@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::HashMap, convert::TryInto, io::ErrorKind, sync::atomic::AtomicBool};
+use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::atomic::AtomicBool};
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
@@ -11,7 +11,7 @@ use tokio::{
 };
 use tokio::{net::TcpStream, task::JoinHandle};
 
-mod packet;
+pub(crate) mod packet;
 
 #[derive(Debug)]
 pub enum RconError {
@@ -59,14 +59,38 @@ impl<T> From<FromAsciiError<T>> for RconError {
 
 pub type RconResult<T> = Result<T, RconError>;
 
+pub struct RconConnectionInfo {
+    pub ip: String,
+    pub port: u16,
+    pub password: AsciiString,
+}
+
+impl Into<RconConnectionInfo> for (String, u16, AsciiString) {
+    fn into(self) -> RconConnectionInfo {
+        RconConnectionInfo {
+            ip: self.0,
+            port: self.1,
+            password: self.2,
+        }
+    }
+}
+
+impl Into<RconConnectionInfo> for (&str, u16, &str) {
+    fn into(self) -> RconConnectionInfo {
+        RconConnectionInfo {
+            ip: self.0.into(),
+            port: self.1.into(),
+            password: AsciiString::from_str(self.2).expect("Password is not ASCII."),
+        }
+    }
+}
+
 pub struct RconClient {
     mainloop: JoinHandle<RconResult<()>>,
     mainloop_ctrl: mpsc::UnboundedSender<Query>,
     shutdown_tx: broadcast::Sender<()>,
 
-    _ip: String,
-    _port: u16,
-    _password: AsciiString,
+    _connection_info: RconConnectionInfo,
 
     drop_ready: AtomicBool,
 }
@@ -77,20 +101,17 @@ struct Query(
     oneshot::Sender<RconResult<Vec<AsciiString>>>,
 );
 
-pub trait RconEventsReceiver {
-    fn on_packet(packet: Packet); // MAYBE?
+pub trait RconEventPacketHandler {
+    fn on_packet(&self, packet: Packet);
 }
 
 /// Just used internally to do a remote procedure call.
 impl RconClient {
-    pub async fn connect<A>(ip: impl Into<String>, port: u16, password: A, events_caller: impl Fn(Packet) + Send + 'static) -> RconResult<Self>
-    where
-        A: IntoAsciiString + Clone,
+    pub async fn connect(conn: impl Into<RconConnectionInfo>, events_caller: impl RconEventPacketHandler + Send + 'static) -> RconResult<Self>
     {
-        let password = password.into_ascii_string()?;
-        let ip = ip.into();
+        let conn : RconConnectionInfo = conn.into();
         // println!("uhhh, connecting to {}:{}", ip, port);
-        let tcp = TcpStream::connect((ip.clone(), port)).await?;
+        let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
         // println!("ahhhh");
 
         let (tx, rx) = mpsc::unbounded_channel::<Query>();
@@ -103,19 +124,22 @@ impl RconClient {
             mainloop_ctrl: tx.clone(),
             shutdown_tx: shutdown_tx.clone(),
 
-            _ip: ip,
-            _port: port,
-            _password: password.clone(),
+            _connection_info: RconConnectionInfo {
+                ip: conn.ip,
+                port: conn.port,
+                password: conn.password.clone(),
+            },
             drop_ready: AtomicBool::new(false),
         };
 
         // at this point we should have a fully functional async way to query.
         // so we just login and set stuff up, and done!
 
+        // TODO: use salted passwords eventually.
         let result = myself
             .query_raw(vec![
                 "login.plainText".into_ascii_string().unwrap(),
-                password,
+                conn.password,
             ])
             .await; // Err: Many.. TODO
         // println!("Got login response: {:?}", result);
@@ -153,6 +177,7 @@ impl RconClient {
                 _ = shutdown_rx.recv() => {
                     // not sure if we should finish sending the rest of the packets...
                     // or just break here...
+                    // println!("tcp_write_loop received shutdown signal. Doing rx.close().");
                     rx.close();
                 },
             }
@@ -171,7 +196,7 @@ impl RconClient {
         mut tcp: OwnedReadHalf,
         shutdown_tx: broadcast::Sender<()>,
         mut shutdown_rx: broadcast::Receiver<()>,
-        events_caller: impl Fn(Packet),
+        events_caller: impl RconEventPacketHandler,
     ) -> RconResult<()> {
         let mut buf = vec![0_u8; 12]; // header size. We'll grow the buffer as necessary later.
 
@@ -186,6 +211,7 @@ impl RconClient {
                     match tcpread {
                         Ok(n) if n == 0 => {
                             // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Tcp stream ended, but could not broadcast the message.");
+                            shutdown(&shutdown_tx).await;
                             return Err(RconError::ConnectionClosed);
                         },
                         Ok(n) => {
@@ -193,6 +219,7 @@ impl RconClient {
                         },
                         Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
                             // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Tcp stream ended, but could not broadcast the message.");
+                            shutdown(&shutdown_tx).await;
                             return Err(RconError::ConnectionClosed);
                         },
                         Err(e) => {
@@ -212,6 +239,7 @@ impl RconClient {
                                 match tcpread {
                                     Ok(n) if n == 0 => {
                                         // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Tcp stream ended, but could not broadcast the message.");
+                                        shutdown(&shutdown_tx).await;
                                         return Err(RconError::ConnectionClosed);
                                     },
                                     Ok(n) => {
@@ -219,6 +247,7 @@ impl RconClient {
                                     },
                                     Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
                                         // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Tcp stream ended, but could not broadcast the message.");
+                                        shutdown(&shutdown_tx).await;
                                         return Err(RconError::ConnectionClosed);
                                     },
                                     Err(e) => {
@@ -229,13 +258,15 @@ impl RconClient {
                                 let packet = match Packet::deserialize(&buf[0..total_len]) {
                                     PacketDeserializeResult::Ok {packet, consumed_bytes} => {
                                         if consumed_bytes != total_len {
-                                            // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Received malformed packet, but could not broadcast the message.");
+                                            // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Received malformed packet, but could not broadcast the message.")
+                                            shutdown(&shutdown_tx).await;
                                             return Err(RconError::ProtocolError);
                                         }
                                         packet
                                     },
                                     _ => {
                                         // bus.tx.send(AcrossBroadcast::TcpClosed).expect("Internal error, this is a BUG. Received malformed packet, but could not broadcast the message.");
+                                        shutdown(&shutdown_tx).await;
                                         return Err(RconError::ProtocolError);
                                     }
                                 };
@@ -245,18 +276,19 @@ impl RconClient {
                                     // this send should NEVER fail until mainloop gets dropped.
                                     // which it won't, because it's waiting to join this thread.
                                     // ...unless it panics, then we're all doomed.
-                                    tx.send(packet).expect("Internal error, this is a BUG. Could not send QueryResponse message.");
+                                    tx.send(packet).expect("[tcp_read_loop] Internal error, this is a BUG. Could not send QueryResponse message.");
                                     break; // break inner loop => read next header for next packet.
                                 } else {
                                     // this will give the packet to the mainloop (kinda),
                                     // which will give it to Bf4Client,
                                     // which will read it and convert strings to types and then call its events_caller but then with a Bf4Event.
-                                    events_caller(packet);
-                                    todo!("Need to still implement normal non-reply packets hehe")
+                                    events_caller.on_packet(packet);
+                                    break;
+                                    // todo!("Need to still implement normal non-reply packets hehe")
                                 }
                             },
                             _ = shutdown_rx.recv() => {
-                                println!("warn: tcp_read_loop: received End, but had a packet partially read.");
+                                println!("warn [Rcon tcp_read_loop] received shutdown signal, but had a packet partially read.");
                                 break 'outer;
                             }
                         }
@@ -266,9 +298,15 @@ impl RconClient {
             }
         }
 
-        shutdown_tx.send(()).expect(
-            "This is some kinda bug. Couldn't send shutdown signal at end of tcp_read_loop.",
-        );
+        shutdown(&shutdown_tx).await;
+        // shutdown_tx.send(()).expect(
+        //     "This is some kinda bug. Couldn't send shutdown signal at end of tcp_read_loop.",
+        // );
+
+        async fn shutdown(tx: &broadcast::Sender<()>) {
+            // println!("[tcp_read_loop] Sending shutdown signal..");
+            tx.send(()).expect("[tcp_read_loop] This is a bug. Could not send shutdown signal");
+        }
 
         // println!("tcp_read_loop ended gracefully");
         Ok(())
@@ -279,7 +317,7 @@ impl RconClient {
         mut rx: mpsc::UnboundedReceiver<Query>,
         tcp: TcpStream,
         shutdown_tx: broadcast::Sender<()>,
-        events_caller: impl Fn(Packet) + Send + 'static,
+        events_caller: impl RconEventPacketHandler + Send + 'static,
     ) -> RconResult<()> {
         // no need for mutexes locking the sequence numbers and `waiting`, since we're using message passing.
         struct Waiting {
@@ -345,6 +383,7 @@ impl RconClient {
 
                         // ignore the result of send. If it fails, means tcp_out has died, aka connection has been lost
                         // then we'll simply catch tcp_out.handle in the next loop select here. And then we will stop too.
+                        // println!("mainloop: tcp_out.x.send(packet).unwrap(); with packet = {}", packet);
                         tcp_out.x.send(packet).unwrap();
                         // FIXME: actually, that means some queries are still waiting on their oneshot result and will never get it... ISSUE!
                     },
@@ -378,35 +417,15 @@ impl RconClient {
                     },
                 },
                 _ = shutdown_rx.recv() => {
+                    println!("mainloop: Received shutdown signal.");
                     break;
                 }
-                // for when the tcp workers stop, gracefully or not.
-                // tcp_in_result = tcp_in.handle, if tcp_in.result.is_none() => {
-                //     tcp_out.result = Some(tcp_in_result.expect("Failed to join tcp_in worker on shutdown. This is a bug. Most likely, the worker panicked."));
-                //     break;
-                // },
-                // tcp_out_result = tcp_out.handle, if tcp_out.result.is_none() => {
-                //     tcp_out.result = Some(tcp_out_result.expect("Failed to join tcp_out worker on shutdown. This is a bug. Most likely, the worker panicked."));
-                //     break;
-                // },
             }
         }
 
         shutdown_tx.send(()).unwrap();
         tcp_in.handle.await.expect("Failed to join tcp_in worker on shutdown. This is a bug. Most likely, the worker panicked.")?;
         tcp_out.handle.await.expect("Failed to join tcp_out worker on shutdown. This is a bug. Most likely, the worker panicked.")?;
-        // if tcp_out.result.is_none() {
-        //     // `await` returns a Result<..., JoinError>, when it panicks or is cancelled.
-        //     tcp_out.result = Some(tcp_out.handle.await.expect("Failed to join tcp_out worker on shutdown. This is a bug. Most likely, the worker panicked."));
-        // }
-        // if tcp_in.result.is_none() {
-        //     tcp_in.result = Some(tcp_in.handle.await.expect("Failed to join tcp_in worker on shutdown. This is a bug. Most likely, the worker panicked."));
-        // }
-
-        // // unwrap Option<Result<...>>
-        // // then we use `?` to propagate the `Result<(), RconError>`.
-        // tcp_in.result.unwrap()?;
-        // tcp_out.result.unwrap()?;
 
         // println!("mainloop ended gracefully");
         Ok(())
@@ -463,6 +482,7 @@ impl RconClient {
 
 
     pub async fn shutdown(&mut self) -> RconResult<()> {
+        println!("rcon shutdown invoked");
         self.shutdown_tx.send(()).unwrap();
         // maybe better error handling some day... sigh...
         (&mut self.mainloop).await.unwrap()?;

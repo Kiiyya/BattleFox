@@ -140,6 +140,8 @@ impl Packet {
             if offset + len > total_len {
                 return PacketDeserializeResult::Malformed;
             }
+            // TODO: make a buffer for wordbytes instead of a heap-allocated vector.
+            // since right now we allocate a new vector EVERY WORD lol.
             let wordbytes: Vec<u8> = buf[offset..offset + len].try_into().unwrap();
             match AsciiString::from_ascii(wordbytes) {
                 Ok(str) => {
@@ -154,13 +156,16 @@ impl Packet {
         if offset != total_len {
             return PacketDeserializeResult::Malformed;
         }
+
+        let packet = Packet {
+            sequence: seq_id,
+            is_response,
+            origin,
+            words,
+        };
+        // println!("[Packet::deserialize] {}", packet);
         PacketDeserializeResult::Ok {
-            packet: Packet {
-                sequence: seq_id,
-                is_response,
-                origin,
-                words,
-            },
+            packet,
             consumed_bytes: total_len,
         }
     }
