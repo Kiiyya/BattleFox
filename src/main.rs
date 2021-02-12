@@ -3,8 +3,9 @@
 
 use std::time::Duration;
 
-use bf4::Bf4Client;
+use bf4::{Bf4Client, Event};
 use rcon::RconClient;
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 #[macro_use]
@@ -24,12 +25,21 @@ async fn main() -> rcon::RconResult<()> {
 
     bf4.kill("player").await.unwrap_err();
 
-    let mut e = bf4.event_stream();
-    while let Some(ev) = e.next().await {
-        println!("main: Got event {:?}", ev);
+    let mut event_stream = bf4.event_stream();
+    while let Some(ev) = event_stream.next().await {
+        match ev {
+            Ok(Event::Kill{killer, victim, headshot: _, weapon}) => {
+                println!("{} killed {} with a {}!", killer, victim, weapon);
+            },
+            Ok(_) => {}, // ignore other events.
+            Err(err) => {
+                println!("Got error: {:?}", err);
+            },
+
+        }
     }
 
-    tokio::time::sleep(Duration::from_secs(60)).await;
+    sleep(Duration::from_secs(60)).await;
 
     Ok(())
 }

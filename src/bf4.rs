@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ascii::{AsciiString, IntoAsciiString};
 use futures_core::Stream;
 use tokio::sync::{broadcast, mpsc};
@@ -39,6 +41,14 @@ pub enum Weapon {
     Derp,
 }
 
+impl Display for Weapon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Weapon::Derp => write!(f, "Derp")
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     Chat {
@@ -47,9 +57,9 @@ pub enum Event {
         msg: AsciiString,
     },
     Kill {
-        killer: Player,
+        killer: AsciiString,
         weapon: Weapon,
-        victim: Player,
+        victim: AsciiString,
         headshot: bool,
     },
     Spawn,
@@ -64,6 +74,11 @@ pub struct Bf4Client
     events: broadcast::Sender<RconResult<Event>>,
 }
 
+enum ParsePacketError {
+    UnknownEvent,
+    InvalidArguments,
+}
+
 impl Bf4Client
 {
     pub async fn new(mut rcon: RconClient) -> Result<Self, RconError> {
@@ -76,6 +91,33 @@ impl Bf4Client
         Ok(myself)
     }
 
+    fn parse_packet(packet: Packet) -> Result<Event, ParsePacketError> {
+        match packet.words[0].as_str() {
+            "player.onKill" => {
+                if packet.words.len() != 5 {
+                    return Err(ParsePacketError::InvalidArguments);
+                }
+                let ev = Event::Kill {
+                    killer: packet.words[1].clone(),
+                    victim: packet.words[2].clone(),
+                    weapon: Weapon::Derp,
+                    headshot: false,
+                };
+                Ok(ev)
+            },
+            "player.onSpawn" => {
+                if packet.words.len() != 3 {
+                    return Err(ParsePacketError::InvalidArguments);
+                }
+                Ok(Event::Spawn)
+            }
+            _ => {
+                println!("warm [Bf4Client::packet_to_event_stream] Received unknown event type packet: {:?}", packet);
+                return Err(ParsePacketError::UnknownEvent);
+            }
+        }
+    }
+
     /// Takes packets, transforms into events, broadcasts.
     fn packet_to_event_stream(
         mut packets: mpsc::UnboundedReceiver<RconResult<Packet>>,
@@ -84,18 +126,33 @@ impl Bf4Client
         let tx2 = tx.clone();
         tokio::spawn(async move {
             while let Some(packet) = packets.recv().await {
-                println!("[Bf4Clinet::packet_to_event_stream] Received {:?}", packet);
-
-                // TODO decode packet into event here
-
-                match tx2.send(Ok(Event::Spawn)) {
-                    Ok(_) => {
-                        // on success we ignore it.
+                // println!("[Bf4Clinet::packet_to_event_stream] Received {:?}", packet);
+                match packet {
+                    Ok(packet) => {
+                        if packet.words.len() == 0 {
+                            let _ = tx2.send(Err(RconError::ProtocolError)); // All events must have at least one word.
+                            continue; // should probably be a break, but yeah whatever.
+                        }
+                        let _ = tx2.send(Bf4Client::parse_packet(packet).map_err(|e| match e {
+                            ParsePacketError::UnknownEvent => RconError::UnknownResponse,
+                            ParsePacketError::InvalidArguments => RconError::InvalidArguments,
+                        }));
+                        //  {
+                        //     Ok(_n) => {
+                        //         // on send success, we don't need to do anything.
+                        //     },
+                        //     Err(_err) => {
+                        //         // on send error, there exist no receiver handles (none registered yet, or all already dropped).
+                        //         // either way, we just ignore it.
+                        //     },
+                        // }
                     },
-                    Err(_) => {
-                        // send can only fail when there are no active receivers.
-                        // so we just ignore it.
-                    },
+                    Err(e) => {
+                        // the packet receiver loop (tcp,...) encountered an error. This will most of the time
+                        // be something such as connection dropped.
+                        let _ = tx2.send(Err(e));
+                        continue; // should probably a break, but yeah whatever.
+                    }
                 }
             }
             println!("[Bf4Client::packet_to_event_stream] Ended");
