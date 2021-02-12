@@ -41,3 +41,4 @@ async fn main() -> rcon::RconResult<()> {
 - [ ] Implement more commands.
 - [ ] Various to-dos and fix-mes scattered in the code.
 - [ ] Write mapvote plugin etc on top of this.
+- [ ] Build a pool of RCON TCP connections to handle many queries at a time (since RCON only allows one packet per game server tick, i.e. 33ms on 30Hz servers). Maybe extend to events too, since sequence IDs for events seem to be retained even across TCP connections.
