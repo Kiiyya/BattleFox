@@ -1,23 +1,8 @@
 #![feature(arc_new_cyclic)]
 #![warn(missing_debug_implementations, rust_2018_idioms)]
-
-use std::time::Duration;
-
-use bf4::{Bf4Client, Event};
-use rcon::RconClient;
-use tokio::time::sleep;
-use tokio_stream::StreamExt;
-
-#[macro_use]
-pub mod macros;
-pub mod bf4;
-pub mod mapvote;
-pub mod rcon;
-
-/// This function is only here becuase I like messing with stuff.
-/// A general sketchpad. Eventually this crate will be more of a library,
-/// And eventually I'll split it up into rcon+bf4client crate, and then
-/// Andother crate with everything like mapvote, etc.
+/*!
+# Example
+```
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
@@ -43,3 +28,18 @@ async fn main() -> rcon::RconResult<()> {
 
     Ok(())
 }
+```
+*/
+
+// use std::time::Duration;
+
+// use bf4::{Bf4Client, Event};
+// use rcon::RconClient;
+// use tokio::time::sleep;
+// use tokio_stream::StreamExt;
+
+#[macro_use]
+pub mod macros;
+pub mod bf4;
+pub mod mapvote;
+pub mod rcon;

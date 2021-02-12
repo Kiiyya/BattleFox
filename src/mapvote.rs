@@ -1,23 +1,26 @@
 #![allow(unused_variables, unused_imports)]
-// use std::collections::HashMap;
+use std::collections::HashMap;
 
-// enum Bf4Map {
-//     Locker,
-//     Metro,
-//     PearlMarket,
-// }
+#[derive(Debug)]
+enum Bf4Map {
+    Locker,
+    Metro,
+    PearlMarket,
+}
 
-// struct Ballot {
-//     preferences: Vec<Bf4Map>,
-// }
+#[derive(Debug)]
+struct Ballot {
+    preferences: Vec<Bf4Map>,
+}
 
-// struct MapVote {
-//     votes: HashMap<String, Ballot>,
-// }
+#[derive(Debug)]
+struct MapVote {
+    votes: HashMap<String, Ballot>,
+}
 
-// impl MapVote {
-//     fn calculate_result(&self) {}
-// }
+impl MapVote {
+    fn calculate_result(&self) {}
+}
 
 /*
 So, you want to have a state-only thing which only manages state, and handles the database. aka the model.
