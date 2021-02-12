@@ -1,36 +1,17 @@
 #![feature(arc_new_cyclic)]
-use std::{sync::Arc, time::Duration};
+#![warn(missing_debug_implementations, rust_2018_idioms)]
 
-use bf4::{Bf4Client, Event};
-use rcon::{RconClient, RconConnectionInfo, RconResult};
-use tokio::time::Instant;
+use std::time::Duration;
+
+use bf4::Bf4Client;
+use rcon::RconClient;
+use tokio_stream::StreamExt;
 
 #[macro_use]
-mod macros;
-
+pub mod macros;
+pub mod bf4;
 pub mod mapvote;
 pub mod rcon;
-pub mod bf4;
-
-// async fn handler(bf4: Arc<Bf4Client>, ev: Event) -> rcon::RconResult<()> {
-//     match ev {
-//         Event::Chat { vis, chatter, msg } => {
-
-//         }
-//         Event::Kill { killer, weapon, victim } => {
-
-//         }
-//         Event::Spawn { player } => {}
-//     }
-//     todo!()
-// }
-
-
-async fn busy(i: usize) {
-    if i % 1_000_000 == 0 {
-        println!("This is i = {}", i);
-    }
-}
 
 /// This function is only here becuase I like messing with stuff.
 /// A general sketchpad. Eventually this crate will be more of a library,
@@ -38,24 +19,17 @@ async fn busy(i: usize) {
 /// Andother crate with everything like mapvote, etc.
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
-    // let conn : RconConnectionInfo = ("127.0.0.1", 47200, "smurf").into();
-    // let mut bf4 = Arc::new(Bf4Client::new(conn, |_, _| {}).await.unwrap());
+    let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
+    let bf4 = Bf4Client::new(rcon).await.unwrap();
 
-    // println!("Enabled events..");
+    bf4.kill("player").await.unwrap_err();
 
-    // // let start = Instant::now();
-    // // println!("Time: {}", start.elapsed().as_millis());
+    let mut e = bf4.event_stream();
+    while let Some(ev) = e.next().await {
+        println!("main: Got event {:?}", ev);
+    }
 
-    // // bf4
-    // //   .addMapVote()
-    // //   .addBalancer()
-    // //   .add()
+    tokio::time::sleep(Duration::from_secs(60)).await;
 
-    // tokio::time::sleep(Duration::from_secs(60)).await;
-
-    // (Arc::get_mut(&mut bf4))
-    //     .unwrap()
-    //     .shutdown()
-    //     .await?;
     Ok(())
 }

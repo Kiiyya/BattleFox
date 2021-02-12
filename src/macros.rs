@@ -1,4 +1,3 @@
-
 // just a convenience vector creation macro, which converts all items to ascii.
 macro_rules! veca {
     ($($x:expr),+ $(,)?) => {

@@ -45,6 +45,7 @@ impl Display for Packet {
     }
 }
 
+#[derive(Debug)]
 pub enum PacketDeserializeResult {
     Ok {
         packet: Packet,
