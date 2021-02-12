@@ -2,7 +2,7 @@
 #![warn(missing_debug_implementations, rust_2018_idioms)]
 /*!
 # Example
-```
+```ignore
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;

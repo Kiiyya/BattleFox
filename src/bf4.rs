@@ -1,14 +1,15 @@
 use std::fmt::Display;
 
-use ascii::{AsciiString, IntoAsciiString};
+use ascii::{AsciiChar, AsciiString, IntoAsciiString};
 use futures_core::Stream;
 use tokio::sync::{broadcast, mpsc};
 use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 
-use crate::rcon::{ok_eof, packet::Packet, RconClient, RconError, RconResult};
+use crate::rcon::{RconClient, RconError, RconResult, ok_eof, packet::Packet};
 
-cmd_err!(pub PlayerKickError, PlayerNotFound, A);
+// cmd_err!(pub PlayerKickError, PlayerNotFound, A);
 cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
+cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 
 /// Maybe some flyweight or proxy, to enable `.kill()`, getting EA GUID, etc?
 #[derive(Debug, Clone)]
@@ -16,17 +17,69 @@ pub struct Player {
     ingamename: AsciiString,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Team {
-    One,
-    Two,
+    Neutral = 0,
+    One = 1,
+    Two = 2,
 }
 
-#[derive(Debug, Clone)]
+impl Team {
+    pub fn to_rcon_format(self) -> String {
+        (self as usize).to_string()
+    }
+
+    pub fn from_rcon_format<'a>(ascii: &AsciiString) -> Result<Team, ParsePacketError> {
+        match ascii.as_str() {
+            "0" => Ok(Team::Neutral),
+            "1" => Ok(Team::One),
+            "2" => Ok(Team::Two),
+            _   => Err(ParsePacketError::InvalidVisibility),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq)]
 pub enum Squad {
-    Alpha,
-    Bravo,
-    Charlie,
+    NoSquad = 0,
+    Alpha = 1,
+    Bravo = 2,
+    Charlie = 3,
+    Delta = 4,
+    Echo = 5,
+    Foxtrot = 6,
+    Golf = 7,
+    Hotel = 8,
+    India = 9,
+    Juliet = 10,
+    Kilo = 11,
+    Lima = 12,
+}
+
+impl Squad {
+    /// Returns "2" for Bravo, 0 for "NoSquad", ...
+    pub fn rcon_format(self) -> String {
+        (self as usize).to_string()
+    }
+
+    pub fn from_rcon_format(ascii: &AsciiString) -> Result<Self, ParsePacketError> {
+        match ascii.as_str() {
+            "0" => Ok(Squad::NoSquad),
+            "1" => Ok(Squad::Alpha),
+            "2" => Ok(Squad::Bravo),
+            "3" => Ok(Squad::Charlie),
+            "4" => Ok(Squad::Delta),
+            "5" => Ok(Squad::Echo),
+            "6" => Ok(Squad::Foxtrot),
+            "7" => Ok(Squad::Golf),
+            "8" => Ok(Squad::Hotel),
+            "9" => Ok(Squad::India),
+            "10" => Ok(Squad::Juliet),
+            "11" => Ok(Squad::Kilo),
+            "12" => Ok(Squad::Lima),
+            _   => Err(ParsePacketError::InvalidVisibility),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +87,47 @@ pub enum Visibility {
     All,
     Team(Team),
     Squad(Team, Squad),
+}
+
+impl Visibility {
+    pub fn to_rcon_format(&self) -> String {
+        match self {
+            Visibility::All => "all".into(),
+            Visibility::Team(team) => format!("team {}", team.to_rcon_format()),
+            Visibility::Squad(team, squad) => format!("squad {} {}", team.to_rcon_format(), squad.rcon_format()),
+        }
+    }
+
+    pub fn from_rcon_format(str: &AsciiString) -> Result<Self, ParsePacketError> {
+        let split : Vec<_> = str.split(AsciiChar::Space).collect::<Vec<_>>();
+        if split.len() == 0 {
+            return Err(ParsePacketError::InvalidVisibility);
+        }
+        match split[0].as_str() {
+            "all" => {
+                if split.len() != 1 {
+                    return Err(ParsePacketError::InvalidVisibility);
+                }
+                Ok(Visibility::All)
+            },
+            "team" => {
+                if split.len() != 2 {
+                    return Err(ParsePacketError::InvalidVisibility);
+                }
+                Ok(Visibility::Team(Team::from_rcon_format(&split[1].into())?))
+            },
+            "squad" => {
+                if split.len() != 3 {
+                    return Err(ParsePacketError::InvalidVisibility);
+                }
+                Ok(Visibility::Squad(
+                    Team::from_rcon_format(&split[1].into())?,
+                    Squad::from_rcon_format(&split[2].into())?
+                ))
+            },
+            _ => Err(ParsePacketError::InvalidVisibility),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +147,7 @@ impl Display for Weapon {
 pub enum Event {
     Chat {
         vis: Visibility,
-        chatter: Player,
+        chatter: AsciiString,
         msg: AsciiString,
     },
     Kill {
@@ -62,21 +156,25 @@ pub enum Event {
         victim: AsciiString,
         headshot: bool,
     },
-    Spawn,
+    Spawn {
+        player: AsciiString,
+        team: Team,
+    },
 }
 
 /// You should never need to worry about the `F` generic parameter.
 /// It should be automatically inferred from the event handler you provide upon creation.
 #[derive(Debug)]
-pub struct Bf4Client
-{
+pub struct Bf4Client {
     rcon: RconClient,
     events: broadcast::Sender<RconResult<Event>>,
 }
 
-enum ParsePacketError {
+#[derive(Debug)]
+pub enum ParsePacketError {
     UnknownEvent,
     InvalidArguments,
+    InvalidVisibility,
 }
 
 impl Bf4Client
@@ -97,19 +195,31 @@ impl Bf4Client
                 if packet.words.len() != 5 {
                     return Err(ParsePacketError::InvalidArguments);
                 }
-                let ev = Event::Kill {
+                Ok(Event::Kill {
                     killer: packet.words[1].clone(),
                     victim: packet.words[2].clone(),
                     weapon: Weapon::Derp,
                     headshot: false,
-                };
-                Ok(ev)
+                })
             },
             "player.onSpawn" => {
                 if packet.words.len() != 3 {
                     return Err(ParsePacketError::InvalidArguments);
                 }
-                Ok(Event::Spawn)
+                Ok(Event::Spawn {
+                    player: packet.words[1].clone(),
+                    team: Team::from_rcon_format(&packet.words[2])?,
+                })
+            },
+            "player.onChat" => {
+                if packet.words.len() != 4 {
+                    return Err(ParsePacketError::InvalidArguments);
+                }
+                Ok(Event::Chat {
+                    chatter: packet.words[1].clone(),
+                    vis: Visibility::from_rcon_format(&packet.words[2])?,
+                    msg: packet.words[3].clone(),
+                })
             }
             _ => {
                 println!("warm [Bf4Client::packet_to_event_stream] Received unknown event type packet: {:?}", packet);
@@ -136,6 +246,7 @@ impl Bf4Client
                         let _ = tx2.send(Bf4Client::parse_packet(packet).map_err(|e| match e {
                             ParsePacketError::UnknownEvent => RconError::UnknownResponse,
                             ParsePacketError::InvalidArguments => RconError::InvalidArguments,
+                            ParsePacketError::InvalidVisibility => RconError::ProtocolError,
                         }));
                         //  {
                         //     Ok(_n) => {
@@ -196,6 +307,19 @@ impl Bf4Client
             })
             .await
     }
+
+    pub async fn say(&self, msg: impl IntoAsciiString, target: Visibility) -> Result<(), SayError> {
+        self.rcon.command(veca!["admin.say", msg, target.to_rcon_format()],
+            ok_eof,
+            |err| match err {
+                "InvalidTeam" => Some(SayError::Rcon(RconError::ProtocolError)),
+                "InvalidSquad" => Some(SayError::Rcon(RconError::ProtocolError)),
+                "MessageTooLong" => Some(SayError::MessageTooLong),
+                "PlayerNotFound" => Some(SayError::PlayerNotFound),
+                _ => None,
+            }
+        ).await
+    }
 }
 
 #[cfg(test)]
@@ -215,7 +339,6 @@ mod test {
             joinhandles.push(tokio::spawn(async move { bf4.kill("player").await }));
         }
 
-        // println!("spammer#{}: Done sending after {}ms", i, Instant::now().duration_since(start).as_millis());
 
         for future in joinhandles {
             future.await.unwrap().unwrap_err();
