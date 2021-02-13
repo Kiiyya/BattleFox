@@ -41,5 +41,4 @@ async fn main() -> rcon::RconResult<()> {
 #[macro_use]
 pub mod macros;
 pub mod bf4;
-pub mod mapvote;
 pub mod rcon;
