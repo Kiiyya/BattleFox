@@ -14,7 +14,7 @@ async fn main() -> rcon::RconResult<()> {
     let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
     let bf4 = Bf4Client::new(rcon).await.unwrap();
 
-    bf4.kill("player").await.unwrap_err();
+    bf4.kill("Kiiyya").await.unwrap();
 
     let mut event_stream = bf4.event_stream();
     while let Some(ev) = event_stream.next().await {
@@ -26,7 +26,6 @@ async fn main() -> rcon::RconResult<()> {
             Err(err) => {
                 println!("Got error: {:?}", err);
             },
-
         }
     }
 
@@ -37,8 +36,10 @@ async fn main() -> rcon::RconResult<()> {
 ```
 
 ## To-do
+- [ ] Write documentation, especially examples for `RconClient::command` etc. (`cargo doc --open`)
 - [ ] Implement more events.
 - [ ] Implement more commands.
 - [ ] Various to-dos and fix-mes scattered in the code.
 - [ ] Write mapvote plugin etc on top of this.
 - [ ] Build a pool of RCON TCP connections to handle many queries at a time (since RCON only allows one packet per game server tick, i.e. 33ms on 30Hz servers). Maybe extend to events too, since sequence IDs for events seem to be retained even across TCP connections.
+- [ ] `Arc<Bf4Client>` inside the Bf4Client packet parser is weird, I think it keeps it alive way too long :/.

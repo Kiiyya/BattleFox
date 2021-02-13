@@ -1,12 +1,11 @@
 use core::panic;
-use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc};
+use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc, time::Instant};
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    runtime::Handle,
 };
 use tokio::{
     net::tcp::OwnedReadHalf,
@@ -135,7 +134,9 @@ impl RconClient {
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel::<()>();
         let (nonresponses_tx, nonresponses_rx) = mpsc::unbounded_channel::<RconResult<Packet>>();
 
-        let tokio = Handle::current();
+        let shutdown_rx = shutdown_rx;
+
+        let tokio = tokio::runtime::Handle::current();
         let mainloop = std::thread::spawn(move || {
             tokio.spawn(RconClient::mainloop(
                 query_rx,
@@ -319,7 +320,7 @@ impl RconClient {
             }
         }
 
-        println!("tcp_read_loop ended");
+        // println!("tcp_read_loop ended");
         // we drop the TCP half here.
         // we drop shutdown_rx here.
     }
@@ -429,9 +430,14 @@ impl RconClient {
                         break;
                     },
                 },
-                _ = shutdown.recv() => {
-                    println!("     [RconClient::mainloop] Received shutdown signal.");
-                    break;
+                some = shutdown.recv() => match some {
+                    Some(()) => {
+                        // println!("     [RconClient::mainloop] Received shutdown signal.");
+                        break;
+                    },
+                    None => {
+                        println!("warn [RconClient::mainloop] Received shutdown signal (only because all Sender halves have dropped).");
+                    }
                 }
             }
         }
@@ -449,7 +455,7 @@ impl RconClient {
             tx.send(Err(RconError::ConnectionClosed)).unwrap();
         }
 
-        println!("     [RconClient::mainloop] Ended gracefully");
+        // println!("     [RconClient::mainloop] Ended gracefully");
     }
 
     pub async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
@@ -543,7 +549,7 @@ where
 
 impl Drop for RconClient {
     fn drop(&mut self) {
-        let _ = self.mainloop_shutdown.send(()); // if we get a SendError, that means the main loop already dropped its Receiver.
+        let _ = self.mainloop_shutdown.send(()).unwrap(); // if we get a SendError, that means the main loop already dropped its Receiver. So the .unwrap() might cause more damage than safety. But for now, I'm leaving it here until we run into issues.
         if self.mainloop.is_some() {
             self.mainloop
                 .take()

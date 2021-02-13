@@ -1,4 +1,3 @@
-#![feature(arc_new_cyclic)]
 #![warn(missing_debug_implementations, rust_2018_idioms)]
 /*!
 # Example
@@ -31,14 +30,8 @@ async fn main() -> rcon::RconResult<()> {
 ```
 */
 
-// use std::time::Duration;
-
-// use bf4::{Bf4Client, Event};
-// use rcon::RconClient;
-// use tokio::time::sleep;
-// use tokio_stream::StreamExt;
-
 #[macro_use]
 pub mod macros;
 pub mod bf4;
 pub mod rcon;
+pub mod ea_guid;
