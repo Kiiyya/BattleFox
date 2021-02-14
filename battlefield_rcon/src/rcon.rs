@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc, time::Instant};
+use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc};
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
@@ -44,7 +44,7 @@ pub enum RconError {
     UnknownCommand,
     /// When Rcon says that something's wrong with the arguments to the command.
     InvalidArguments,
-    /// When *we* don't know what the fuck rcon just responded to us.
+    /// When *we* don't know what the fuck rcon just responded to us. More like unknown query response.
     UnknownResponse,
 
     /// Some rare or very weird error.
@@ -164,7 +164,7 @@ impl RconClient {
         // TODO: use salted passwords eventually.
         myself
             .command(
-                veca!["login.plainText", conn.password],
+                &veca!["login.plainText", conn.password],
                 ok_eof::<RconError>,
                 |err| match err {
                     "InvalidPassword" => Some(RconError::WrongPassword),
@@ -458,11 +458,11 @@ impl RconClient {
         // println!("     [RconClient::mainloop] Ended gracefully");
     }
 
-    pub async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
+    pub async fn query_raw(&self, words: &Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
         let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
 
         self.queries
-            .send(Query(words, tx))
+            .send(Query(words.clone(), tx))
             .map_err(|_: mpsc::error::SendError<_>| RconError::ConnectionClosed)?; // when mainloop did `rx.close()` at the end for example.
         rx.await.expect(
             "query_raw: failed to receive query response from main loop. This is likely a bug.",
@@ -479,13 +479,13 @@ impl RconClient {
             words_ascii.push(w?);
         }
 
-        self.query_raw(words_ascii).await
+        self.query_raw(&words_ascii).await
     }
 
     pub async fn command<T, E>(
         &self,
-        words: Vec<AsciiString>,
-        ok: impl FnOnce(Vec<AsciiString>) -> Result<T, E>,
+        words: &Vec<AsciiString>,
+        ok: impl FnOnce(&Vec<AsciiString>) -> Result<T, E>,
         err: impl FnOnce(&str) -> Option<E>,
     ) -> Result<T, E>
     where
@@ -493,7 +493,7 @@ impl RconClient {
     {
         let res = self.query_raw(words).await?;
         match res[0].as_str() {
-            "OK" => ok(res),
+            "OK" => ok(&res),
             "UnknownCommand" => Err(RconError::UnknownCommand.into()),
             "InvalidArguments" => Err(RconError::InvalidArguments.into()),
             word => Err(err(word).unwrap_or(RconError::UnknownResponse.into())),
@@ -503,7 +503,7 @@ impl RconClient {
     pub async fn events_enabled(&self, enabled: bool) -> RconResult<()> {
         // there exists a get version of this, but I assume it'll be never needed.
         self.command(
-            veca!["admin.eventsEnabled", enabled.to_string()],
+            &veca!["admin.eventsEnabled", enabled.to_string()],
             ok_eof,
             err_none,
         )
@@ -529,7 +529,7 @@ impl RconClient {
 /// the first word to be "OK" (already checked at a different place),
 /// and nothing else.
 /// Basically just a convenience function.
-pub(crate) fn ok_eof<E>(words: Vec<ascii::AsciiString>) -> Result<(), E>
+pub(crate) fn ok_eof<E>(words: &Vec<AsciiString>) -> Result<(), E>
 where
     E: From<RconError>,
 {

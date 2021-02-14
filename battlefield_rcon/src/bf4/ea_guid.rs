@@ -1,7 +1,8 @@
 use std::{convert::TryInto, str::FromStr};
 
-use ascii::{AsciiChar, AsciiString};
+use ascii::{AsAsciiStr, AsciiChar, AsciiString};
 
+#[derive(Debug, Clone, Copy)]
 pub enum EaidParseError {
     NotEaid,
 }
@@ -11,12 +12,14 @@ pub enum EaidParseError {
 pub struct Eaid ([AsciiChar; 32]);
 
 impl Eaid {
-    pub fn from_ascii(slice: &[AsciiChar]) -> Result<Eaid, EaidParseError> {
-        if slice.len() == 32 + 3 {
-            if slice[0..3] == ['E', 'A', '_'] {
-                Ok(Eaid(slice.try_into().unwrap())) // we can use unwrap here because we tested the length
-            } else {
+    pub fn from_ascii(ascii: &AsciiString) -> Result<Eaid, EaidParseError> {
+        let str = ascii.as_str();
+        if str.len() == 32 + 3 {
+            if &str[0..3] != "EA_" {
                 Err(EaidParseError::NotEaid)
+            }
+            else {
+                Ok(Eaid(str.as_ascii_str().unwrap().try_into().unwrap())) // we can use unwrap here because we tested the length
             }
         } else {
             Err(EaidParseError::NotEaid)

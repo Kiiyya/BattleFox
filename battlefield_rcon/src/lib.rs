@@ -34,4 +34,3 @@ async fn main() -> rcon::RconResult<()> {
 pub mod macros;
 pub mod bf4;
 pub mod rcon;
-pub mod ea_guid;
