@@ -123,13 +123,14 @@ impl Into<RconConnectionInfo> for (String, u16, AsciiString) {
     }
 }
 
-impl Into<RconConnectionInfo> for (&str, u16, &str) {
-    fn into(self) -> RconConnectionInfo {
-        RconConnectionInfo {
+impl <'a> TryInto<RconConnectionInfo> for (&str, u16, &str) {
+    type Error = RconError;
+    fn try_into(self) -> std::result::Result<RconConnectionInfo, RconError> {
+        Ok(RconConnectionInfo {
             ip: self.0.into(),
             port: self.1,
-            password: AsciiString::from_str(self.2).expect("Password is not ASCII."),
-        }
+            password: AsciiString::from_str(self.2).map_err(|_| RconError::NotAscii(self.2.to_string()))?,
+        })
     }
 }
 
@@ -162,8 +163,8 @@ pub trait RconEventPacketHandler {
 /// Just used internally to do a remote procedure call.
 impl RconClient {
     #[allow(clippy::useless_vec)]
-    pub async fn connect(conn: impl Into<RconConnectionInfo>) -> RconResult<Self> {
-        let conn: RconConnectionInfo = conn.into();
+    pub async fn connect(conn: impl TryInto<RconConnectionInfo, Error = RconError>) -> RconResult<Self> {
+        let conn: RconConnectionInfo = conn.try_into()?;
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
 
         let (query_tx, query_rx) = mpsc::unbounded_channel::<Query>();
@@ -505,19 +506,6 @@ impl RconClient {
         )
     }
 
-    // pub async fn query<A>(&self, words: impl IntoIterator<Item = A>) -> RconResult<Vec<AsciiString>>
-    // where
-    //     A: IntoAsciiString,
-    // {
-    //     // convert each word to ascii.
-    //     let mut words_ascii = Vec::new();
-    //     for w in words.into_iter().map(|w| w.into_ascii_string()) {
-    //         words_ascii.push(w);
-    //     }
-
-    //     self.query_raw(words_ascii).await
-    // }
-
     pub async fn command<T, E>(
         &self,
         words: &[AsciiString],
@@ -559,20 +547,6 @@ impl RconClient {
         )
         .await
     }
-
-    // pub async fn shutdown(&mut self) -> RconResult<()> {
-    //     println!("rcon shutdown invoked");
-    //     self.shutdown_tx.send(()).unwrap();
-    //     // maybe better error handling some day... sigh...
-    //     (&mut self.mainloop).await.unwrap()?;
-
-    //     // this is technically wrong. We shouldn't await the mainloop JoinHandle twice I think, but this
-    //     // atomic store doesn't prevent that. Need a proper mutex I think. But alas, too lazy, it'll be fiiiiine.
-    //     self.drop_ready
-    //         .store(true, std::sync::atomic::Ordering::SeqCst);
-
-    //     Ok(())
-    // }
 }
 
 /// Use this to assert that there is no more extra input. As in, we only expect
