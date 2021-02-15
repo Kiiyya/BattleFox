@@ -298,12 +298,13 @@ impl Bf4Client {
             .await
     }
 
-    pub async fn kill(&self, player: impl IntoAsciiString) -> Result<(), PlayerKillError> {
+    pub async fn kill(&self, player: impl IntoAsciiString + Into<String>) -> Result<(), PlayerKillError> {
         // first, `command` checks whether we received an OK, if yes, calls `ok`.
         // if not, then it checks if the response was `UnknownCommand` or `InvalidArguments`,
         // and handles those with an appropriate error message.
         // if not, then it calls `err`, hoping for a `Some(err)`, but if it returns `None`,
         // then it just creates an `RconError::UnknownResponse` error.
+        let player = player.into_ascii_string()?;
         self.rcon
             .command(
                 &veca!["admin.killPlayer", player],
@@ -317,7 +318,7 @@ impl Bf4Client {
             .await
     }
 
-    pub async fn say(&self, msg: impl IntoAsciiString, vis: Visibility) -> Result<(), SayError> {
+    pub async fn say(&self, msg: impl IntoAsciiString + Into<String>, vis: Visibility) -> Result<(), SayError> {
         let mut words = veca!["admin.say", msg];
         words.append(&mut vis.to_rcon_format());
         self.rcon

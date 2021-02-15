@@ -33,7 +33,7 @@ pub enum RconError {
 
     /// Some string passed into this api could not be converted to Ascii.
     /// E.g. contains utf8 characters which don't exist in Ascii.
-    NotAscii,
+    NotAscii(String),
 
     /// Some rcon query/command timed out.
     TimedOut,
@@ -92,11 +92,17 @@ impl From<std::io::Error> for RconError {
     }
 }
 
-impl<T> From<FromAsciiError<T>> for RconError {
-    fn from(_: FromAsciiError<T>) -> Self {
-        RconError::NotAscii
+impl <T: Into<String>> From<FromAsciiError<T>> for RconError {
+    fn from(err: FromAsciiError<T>) -> Self {
+        RconError::NotAscii(err.into_source().into())
     }
 }
+
+// impl From<FromAsciiError<AsciiString>> for RconError {
+//     fn from(err: FromAsciiError<AsciiString>) -> Self {
+//         RconError::NotAscii(err.into_source().into())
+//     }
+// }
 
 pub type RconResult<T> = Result<T, RconError>;
 
@@ -488,7 +494,7 @@ impl RconClient {
         // println!("     [RconClient::mainloop] Ended gracefully");
     }
 
-    pub async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
+    pub async fn query(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
         let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
 
         self.queries
@@ -499,18 +505,18 @@ impl RconClient {
         )
     }
 
-    pub async fn query<A>(&self, words: impl IntoIterator<Item = A>) -> RconResult<Vec<AsciiString>>
-    where
-        A: IntoAsciiString,
-    {
-        // convert each word to ascii.
-        let mut words_ascii = Vec::new();
-        for w in words.into_iter().map(|w| w.into_ascii_string()) {
-            words_ascii.push(w?);
-        }
+    // pub async fn query<A>(&self, words: impl IntoIterator<Item = A>) -> RconResult<Vec<AsciiString>>
+    // where
+    //     A: IntoAsciiString,
+    // {
+    //     // convert each word to ascii.
+    //     let mut words_ascii = Vec::new();
+    //     for w in words.into_iter().map(|w| w.into_ascii_string()) {
+    //         words_ascii.push(w);
+    //     }
 
-        self.query_raw(words_ascii).await
-    }
+    //     self.query_raw(words_ascii).await
+    // }
 
     pub async fn command<T, E>(
         &self,
@@ -522,7 +528,7 @@ impl RconClient {
         E: From<RconError>,
     {
         // println!("Command out: {:?}", words);
-        let res = self.query_raw(words.to_vec()).await?;
+        let res = self.query(words.to_vec()).await?;
         match res[0].as_str() {
             "OK" => ok(&res),
             "UnknownCommand" => Err(RconError::UnknownCommand {

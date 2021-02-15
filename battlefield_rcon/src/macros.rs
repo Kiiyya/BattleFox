@@ -24,9 +24,21 @@ macro_rules! cmd_err {
             }
         }
 
-        impl <T> From<ascii::FromAsciiError<T>> for $error_name {
-            fn from(_e: ascii::FromAsciiError<T>) -> Self {
-                $error_name::Rcon(RconError::NotAscii)
+        // impl From<ascii::FromAsciiError<String>> for $error_name {
+        //     fn from(e: ascii::FromAsciiError<String>) -> Self {
+        //         $error_name::Rcon(RconError::NotAscii(e.into_source()))
+        //     }
+        // }
+
+        // impl From<ascii::FromAsciiError<&str>> for $error_name {
+        //     fn from(e: ascii::FromAsciiError<&str>) -> Self {
+        //         $error_name::Rcon(RconError::NotAscii(e.into_source().to_string()))
+        //     }
+        // }
+
+        impl <O: Into<String> + IntoAsciiString> From<ascii::FromAsciiError<O>> for $error_name {
+            fn from(e: ascii::FromAsciiError<O>) -> Self {
+                $error_name::Rcon(RconError::NotAscii(e.into_source().into()))
             }
         }
     };
