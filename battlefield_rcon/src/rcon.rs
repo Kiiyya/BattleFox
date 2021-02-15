@@ -92,7 +92,7 @@ impl From<std::io::Error> for RconError {
     }
 }
 
-impl <T: Into<String>> From<FromAsciiError<T>> for RconError {
+impl<T: Into<String>> From<FromAsciiError<T>> for RconError {
     fn from(err: FromAsciiError<T>) -> Self {
         RconError::NotAscii(err.into_source().into())
     }
@@ -123,13 +123,14 @@ impl Into<RconConnectionInfo> for (String, u16, AsciiString) {
     }
 }
 
-impl <'a> TryInto<RconConnectionInfo> for (&str, u16, &str) {
+impl<'a> TryInto<RconConnectionInfo> for (&str, u16, &str) {
     type Error = RconError;
     fn try_into(self) -> std::result::Result<RconConnectionInfo, RconError> {
         Ok(RconConnectionInfo {
             ip: self.0.into(),
             port: self.1,
-            password: AsciiString::from_str(self.2).map_err(|_| RconError::NotAscii(self.2.to_string()))?,
+            password: AsciiString::from_str(self.2)
+                .map_err(|_| RconError::NotAscii(self.2.to_string()))?,
         })
     }
 }
@@ -163,7 +164,9 @@ pub trait RconEventPacketHandler {
 /// Just used internally to do a remote procedure call.
 impl RconClient {
     #[allow(clippy::useless_vec)]
-    pub async fn connect(conn: impl TryInto<RconConnectionInfo, Error = RconError>) -> RconResult<Self> {
+    pub async fn connect(
+        conn: impl TryInto<RconConnectionInfo, Error = RconError>,
+    ) -> RconResult<Self> {
         let conn: RconConnectionInfo = conn.try_into()?;
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
 
@@ -518,7 +521,7 @@ impl RconClient {
         // println!("Command out: {:?}", words);
         let res = self.query(words.to_vec()).await?;
         match res[0].as_str() {
-            "OK" => ok(&res),
+            "OK" => ok(&res[1..]),
             "UnknownCommand" => Err(RconError::UnknownCommand {
                 our_query: words.to_vec(),
             }
@@ -557,7 +560,7 @@ pub(crate) fn ok_eof<E>(words: &[AsciiString]) -> Result<(), E>
 where
     E: From<RconError>,
 {
-    if words.len() == 1 {
+    if words.is_empty() {
         Ok(())
     } else {
         Err(RconError::protocol().into())

@@ -7,7 +7,7 @@ use std::{
 
 use self::error::Bf4Result;
 use crate::rcon::{err_none, ok_eof, packet::Packet, RconClient, RconError, RconResult};
-use ascii::{AsciiString, IntoAsciiString};
+use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::PlayerInfo;
@@ -17,34 +17,23 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 pub mod defs;
 pub mod ea_guid;
 pub mod error;
+mod map_list;
 mod player_info_block;
-pub mod visibility;
+mod util;
 
-pub use defs::{Event, GameMode, Map, Player, Weapon};
+pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
 pub use ea_guid::Eaid;
-pub use visibility::{Squad, Team, Visibility};
-
-// trait Bf4Event {
-//     type Error : From<RconError>;
-//     const KEY : &'static str;
-//     const N_WORDS : Option<usize>;
-
-//     fn parse(words: &Vec<AsciiString>) -> Result<Event, Self::Error> {
-//         if let Some(n) = Self::N_WORDS {
-//             if words.len() != n {
-//                 Err(RconError::UnknownResponse)
-//             } else {
-//                 Ok(Self::inner(words))
-//             }
-//         }
-//     }
-// }
 
 // cmd_err!(pub PlayerKickError, PlayerNotFound, A);
 cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
 cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
-cmd_err!(pub MapListError, );
+cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
+
+pub(crate) trait RconEncoding: Sized {
+    fn rcon_encode(&self) -> AsciiString;
+    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self>;
+}
 
 #[derive(Debug, Copy, Clone)]
 struct PlayerCacheEntry {
@@ -196,7 +185,7 @@ impl Bf4Client {
                 let bf4 = upgrade(bf4client)?;
                 Ok(Event::Spawn {
                     player: bf4.resolve_player(&packet.words[1]).await?,
-                    team: Team::from_rcon_format(&packet.words[2])?,
+                    team: Team::rcon_decode(&packet.words[2])?,
                 })
             }
             "player.onChat" => {
@@ -207,11 +196,20 @@ impl Bf4Client {
                     )));
                 }
                 let bf4 = upgrade(bf4client)?;
-                Ok(Event::Chat {
-                    player: bf4.resolve_player(&packet.words[1]).await?,
-                    msg: packet.words[2].clone(),
-                    vis: Visibility::from_rcon_format(&packet.words[3..])?,
-                })
+
+                let (vis, consumed) = Visibility::rcon_decode(&packet.words[3..])?;
+                if consumed + 3 == packet.words.len() {
+                    Ok(Event::Chat {
+                        player: bf4.resolve_player(&packet.words[1]).await?,
+                        msg: packet.words[2].clone(),
+                        vis,
+                    })
+                } else {
+                    Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words,
+                        "More words than expected",
+                    )))
+                }
             }
             "punkBuster.onMessage" => {
                 assert_len(&packet, 2)?;
@@ -242,14 +240,7 @@ impl Bf4Client {
                             continue; // should probably be a break, but yeah whatever.
                         }
                         let event = Bf4Client::parse_packet(&bf4client, packet).await;
-                        let _ = tx2.send(event);
-                        // let _ = tx2.send(Bf4Client::parse_packet(&bf4client, packet).await.map_err(|e| match e {
-                        //     ParsePacketError::UnknownEvent => RconError::UnknownResponse,
-                        //     ParsePacketError::InvalidArguments => RconError::InvalidArguments,
-                        //     ParsePacketError::InvalidVisibility => RconError::ProtocolError,
-                        //     ParsePacketError::Rcon(e) => e,
-                        //     ParsePacketError::Other(msg) => RconError::Other(msg),
-                        // }));
+                        let _ = tx2.send(event); // actually broadcast packet to all event streams.
                     }
                     Err(e) => {
                         // the packet receiver loop (tcp,...) encountered an error. This will most of the time
@@ -288,17 +279,20 @@ impl Bf4Client {
 
     pub async fn list_players(&self, vis: Visibility) -> Result<Vec<PlayerInfo>, ListPlayersError> {
         let mut words = veca!["admin.listPlayers"];
-        words.append(&mut vis.to_rcon_format());
+        words.append(&mut vis.rcon_encode());
         self.rcon
             .command(
                 &words,
-                |ok| player_info_block::parse_pib(&ok[1..]).map_err(|rconerr| rconerr.into()),
+                |ok| player_info_block::parse_pib(&ok).map_err(|rconerr| rconerr.into()),
                 err_none,
             )
             .await
     }
 
-    pub async fn kill(&self, player: impl IntoAsciiString + Into<String>) -> Result<(), PlayerKillError> {
+    pub async fn kill(
+        &self,
+        player: impl IntoAsciiString + Into<String>,
+    ) -> Result<(), PlayerKillError> {
         // first, `command` checks whether we received an OK, if yes, calls `ok`.
         // if not, then it checks if the response was `UnknownCommand` or `InvalidArguments`,
         // and handles those with an appropriate error message.
@@ -318,9 +312,13 @@ impl Bf4Client {
             .await
     }
 
-    pub async fn say(&self, msg: impl IntoAsciiString + Into<String>, vis: Visibility) -> Result<(), SayError> {
+    pub async fn say(
+        &self,
+        msg: impl IntoAsciiString + Into<String>,
+        vis: Visibility,
+    ) -> Result<(), SayError> {
         let mut words = veca!["admin.say", msg];
-        words.append(&mut vis.to_rcon_format());
+        words.append(&mut vis.rcon_encode());
         self.rcon
             .command(&words, ok_eof, |err| match err {
                 "InvalidTeam" => Some(SayError::Rcon(RconError::protocol_msg(
@@ -341,6 +339,7 @@ impl Bf4Client {
             .command(&veca!["mapList.clear"], ok_eof, err_none)
             .await
     }
+
     pub async fn maplist_add(
         &self,
         map: Map,
@@ -349,7 +348,69 @@ impl Bf4Client {
         offset: i32,
     ) -> Result<(), MapListError> {
         self.rcon
-            .command(&veca!["mapList.clear"], ok_eof, err_none)
+            .command(
+                &veca![
+                    "mapList.add",
+                    map.rcon_encode(),
+                    game_mode.rcon_encode(),
+                    n_rounds.to_string().into_ascii_string().unwrap(),
+                    offset.to_string().into_ascii_string().unwrap(),
+                ],
+                ok_eof,
+                |err| match err {
+                    "InvalidMap" => Some(MapListError::Rcon(RconError::protocol_msg(format!(
+                        "Rcon did not understand our map name {}",
+                        map.rcon_encode()
+                    )))),
+                    "Full" => Some(MapListError::MapListFull),
+                    "InvalidGameModeOnMap" => Some(MapListError::InvalidGameMode), // chosen map + gamemode combo invalid (not always purely rcon error)
+                    "InvalidRoundsPerMap" => Some(MapListError::InvalidRoundsPerMap),
+                    "InvalidMapIndex" => Some(MapListError::InvalidMapIndex),
+                    _ => None,
+                },
+            )
+            .await
+    }
+
+    pub async fn maplist_list(&self) -> Result<Vec<map_list::MapListEntry>, MapListError> {
+        self.rcon
+            .command(
+                &veca!["maplist.list", "0"],
+                |ok| Ok(map_list::parse_map_list(&ok)?),
+                err_none,
+            )
+            .await
+    }
+
+    pub async fn maplist_run_next_round(&self) -> Result<(), MapListError> {
+        // TODO errors
+        self.rcon
+            .command(&veca!["mapList.runNextRound"], ok_eof, err_none)
+            .await
+    }
+    pub async fn maplist_save(&self) -> Result<(), MapListError> {
+        // TODO err
+        self.rcon
+            .command(&veca!["mapList.save"], ok_eof, err_none)
+            .await
+    }
+    pub async fn maplist_restart_round(&self) -> Result<(), MapListError> {
+        // TODO err
+        self.rcon
+            .command(&veca!["mapList.restartRound"], ok_eof, err_none)
+            .await
+    }
+    pub async fn maplist_set_next_map(&self, index: usize) -> Result<(), MapListError> {
+        // TODO err
+        self.rcon
+            .command(
+                &veca![
+                    "mapList.setNextMapIndex",
+                    index.to_string().into_ascii_string().unwrap()
+                ],
+                ok_eof,
+                err_none,
+            )
             .await
     }
 }

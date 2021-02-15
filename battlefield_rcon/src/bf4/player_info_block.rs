@@ -1,9 +1,10 @@
+use crate::bf4::util::parse_int;
 use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
 
 use super::{
     ea_guid::{Eaid, EaidParseError},
-    visibility::{Squad, Team},
+    Squad, Team,
 };
 
 // pub enum ParsePibError {
@@ -28,15 +29,6 @@ pub struct PlayerInfo {
     pub score: i32,
     pub rank: i32,
     pub ping: i32,
-}
-
-fn parse_int(word: &AsciiString) -> RconResult<i32> {
-    word.as_str().parse::<i32>().map_err(|_| {
-        RconError::protocol_msg(format!(
-            "Failed to parse PlayerInfoBlock: \"{}\" is not an unsigned integer",
-            word
-        ))
-    })
 }
 
 // fn assert_len(words: &[AsciiString], len: usize) -> Bf4Result<()> {
@@ -106,8 +98,8 @@ pub fn parse_pib(words: &[AsciiString]) -> RconResult<Vec<PlayerInfo>> {
                     words[offset + 1]
                 ))
             })?,
-            team: Team::from_rcon_format(&words[offset + 2])?,
-            squad: Squad::from_rcon_format(&words[offset + 3])?,
+            team: Team::rcon_decode(&words[offset + 2])?,
+            squad: Squad::rcon_decode(&words[offset + 3])?,
             kills: parse_int(&words[offset + 4])?,
             deahts: parse_int(&words[offset + 5])?,
             score: parse_int(&words[offset + 6])?,
