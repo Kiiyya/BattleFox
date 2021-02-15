@@ -1,8 +1,10 @@
+use ascii::AsciiString;
+
 use crate::rcon::RconError;
 
 #[derive(Debug, Clone)]
 pub enum Bf4Error {
-    PlayerGuidResolveFailed,
+    PlayerGuidResolveFailed{ player_name: AsciiString, rcon: Option<RconError> },
     UnknownEvent(String),
     Rcon(RconError),
     Other(String),

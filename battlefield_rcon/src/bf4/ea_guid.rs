@@ -21,6 +21,8 @@ impl Eaid {
                 let guid_only = &ascii.as_slice()[3..]; // skip "EA_"
                 Ok(Eaid(guid_only.try_into().unwrap())) // we can use unwrap here because we tested the length
             }
+        } else if str.len() == 0 {
+            Ok(Eaid([AsciiChar::X; 32]))
         } else {
             Err(EaidParseError)
         }

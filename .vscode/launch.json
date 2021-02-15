@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'battlefield_rcon'",
+            "name": "Debug executable 'battle_fox'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=battlefield_rcon",
-                    "--package=battlefield_rcon"
+                    "--bin=battle_fox",
+                    "--package=battle_fox"
                 ],
                 "filter": {
-                    "name": "battlefield_rcon",
+                    "name": "battle_fox",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'battlefield_rcon'",
+            "name": "Debug unit tests in executable 'battle_fox'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=battlefield_rcon",
-                    "--package=battlefield_rcon"
+                    "--bin=battle_fox",
+                    "--package=battle_fox"
                 ],
                 "filter": {
-                    "name": "battlefield_rcon",
+                    "name": "battle_fox",
                     "kind": "bin"
                 }
             },

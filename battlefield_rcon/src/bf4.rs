@@ -166,20 +166,22 @@ impl Bf4Client {
         } else {
             // welp, gotta ask rcon and update cache...
             // println!("[Bf4Client::resolve_player] Cache miss for {}, resolving...", name);
-            let pib = match self.list_players(Visibility::Player(name.clone())).await { // hm, sucks that you need clone for this :/
-                Ok(pib) => Ok(pib),
-                Err(ListPlayersError::Rcon(RconError::InvalidArguments)) => {
-                    Err(Bf4Error::Rcon(RconError::other(format!("Failed to resolve player {}", name))))
+
+            // let pib = match self.list_players(Visibility::Player(name.clone())).await { // hm, sucks that you need clone for this :/
+            // let pib = match self.list_players(Visibility::Squad(Team::One, Squad::Alpha)).await { // hm, sucks that you need clone for this :/
+            let pib = match self.list_players(Visibility::All).await { // hm, sucks that you need clone for this :/
+                Ok(pib) => pib,
+                Err(ListPlayersError::Rcon(rcon)) => {
+                    return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: Some(rcon) } );
                 },
-                Err(ListPlayersError::Rcon(rcon)) => Err(rcon.into()),
-            }?;
+            };
             if pib.len() != 1 {
                 // we expect exactly one
-                return Err(Bf4Error::PlayerGuidResolveFailed);
+                return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
             }
             if &pib[0].player_name != name {
                 // wrong player returned? Wtf xD.
-                return Err(Bf4Error::PlayerGuidResolveFailed);
+                return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
             }
 
             let player = Player {
@@ -319,7 +321,7 @@ impl Bf4Client {
 
     pub async fn list_players(&self, vis: Visibility) -> Result<Vec<PlayerInfo>, ListPlayersError> {
         self.rcon.command(&veca!["admin.listPlayers", vis.to_rcon_format()],
-            |ok| player_info_block::parse_pib(ok).map_err(|rconerr| rconerr.into()),
+            |ok| player_info_block::parse_pib(&ok[1..]).map_err(|rconerr| rconerr.into()),
             err_none
         ).await
     }
