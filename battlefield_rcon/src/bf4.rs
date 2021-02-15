@@ -1,17 +1,28 @@
-use std::{collections::HashMap, fmt::{Display, Formatter}, sync::{Arc, Weak}, time::Instant};
+#![allow(clippy::useless_vec)]
+use std::{
+    collections::HashMap,
+    sync::{Arc, Weak},
+    time::Instant,
+};
 
+use self::error::Bf4Result;
+use crate::rcon::{err_none, ok_eof, packet::Packet, RconClient, RconError, RconResult};
 use ascii::{AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::PlayerInfo;
-use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
-use tokio_stream::{StreamExt, wrappers::BroadcastStream};
-use crate::rcon::{RconClient, RconError, RconResult, err_none, ok_eof, packet::Packet};
-use self::{ea_guid::Eaid, error::Bf4Result, visibility::{Team, Visibility}};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-pub mod visibility;
+pub mod defs;
 pub mod ea_guid;
-pub mod player_info_block;
+pub mod error;
+mod player_info_block;
+pub mod visibility;
+
+pub use defs::{Event, GameMode, Map, Player, Weapon};
+pub use ea_guid::Eaid;
+pub use visibility::{Squad, Team, Visibility};
 
 // trait Bf4Event {
 //     type Error : From<RconError>;
@@ -33,75 +44,7 @@ pub mod player_info_block;
 cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
 cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
-
-pub mod error;
-
-/// Maybe some flyweight or proxy, to enable `.kill()`, getting EA GUID, etc?
-#[derive(Debug, Clone)]
-pub struct Player {
-    ingamename: AsciiString,
-    eaid: Eaid,
-}
-
-impl Display for Player {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.ingamename.as_str())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Weapon {
-    Other(AsciiString),
-}
-
-impl Display for Weapon {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Weapon::Other(ascii) => f.write_str(ascii.as_str())
-        }
-    }
-}
-
-// #[derive(Debug)]
-// pub enum ParsePacketError {
-//     UnknownEvent,
-//     InvalidArguments,
-//     InvalidVisibility,
-//     Rcon(RconError),
-//     Other(String),
-// }
-
-// impl ParsePacketError {
-//     pub fn other(str: impl Into<String>) -> Self {
-//         Self::Other(str.into())
-//     }
-// }
-
-// impl From<RconError> for ParsePacketError {
-//     fn from(e: RconError) -> Self {
-//         Self::Rcon(e)
-//     }
-// }
-
-#[derive(Debug, Clone)]
-pub enum Event {
-    Chat {
-        vis: Visibility,
-        player: Player,
-        msg: AsciiString,
-    },
-    Kill {
-        killer: Option<Player>,
-        weapon: Weapon,
-        victim: Player,
-        headshot: bool,
-    },
-    Spawn {
-        player: Player,
-        team: Team,
-    },
-    PunkBusterMessage(String),
-}
+cmd_err!(pub MapListError, );
 
 #[derive(Debug, Copy, Clone)]
 struct PlayerCacheEntry {
@@ -151,9 +94,9 @@ impl Bf4Client {
 
     /// TODO: change cache policy to just fetch ALL players instead, that'll be quicker. Like if cache size is <5, just fetch ALL.
     pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
-        let entry : Option<PlayerCacheEntry> = {
+        let entry: Option<PlayerCacheEntry> = {
             let cache = self.player_cache.lock().await;
-            cache.get(name).map(|o| *o)
+            cache.get(name).copied()
             // make sure we unlock the mutex quickly, especially since we might query.
         };
 
@@ -161,7 +104,7 @@ impl Bf4Client {
             // oh neat, player is already cached. No need for sending a command to rcon.
             // println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
             Ok(Player {
-                ingamename: name.clone(),
+                name: name.clone(),
                 eaid: entry.eaid,
             })
         } else {
@@ -170,20 +113,27 @@ impl Bf4Client {
 
             // let pib = match self.list_players(Visibility::Player(name.clone())).await { // hm, sucks that you need clone for this :/
             // let pib = match self.list_players(Visibility::Squad(Team::One, Squad::Alpha)).await { // hm, sucks that you need clone for this :/
-            let mut pib = match self.list_players(Visibility::All).await { // hm, sucks that you need clone for this :/
+            let mut pib = match self.list_players(Visibility::All).await {
+                // hm, sucks that you need clone for this :/
                 Ok(pib) => pib,
                 Err(ListPlayersError::Rcon(rcon)) => {
-                    return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: Some(rcon) } );
-                },
+                    return Err(Bf4Error::PlayerGuidResolveFailed {
+                        player_name: name.clone(),
+                        rcon: Some(rcon),
+                    });
+                }
             };
 
             let mut cache = self.player_cache.lock().await;
             // technically it's possible someone else updated the cache meanwhile, but that's fine.
             for pi in &mut pib {
-                cache.insert(pi.player_name.clone(), PlayerCacheEntry {
-                    freshness: Instant::now(),
-                    eaid: pi.eaid,
-                });
+                cache.insert(
+                    pi.player_name.clone(),
+                    PlayerCacheEntry {
+                        freshness: Instant::now(),
+                        eaid: pi.eaid,
+                    },
+                );
 
                 // println!("Resolved");
             }
@@ -191,14 +141,15 @@ impl Bf4Client {
             match pib.iter().find(|pi| &pi.player_name == name) {
                 Some(pi) => {
                     let player = Player {
-                        ingamename: pi.player_name.clone(),
+                        name: pi.player_name.clone(),
                         eaid: pi.eaid,
                     };
                     Ok(player)
                 }
-                None => {
-                    Err(Bf4Error::PlayerGuidResolveFailed{ player_name: name.clone(), rcon: None })
-                }
+                None => Err(Bf4Error::PlayerGuidResolveFailed {
+                    player_name: name.clone(),
+                    rcon: None,
+                }),
             }
         }
     }
@@ -208,13 +159,18 @@ impl Bf4Client {
         fn upgrade(bf4client: &Weak<Bf4Client>) -> Bf4Result<Arc<Bf4Client>> {
             match bf4client.upgrade() {
                 Some(arc) => Ok(arc),
-                None => Err(Bf4Error::other("[Bf4Client::parse_packet] Bf4Client is already dropped.")),
+                None => Err(Bf4Error::other(
+                    "[Bf4Client::parse_packet] Bf4Client is already dropped.",
+                )),
             }
         }
 
         fn assert_len(packet: &Packet, n: usize) -> Bf4Result<()> {
             if packet.words.len() != n {
-                Err(Bf4Error::Rcon(RconError::malformed_packet(packet.words.clone(), format!("{} packet must have {} words", &packet.words[0], n))))
+                Err(Bf4Error::Rcon(RconError::malformed_packet(
+                    packet.words.clone(),
+                    format!("{} packet must have {} words", &packet.words[0], n),
+                )))
             } else {
                 Ok(())
             }
@@ -225,12 +181,16 @@ impl Bf4Client {
                 assert_len(&packet, 5)?;
                 let bf4 = upgrade(bf4client)?;
                 Ok(Event::Kill {
-                    killer: if packet.words[1].len() == 0 { None } else { Some(bf4.resolve_player(&packet.words[1]).await?) },
+                    killer: if packet.words[1].is_empty() {
+                        None
+                    } else {
+                        Some(bf4.resolve_player(&packet.words[1]).await?)
+                    },
                     victim: bf4.resolve_player(&packet.words[2]).await?,
                     weapon: Weapon::Other(packet.words[3].clone()),
                     headshot: false,
                 })
-            },
+            }
             "player.onSpawn" => {
                 assert_len(&packet, 3)?;
                 let bf4 = upgrade(bf4client)?;
@@ -238,10 +198,13 @@ impl Bf4Client {
                     player: bf4.resolve_player(&packet.words[1]).await?,
                     team: Team::from_rcon_format(&packet.words[2])?,
                 })
-            },
+            }
             "player.onChat" => {
                 if packet.words.len() < 4 {
-                    return Err(Bf4Error::Rcon(RconError::malformed_packet(packet.words.clone(), format!("{} packet must have at least {} words", &packet.words[0], 4))));
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have at least {} words", &packet.words[0], 4),
+                    )));
                 }
                 let bf4 = upgrade(bf4client)?;
                 Ok(Event::Chat {
@@ -254,9 +217,7 @@ impl Bf4Client {
                 assert_len(&packet, 2)?;
                 Ok(Event::PunkBusterMessage(packet.words[1].to_string()))
             }
-            _ => {
-                Err(Bf4Error::UnknownEvent(packet.words))
-            }
+            _ => Err(Bf4Error::UnknownEvent(packet.words)),
         }
     }
 
@@ -265,17 +226,19 @@ impl Bf4Client {
         bf4client_rx: oneshot::Receiver<Weak<Bf4Client>>,
         mut packets: mpsc::UnboundedReceiver<RconResult<Packet>>,
     ) -> broadcast::Sender<Bf4Result<Event>> {
-
         let (tx, _) = broadcast::channel::<Bf4Result<Event>>(128);
         let tx2 = tx.clone();
         tokio::spawn(async move {
-            let bf4client : Weak<Bf4Client> = bf4client_rx.await.unwrap();
+            let bf4client: Weak<Bf4Client> = bf4client_rx.await.unwrap();
             while let Some(packet) = packets.recv().await {
                 // println!("[Bf4Clinet::packet_to_event_stream] Received {:?}", packet);
                 match packet {
                     Ok(packet) => {
-                        if packet.words.len() == 0 {
-                            let _ = tx2.send(Err(RconError::protocol_msg("Received empty packet somehow?").into())); // All events must have at least one word.
+                        if packet.words.is_empty() {
+                            let _ = tx2.send(Err(RconError::protocol_msg(
+                                "Received empty packet somehow?",
+                            )
+                            .into())); // All events must have at least one word.
                             continue; // should probably be a break, but yeah whatever.
                         }
                         let event = Bf4Client::parse_packet(&bf4client, packet).await;
@@ -287,7 +250,7 @@ impl Bf4Client {
                         //     ParsePacketError::Rcon(e) => e,
                         //     ParsePacketError::Other(msg) => RconError::Other(msg),
                         // }));
-                    },
+                    }
                     Err(e) => {
                         // the packet receiver loop (tcp,...) encountered an error. This will most of the time
                         // be something such as connection dropped.
@@ -304,7 +267,7 @@ impl Bf4Client {
 
     fn event_stream_raw(&self) -> BroadcastStream<Bf4Result<Event>> {
         let rx = self.events.subscribe();
-        return tokio_stream::wrappers::BroadcastStream::new(rx);
+        tokio_stream::wrappers::BroadcastStream::new(rx)
     }
 
     /// This function differs from the raw version by unpacking potential broadcast errors,
@@ -326,10 +289,13 @@ impl Bf4Client {
     pub async fn list_players(&self, vis: Visibility) -> Result<Vec<PlayerInfo>, ListPlayersError> {
         let mut words = veca!["admin.listPlayers"];
         words.append(&mut vis.to_rcon_format());
-        self.rcon.command(&words,
-            |ok| player_info_block::parse_pib(&ok[1..]).map_err(|rconerr| rconerr.into()),
-            err_none
-        ).await
+        self.rcon
+            .command(
+                &words,
+                |ok| player_info_block::parse_pib(&ok[1..]).map_err(|rconerr| rconerr.into()),
+                err_none,
+            )
+            .await
     }
 
     pub async fn kill(&self, player: impl IntoAsciiString) -> Result<(), PlayerKillError> {
@@ -339,27 +305,51 @@ impl Bf4Client {
         // if not, then it calls `err`, hoping for a `Some(err)`, but if it returns `None`,
         // then it just creates an `RconError::UnknownResponse` error.
         self.rcon
-            .command(&veca!["admin.killPlayer", player], ok_eof, |err| match err {
-                "InvalidPlayerName" => Some(PlayerKillError::InvalidPlayerName),
-                "SoldierNotAlive" => Some(PlayerKillError::SoldierNotAlive),
-                _ => None,
-            })
+            .command(
+                &veca!["admin.killPlayer", player],
+                ok_eof,
+                |err| match err {
+                    "InvalidPlayerName" => Some(PlayerKillError::InvalidPlayerName),
+                    "SoldierNotAlive" => Some(PlayerKillError::SoldierNotAlive),
+                    _ => None,
+                },
+            )
             .await
     }
 
     pub async fn say(&self, msg: impl IntoAsciiString, vis: Visibility) -> Result<(), SayError> {
         let mut words = veca!["admin.say", msg];
         words.append(&mut vis.to_rcon_format());
-        self.rcon.command(&words,
-            ok_eof,
-            |err| match err {
-                "InvalidTeam" => Some(SayError::Rcon(RconError::protocol_msg("Rcon did not understand our teamId"))),
-                "InvalidSquad" => Some(SayError::Rcon(RconError::protocol_msg("Rcon did not understand our squadId"))),
+        self.rcon
+            .command(&words, ok_eof, |err| match err {
+                "InvalidTeam" => Some(SayError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our teamId",
+                ))),
+                "InvalidSquad" => Some(SayError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our squadId",
+                ))),
                 "MessageTooLong" => Some(SayError::MessageTooLong),
                 "PlayerNotFound" => Some(SayError::PlayerNotFound),
                 _ => None,
-            }
-        ).await
+            })
+            .await
+    }
+
+    pub async fn maplist_clear(&self) -> Result<(), MapListError> {
+        self.rcon
+            .command(&veca!["mapList.clear"], ok_eof, err_none)
+            .await
+    }
+    pub async fn maplist_add(
+        &self,
+        map: Map,
+        game_mode: GameMode,
+        n_rounds: i32,
+        offset: i32,
+    ) -> Result<(), MapListError> {
+        self.rcon
+            .command(&veca!["mapList.clear"], ok_eof, err_none)
+            .await
     }
 }
 
@@ -392,7 +382,11 @@ mod test {
 
         // tokio::time::sleep(Duration::from_secs(2)).await;
 
-        println!("spammer#{}: Done receiving after {}ms", i, start.elapsed().as_millis());
+        println!(
+            "spammer#{}: Done receiving after {}ms",
+            i,
+            start.elapsed().as_millis()
+        );
         Ok(())
     }
 
@@ -416,7 +410,11 @@ mod test {
         let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
         let bf4 = Bf4Client::new(rcon).await.unwrap();
 
-        println!("bf4 counts: {}, {}", Arc::strong_count(&bf4), Arc::weak_count(&bf4));
+        println!(
+            "bf4 counts: {}, {}",
+            Arc::strong_count(&bf4),
+            Arc::weak_count(&bf4)
+        );
 
         Ok(())
     }

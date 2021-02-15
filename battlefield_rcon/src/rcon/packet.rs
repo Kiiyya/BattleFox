@@ -104,8 +104,7 @@ impl Packet {
     /// reads total lentgh from packet header. Including the header though!
     /// So you need to subtract 12 bytes potentially.
     pub fn read_total_len(buf: &[u8; 12]) -> usize {
-        let total_len = u32::from_le_bytes(buf[4..8].try_into().unwrap()) as usize;
-        total_len
+        u32::from_le_bytes(buf[4..8].try_into().unwrap()) as usize
     }
 
     pub fn deserialize(buf: &[u8]) -> PacketDeserializeResult {

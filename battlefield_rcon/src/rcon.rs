@@ -4,9 +4,7 @@ use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, s
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
     net::tcp::OwnedReadHalf,
     sync::{mpsc, oneshot},
@@ -41,13 +39,9 @@ pub enum RconError {
     TimedOut,
 
     /// When Rcon says this command does not exist.
-    UnknownCommand {
-        our_query: Vec<AsciiString>,
-    },
+    UnknownCommand { our_query: Vec<AsciiString> },
     /// When Rcon says that something's wrong with the arguments to the command.
-    InvalidArguments {
-        our_query: Vec<AsciiString>,
-    },
+    InvalidArguments { our_query: Vec<AsciiString> },
     /// When *we* don't know what the fuck rcon just responded to us. More like unknown query response.
     UnknownResponse {
         our_query: Vec<AsciiString>,
@@ -64,7 +58,10 @@ pub enum RconError {
 }
 
 impl RconError {
-    pub fn malformed_packet(words: impl IntoIterator<Item = AsciiString>, explanation: impl Into<String>) -> Self {
+    pub fn malformed_packet(
+        words: impl IntoIterator<Item = AsciiString>,
+        explanation: impl Into<String>,
+    ) -> Self {
         Self::MalformedPacket {
             words: words.into_iter().collect(),
             explanation: Some(explanation.into()),
@@ -80,7 +77,7 @@ impl RconError {
         // if str.is_empty() {
         //     Self::ProtocolError(None)
         // } else {
-            Self::ProtocolError(Some(str.into()))
+        Self::ProtocolError(Some(str.into()))
         // }
     }
 
@@ -124,7 +121,7 @@ impl Into<RconConnectionInfo> for (&str, u16, &str) {
     fn into(self) -> RconConnectionInfo {
         RconConnectionInfo {
             ip: self.0.into(),
-            port: self.1.into(),
+            port: self.1,
             password: AsciiString::from_str(self.2).expect("Password is not ASCII."),
         }
     }
@@ -158,6 +155,7 @@ pub trait RconEventPacketHandler {
 
 /// Just used internally to do a remote procedure call.
 impl RconClient {
+    #[allow(clippy::useless_vec)]
     pub async fn connect(conn: impl Into<RconConnectionInfo>) -> RconResult<Self> {
         let conn: RconConnectionInfo = conn.into();
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
@@ -490,11 +488,11 @@ impl RconClient {
         // println!("     [RconClient::mainloop] Ended gracefully");
     }
 
-    pub async fn query_raw(&self, words: &Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
+    pub async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
         let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
 
         self.queries
-            .send(Query(words.clone(), tx))
+            .send(Query(words, tx))
             .map_err(|_: mpsc::error::SendError<_>| RconError::ConnectionClosed)?; // when mainloop did `rx.close()` at the end for example.
         rx.await.expect(
             "query_raw: failed to receive query response from main loop. This is likely a bug.",
@@ -511,28 +509,41 @@ impl RconClient {
             words_ascii.push(w?);
         }
 
-        self.query_raw(&words_ascii).await
+        self.query_raw(words_ascii).await
     }
 
     pub async fn command<T, E>(
         &self,
-        words: &Vec<AsciiString>,
-        ok: impl FnOnce(&Vec<AsciiString>) -> Result<T, E>,
+        words: &[AsciiString],
+        ok: impl FnOnce(&[AsciiString]) -> Result<T, E>,
         err: impl FnOnce(&str) -> Option<E>,
     ) -> Result<T, E>
     where
         E: From<RconError>,
     {
         // println!("Command out: {:?}", words);
-        let res = self.query_raw(words).await?;
+        let res = self.query_raw(words.to_vec()).await?;
         match res[0].as_str() {
             "OK" => ok(&res),
-            "UnknownCommand" => Err(RconError::UnknownCommand{ our_query: words.clone() }.into()),
-            "InvalidArguments" => Err(RconError::InvalidArguments {our_query:words.clone()}.into()),
-            word => Err(err(word).unwrap_or(RconError::UnknownResponse { our_query: words.clone(), rcon_response: res.clone()}.into())),
+            "UnknownCommand" => Err(RconError::UnknownCommand {
+                our_query: words.to_vec(),
+            }
+            .into()),
+            "InvalidArguments" => Err(RconError::InvalidArguments {
+                our_query: words.to_vec(),
+            }
+            .into()),
+            word => Err(err(word).unwrap_or_else(|| {
+                RconError::UnknownResponse {
+                    our_query: words.to_vec(),
+                    rcon_response: res.clone(),
+                }
+                .into()
+            })),
         }
     }
 
+    #[allow(clippy::useless_vec)]
     pub async fn events_enabled(&self, enabled: bool) -> RconResult<()> {
         // there exists a get version of this, but I assume it'll be never needed.
         self.command(
@@ -562,7 +573,7 @@ impl RconClient {
 /// the first word to be "OK" (already checked at a different place),
 /// and nothing else.
 /// Basically just a convenience function.
-pub(crate) fn ok_eof<E>(words: &Vec<AsciiString>) -> Result<(), E>
+pub(crate) fn ok_eof<E>(words: &[AsciiString]) -> Result<(), E>
 where
     E: From<RconError>,
 {

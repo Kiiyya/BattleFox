@@ -7,7 +7,7 @@ pub struct EaidParseError;
 
 /// EA GUID. Encoded as 32-long hex, without the EA_ prefix.
 #[derive(Clone, Copy)]
-pub struct Eaid ([AsciiChar; 32]);
+pub struct Eaid([AsciiChar; 32]);
 
 impl Eaid {
     /// Input: "EA_FFFF..."
@@ -16,12 +16,11 @@ impl Eaid {
         if str.len() == 32 + 3 {
             if &str[0..3] != "EA_" {
                 Err(EaidParseError)
-            }
-            else {
+            } else {
                 let guid_only = &ascii.as_slice()[3..]; // skip "EA_"
                 Ok(Eaid(guid_only.try_into().unwrap())) // we can use unwrap here because we tested the length
             }
-        } else if str.len() == 0 {
+        } else if str.is_empty() {
             Ok(Eaid([AsciiChar::X; 32]))
         } else {
             Err(EaidParseError)

@@ -10,6 +10,7 @@ members = ["battlefield_rcon"]
 [dependencies]
 # Cargo is smart enough to find a crate inside a bigger git repo.
 # battlefield_rcon = { git = "https://github.com/Kiiyya/BattleFox", branch = "main" }
+ascii = "1"
 battlefield_rcon = { path = "battlefield_rcon" }
 tokio = "1.2"
 tokio-stream = "0.1"

@@ -1,8 +1,10 @@
-
-use ascii::AsciiString;
 use crate::rcon::{RconError, RconResult};
+use ascii::AsciiString;
 
-use super::{ea_guid::{Eaid, EaidParseError}, visibility::{Squad, Team}};
+use super::{
+    ea_guid::{Eaid, EaidParseError},
+    visibility::{Squad, Team},
+};
 
 // pub enum ParsePibError {
 //     Derp,
@@ -29,7 +31,12 @@ pub struct PlayerInfo {
 }
 
 fn parse_int(word: &AsciiString) -> RconResult<i32> {
-    word.as_str().parse::<i32>().map_err(|_| RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: \"{}\" is not an unsigned integer", word)))
+    word.as_str().parse::<i32>().map_err(|_| {
+        RconError::protocol_msg(format!(
+            "Failed to parse PlayerInfoBlock: \"{}\" is not an unsigned integer",
+            word
+        ))
+    })
 }
 
 // fn assert_len(words: &[AsciiString], len: usize) -> Bf4Result<()> {
@@ -42,48 +49,63 @@ fn parse_int(word: &AsciiString) -> RconResult<i32> {
 
 /// Expects the PIB, without any leading "OK" though.
 pub fn parse_pib(words: &[AsciiString]) -> RconResult<Vec<PlayerInfo>> {
-    if words.len() == 0 {
-        return Err(RconError::protocol_msg("Failed to parse PlayerInfoBlock: Zero length?"));
+    if words.is_empty() {
+        return Err(RconError::protocol_msg(
+            "Failed to parse PlayerInfoBlock: Zero length?",
+        ));
     }
 
     // word offset.
     let mut offset = 0;
 
-    const N_COLS : usize = 10;
+    const N_COLS: usize = 10;
     let n_columns = parse_int(&words[offset])? as usize;
-    if words.len() - offset < n_columns || n_columns != N_COLS { // currently there are 9 columns
-        return Err(RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: Expected {} columns", N_COLS)));
+    if words.len() - offset < n_columns || n_columns != N_COLS {
+        // currently there are 9 columns
+        return Err(RconError::protocol_msg(format!(
+            "Failed to parse PlayerInfoBlock: Expected {} columns",
+            N_COLS
+        )));
     }
     offset += 1;
 
     // now read in the column names, make sure we're still talking about the same thing
-    const COLS : [&'static str; N_COLS] = ["name", "guid", "teamId", "squadId", "kills", "deaths", "score", "rank", "ping", "type"];
+    const COLS: [&str; N_COLS] = [
+        "name", "guid", "teamId", "squadId", "kills", "deaths", "score", "rank", "ping", "type",
+    ];
     for i in 0..N_COLS {
         let col_name = words[offset + i].as_str();
         if col_name != COLS[i] {
-            return Err(RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: Column mismatch, did the rcon protocol change?")));
+            return Err(RconError::protocol_msg(
+                "Failed to parse PlayerInfoBlock: Column mismatch, did the rcon protocol change?",
+            ));
         }
     }
     offset += N_COLS;
 
     // now read in how many rows (= players) we have.
     if words.len() - offset == 0 {
-        return Err(RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock")));
+        return Err(RconError::protocol_msg("Failed to parse PlayerInfoBlock"));
     }
     let m_rows = parse_int(&words[offset])? as usize;
     offset += 1;
 
     // make sure there actually is enough words to read in, that that packet isn't malformed.
     if words.len() - offset != n_columns * m_rows {
-        return Err(RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock")));
+        return Err(RconError::protocol_msg("Failed to parse PlayerInfoBlock"));
     }
 
     // now we actually read in the data.
     let mut pib = Vec::new();
     for _ in 0..m_rows {
         let pi = PlayerInfo {
-            player_name: words[offset + 0].clone(),
-            eaid: Eaid::from_rcon_format(&words[offset + 1]).map_err(|_:EaidParseError| RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: Invalid EA GUID: {}", words[offset + 1])))?,
+            player_name: words[offset].clone(),
+            eaid: Eaid::from_rcon_format(&words[offset + 1]).map_err(|_: EaidParseError| {
+                RconError::protocol_msg(format!(
+                    "Failed to parse PlayerInfoBlock: Invalid EA GUID: {}",
+                    words[offset + 1]
+                ))
+            })?,
             team: Team::from_rcon_format(&words[offset + 2])?,
             squad: Squad::from_rcon_format(&words[offset + 3])?,
             kills: parse_int(&words[offset + 4])?,
