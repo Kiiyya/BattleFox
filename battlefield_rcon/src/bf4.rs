@@ -158,7 +158,7 @@ impl Bf4Client {
 
         if let Some(entry) = entry {
             // oh neat, player is already cached. No need for sending a command to rcon.
-            // println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
+            println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
             Ok(Player {
                 ingamename: name.clone(),
                 eaid: entry.eaid,
@@ -169,41 +169,36 @@ impl Bf4Client {
 
             // let pib = match self.list_players(Visibility::Player(name.clone())).await { // hm, sucks that you need clone for this :/
             // let pib = match self.list_players(Visibility::Squad(Team::One, Squad::Alpha)).await { // hm, sucks that you need clone for this :/
-            let pib = match self.list_players(Visibility::All).await { // hm, sucks that you need clone for this :/
+            let mut pib = match self.list_players(Visibility::All).await { // hm, sucks that you need clone for this :/
                 Ok(pib) => pib,
                 Err(ListPlayersError::Rcon(rcon)) => {
                     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: Some(rcon) } );
                 },
             };
 
-            let pi = pib.iter().find(|row| &row.player_name == name).unwrap();
-            // if pib.len() != 1 {
-            //     // we expect exactly one
-            //     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
-            // }
-            // if &pib[0].player_name != name {
-            //     // wrong player returned? Wtf xD.
-            //     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
-            // }
-
-            let player = Player {
-                ingamename: name.clone(),
-                eaid: pi.eaid,
-            };
-
-            // println!("[Bf4Client::resolve_player] Resolved {} -> {}", name, player.eaid);
-
-            // update cache.
-            {
-                let mut cache = self.player_cache.lock().await;
-                // technically it's possible someone else updated the cache meanwhile, but that's fine.
-                cache.insert(name.clone(), PlayerCacheEntry {
+            let mut cache = self.player_cache.lock().await;
+            // technically it's possible someone else updated the cache meanwhile, but that's fine.
+            for pi in &mut pib {
+                cache.insert(pi.player_name.clone(), PlayerCacheEntry {
                     freshness: Instant::now(),
                     eaid: pi.eaid,
                 });
+
+                println!("Resolved");
             }
 
-            Ok(player)
+            match pib.iter().find(|pi| &pi.player_name == name) {
+                Some(pi) => {
+                    let player = Player {
+                        ingamename: pi.player_name.clone(),
+                        eaid: pi.eaid,
+                    };
+                    Ok(player)
+                }
+                None => {
+                    Err(Bf4Error::PlayerGuidResolveFailed{ player_name: name.clone(), rcon: None })
+                }
+            }
         }
     }
 
