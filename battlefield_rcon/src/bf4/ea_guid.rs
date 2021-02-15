@@ -6,7 +6,7 @@ use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
 pub struct EaidParseError;
 
 /// EA GUID. Encoded as 32-long hex, without the EA_ prefix.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Eaid ([AsciiChar; 32]);
 
 impl Eaid {
@@ -39,6 +39,12 @@ impl Eaid {
 }
 
 impl Display for Eaid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EA_{}", self.0.as_ascii_str().unwrap())
+    }
+}
+
+impl std::fmt::Debug for Eaid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "EA_{}", self.0.as_ascii_str().unwrap())
     }

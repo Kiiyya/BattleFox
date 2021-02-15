@@ -158,7 +158,7 @@ impl Bf4Client {
 
         if let Some(entry) = entry {
             // oh neat, player is already cached. No need for sending a command to rcon.
-            println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
+            // println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
             Ok(Player {
                 ingamename: name.clone(),
                 eaid: entry.eaid,
@@ -175,21 +175,23 @@ impl Bf4Client {
                     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: Some(rcon) } );
                 },
             };
-            if pib.len() != 1 {
-                // we expect exactly one
-                return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
-            }
-            if &pib[0].player_name != name {
-                // wrong player returned? Wtf xD.
-                return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
-            }
+
+            let pi = pib.iter().find(|row| &row.player_name == name).unwrap();
+            // if pib.len() != 1 {
+            //     // we expect exactly one
+            //     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
+            // }
+            // if &pib[0].player_name != name {
+            //     // wrong player returned? Wtf xD.
+            //     return Err(Bf4Error::PlayerGuidResolveFailed { player_name: name.clone(), rcon: None } );
+            // }
 
             let player = Player {
                 ingamename: name.clone(),
-                eaid: pib[0].eaid,
+                eaid: pi.eaid,
             };
 
-            println!("[Bf4Client::resolve_player] Resolved {} -> {}", name, player.eaid);
+            // println!("[Bf4Client::resolve_player] Resolved {} -> {}", name, player.eaid);
 
             // update cache.
             {
@@ -197,7 +199,7 @@ impl Bf4Client {
                 // technically it's possible someone else updated the cache meanwhile, but that's fine.
                 cache.insert(name.clone(), PlayerCacheEntry {
                     freshness: Instant::now(),
-                    eaid: pib[0].eaid,
+                    eaid: pi.eaid,
                 });
             }
 

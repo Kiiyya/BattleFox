@@ -81,11 +81,6 @@ pub fn parse_pib(words: &[AsciiString]) -> RconResult<Vec<PlayerInfo>> {
     // now we actually read in the data.
     let mut pib = Vec::new();
     for _ in 0..m_rows {
-        // let guid = if words[offset + 1].len() == 0 {
-        //     None
-        // } else {
-        //     Some(Eaid::from_rcon_format(&words[offset + 1]).map_err(|_:EaidParseError| RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: Invalid EA GUID: {}", words[offset + 1])))?)
-        // }
         let pi = PlayerInfo {
             player_name: words[offset + 0].clone(),
             eaid: Eaid::from_rcon_format(&words[offset + 1]).map_err(|_:EaidParseError| RconError::protocol_msg(format!("Failed to parse PlayerInfoBlock: Invalid EA GUID: {}", words[offset + 1])))?,
