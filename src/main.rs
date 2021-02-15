@@ -18,7 +18,7 @@ async fn main() -> rcon::RconResult<()> {
     while let Some(ev) = event_stream.next().await {
         match ev {
             Ok(Event::Kill{killer, victim, headshot: _, weapon}) => {
-                println!("{} killed {} with a {}!", killer, victim, weapon);
+                println!("{:?} killed {} with a {}!", killer, victim, weapon);
             },
             Ok(Event::Spawn{player, team: _}) => {
                 println!("{} spawned", player);

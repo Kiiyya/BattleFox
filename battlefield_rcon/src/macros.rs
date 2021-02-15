@@ -8,14 +8,14 @@ macro_rules! veca {
 }
 
 macro_rules! cmd_err {
-    ($vis:vis $error_name:ident, $($error:ident),+) => {
+    ($vis:vis $error_name:ident, $($error:ident),*) => {
         #[derive(Debug)]
         $vis enum $error_name {
             /// Some more low-level error returned by the rcon layer.
             /// For example TCP IO errors, connection closed, unknown RCON command,
             /// etc.
             Rcon(RconError),
-            $($error),+
+            $($error),*
         }
 
         impl From<RconError> for $error_name {

@@ -1,7 +1,8 @@
-use ascii::{AsciiChar, AsciiString};
+use std::str::FromStr;
 
-use super::ParsePacketError;
+use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString, IntoAsciiString};
 
+use crate::rcon::{RconError, RconResult};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Team {
@@ -11,16 +12,16 @@ pub enum Team {
 }
 
 impl Team {
-    pub fn to_rcon_format(self) -> String {
-        (self as usize).to_string()
+    pub fn to_rcon_format(self) -> AsciiString {
+        (self as usize).to_string().into_ascii_string().unwrap()
     }
 
-    pub fn from_rcon_format<'a>(ascii: &AsciiString) -> Result<Team, ParsePacketError> {
+    pub fn from_rcon_format<'a>(ascii: &AsciiStr) -> RconResult<Team> {
         match ascii.as_str() {
             "0" => Ok(Team::Neutral),
             "1" => Ok(Team::One),
             "2" => Ok(Team::Two),
-            _   => Err(ParsePacketError::InvalidVisibility),
+            _   => Err(RconError::protocol_msg(format!("Unknown team Id {}", ascii))),
         }
     }
 }
@@ -44,11 +45,11 @@ pub enum Squad {
 
 impl Squad {
     /// Returns "2" for Bravo, 0 for "NoSquad", ...
-    pub fn rcon_format(self) -> String {
-        (self as usize).to_string()
+    pub fn to_rcon_format(self) -> AsciiString {
+        (self as usize).to_string().into_ascii_string().unwrap()
     }
 
-    pub fn from_rcon_format(ascii: &AsciiString) -> Result<Self, ParsePacketError> {
+    pub fn from_rcon_format(ascii: &AsciiStr) -> RconResult<Self> {
         match ascii.as_str() {
             "0" => Ok(Squad::NoSquad),
             "1" => Ok(Squad::Alpha),
@@ -63,7 +64,7 @@ impl Squad {
             "10" => Ok(Squad::Juliet),
             "11" => Ok(Squad::Kilo),
             "12" => Ok(Squad::Lima),
-            _   => Err(ParsePacketError::InvalidVisibility),
+            _   => Err(RconError::protocol_msg(format!("Unknown squad Id {}", ascii))),
         }
     }
 }
@@ -77,51 +78,69 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    pub fn to_rcon_format(&self) -> String {
+    pub fn to_rcon_format(&self) -> AsciiString {
         match self {
-            Visibility::All => "all".into(),
-            Visibility::Team(team) => format!("team {}", team.to_rcon_format()),
-            Visibility::Squad(team, squad) => format!("squad {} {}", team.to_rcon_format(), squad.rcon_format()),
-            Visibility::Player(player) => format!("player {}", player),
+            Visibility::All => AsciiString::from_str("all").unwrap(),
+            Visibility::Team(team) => {
+                let mut ascii = AsciiString::from_str("team ").unwrap();
+                ascii.extend(team.to_rcon_format().into_iter());
+                ascii
+            }
+            Visibility::Squad(team, squad) => {
+                let mut ascii = AsciiString::from_str("squad ").unwrap();
+                ascii.push_str(team.to_rcon_format().as_ascii_str().unwrap());
+                ascii.push(AsciiChar::Space);
+                ascii.extend(squad.to_rcon_format().into_iter());
+                ascii
+            }
+            Visibility::Player(player) => {
+                let mut ascii = AsciiString::from_str("player ").unwrap();
+                ascii.extend(player.into_iter());
+                ascii
+            }
         }
     }
 
-    pub fn from_rcon_format(str: &AsciiString) -> Result<Self, ParsePacketError> {
+    pub fn from_rcon_format(str: &AsciiStr) -> RconResult<Self> {
         let split : Vec<_> = str.split(AsciiChar::Space).collect::<Vec<_>>();
         if split.len() == 0 {
-            return Err(ParsePacketError::InvalidVisibility);
+            return Err(RconError::protocol());
         }
         match split[0].as_str() {
             "all" => {
                 if split.len() != 1 {
-                    return Err(ParsePacketError::InvalidVisibility);
+                    Err(RconError::protocol())
+                } else {
+                    Ok(Visibility::All)
                 }
-                Ok(Visibility::All)
             },
             "team" => {
                 if split.len() != 2 {
-                    return Err(ParsePacketError::InvalidVisibility);
+                    Err(RconError::protocol())
+                } else {
+                    Ok(Visibility::Team(Team::from_rcon_format(&split[1])?))
                 }
-                Ok(Visibility::Team(Team::from_rcon_format(&split[1].into())?))
             },
             "squad" => {
                 if split.len() != 3 {
-                    return Err(ParsePacketError::InvalidVisibility);
+                    Err(RconError::protocol())
+                } else {
+                    Ok(Visibility::Squad(
+                        Team::from_rcon_format(&split[1])?,
+                        Squad::from_rcon_format(&split[2])?
+                    ))
                 }
-                Ok(Visibility::Squad(
-                    Team::from_rcon_format(&split[1].into())?,
-                    Squad::from_rcon_format(&split[2].into())?
-                ))
             },
             "player" => {
                 if split.len() != 2 {
-                    return Err(ParsePacketError::InvalidVisibility);
+                    Err(RconError::protocol())
+                } else {
+                    Ok(Visibility::Player(
+                        split[1].into()
+                    ))
                 }
-                Ok(Visibility::Player(
-                    split[1].into()
-                ))
             }
-            _ => Err(ParsePacketError::InvalidVisibility),
+            _ => Err(RconError::protocol()),
         }
     }
 }

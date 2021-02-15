@@ -31,7 +31,7 @@ pub enum RconError {
     ConnectionClosed,
 
     /// Malformed packets, bad sequence ids, etc...
-    ProtocolError,
+    ProtocolError(Option<String>),
 
     /// Some string passed into this api could not be converted to Ascii.
     /// E.g. contains utf8 characters which don't exist in Ascii.
@@ -54,6 +54,19 @@ pub enum RconError {
 impl RconError {
     pub fn other(str: impl Into<String>) -> Self {
         RconError::Other(str.into())
+    }
+
+    pub fn protocol_msg(str: impl Into<String>) -> Self {
+        // let str : String = str.into();
+        // if str.is_empty() {
+        //     Self::ProtocolError(None)
+        // } else {
+            Self::ProtocolError(Some(str.into()))
+        // }
+    }
+
+    pub fn protocol() -> Self {
+        Self::ProtocolError(None)
     }
 }
 
@@ -255,13 +268,13 @@ impl RconClient {
                                 let packet = match Packet::deserialize(&buf[0..total_len]) {
                                     PacketDeserializeResult::Ok {packet, consumed_bytes} => {
                                         if consumed_bytes != total_len {
-                                            ret = Err(RconError::ProtocolError);
+                                            ret = Err(RconError::protocol_msg("Malformed packet received"));
                                             break 'outer;
                                         }
                                         packet
                                     },
                                     _ => {
-                                        ret = Err(RconError::ProtocolError);
+                                        ret = Err(RconError::protocol());
                                         break 'outer;
                                     }
                                 };
@@ -491,6 +504,7 @@ impl RconClient {
     where
         E: From<RconError>,
     {
+        // println!("Command out: {:?}", words);
         let res = self.query_raw(words).await?;
         match res[0].as_str() {
             "OK" => ok(&res),
@@ -536,7 +550,7 @@ where
     if words.len() == 1 {
         Ok(())
     } else {
-        Err(RconError::ProtocolError.into())
+        Err(RconError::protocol().into())
     }
 }
 

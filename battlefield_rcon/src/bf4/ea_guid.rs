@@ -1,37 +1,43 @@
-use std::{convert::TryInto, str::FromStr};
+use std::{convert::TryInto, fmt::Display, str::FromStr};
 
-use ascii::{AsAsciiStr, AsciiChar, AsciiString};
+use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
 
-#[derive(Debug, Clone, Copy)]
-pub enum EaidParseError {
-    NotEaid,
-}
+#[derive(Debug, Clone)]
+pub struct EaidParseError;
 
 /// EA GUID. Encoded as 32-long hex, without the EA_ prefix.
 #[derive(Debug, Clone, Copy)]
 pub struct Eaid ([AsciiChar; 32]);
 
 impl Eaid {
-    pub fn from_ascii(ascii: &AsciiString) -> Result<Eaid, EaidParseError> {
+    /// Input: "EA_FFFF..."
+    pub fn from_rcon_format(ascii: &AsciiStr) -> Result<Eaid, EaidParseError> {
         let str = ascii.as_str();
         if str.len() == 32 + 3 {
             if &str[0..3] != "EA_" {
-                Err(EaidParseError::NotEaid)
+                Err(EaidParseError)
             }
             else {
-                Ok(Eaid(str.as_ascii_str().unwrap().try_into().unwrap())) // we can use unwrap here because we tested the length
+                let guid_only = &ascii.as_slice()[3..]; // skip "EA_"
+                Ok(Eaid(guid_only.try_into().unwrap())) // we can use unwrap here because we tested the length
             }
         } else {
-            Err(EaidParseError::NotEaid)
+            Err(EaidParseError)
         }
     }
 
     /// Returns stuff like "EA_FFFF...FFF". Always 32+3 length.
     pub fn to_ascii(&self) -> AsciiString {
         let mut ascii = AsciiString::from_str("EA_").unwrap();
-        for &c in self.0.iter() {
-            ascii.push(c);
+        for &char in self.0.iter() {
+            ascii.push(char);
         }
         ascii
+    }
+}
+
+impl Display for Eaid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EA_{}", self.0.as_ascii_str().unwrap())
     }
 }
