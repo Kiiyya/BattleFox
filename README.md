@@ -10,4 +10,13 @@ If you want to add BattleLog functionality (which is REST and I hate that), best
 
 Very early still. Contributions very much welcome!
 
+## Setting IP/Port/Password
+You can do this in two ways.
+Either setting environment variables directly, or creating a `.env` file in the working directory (e.g. root of this repo), which will fill in the environment variables for you:
+```
+BFOX_RCON_IP=127.0.0.1
+BFOX_RCON_PORT=12345
+BFOX_RCON_PASSWORD=qw3RTy
+```
+
 🇪🇺
