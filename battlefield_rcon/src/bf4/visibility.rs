@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString, IntoAsciiString};
+use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 
 use crate::rcon::{RconError, RconResult};
 
@@ -12,11 +12,11 @@ pub enum Team {
 }
 
 impl Team {
-    pub fn to_rcon_format(self) -> AsciiString {
+    pub(crate) fn to_rcon_format(self) -> AsciiString {
         (self as usize).to_string().into_ascii_string().unwrap()
     }
 
-    pub fn from_rcon_format<'a>(ascii: &AsciiStr) -> RconResult<Team> {
+    pub(crate) fn from_rcon_format<'a>(ascii: &AsciiStr) -> RconResult<Team> {
         match ascii.as_str() {
             "0" => Ok(Team::Neutral),
             "1" => Ok(Team::One),
@@ -45,11 +45,11 @@ pub enum Squad {
 
 impl Squad {
     /// Returns "2" for Bravo, 0 for "NoSquad", ...
-    pub fn to_rcon_format(self) -> AsciiString {
+    pub(crate) fn to_rcon_format(self) -> AsciiString {
         (self as usize).to_string().into_ascii_string().unwrap()
     }
 
-    pub fn from_rcon_format(ascii: &AsciiStr) -> RconResult<Self> {
+    pub(crate) fn from_rcon_format(ascii: &AsciiStr) -> RconResult<Self> {
         match ascii.as_str() {
             "0" => Ok(Squad::NoSquad),
             "1" => Ok(Squad::Alpha),
@@ -78,31 +78,20 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    pub fn to_rcon_format(&self) -> AsciiString {
+    pub(crate) fn to_rcon_format(&self) -> Vec<AsciiString> {
         match self {
-            Visibility::All => AsciiString::from_str("all").unwrap(),
-            Visibility::Team(team) => {
-                let mut ascii = AsciiString::from_str("team ").unwrap();
-                ascii.extend(team.to_rcon_format().into_iter());
-                ascii
-            }
-            Visibility::Squad(team, squad) => {
-                let mut ascii = AsciiString::from_str("squad ").unwrap();
-                ascii.push_str(team.to_rcon_format().as_ascii_str().unwrap());
-                ascii.push(AsciiChar::Space);
-                ascii.extend(squad.to_rcon_format().into_iter());
-                ascii
-            }
+            Visibility::All => vec![AsciiString::from_str("all").unwrap()],
+            Visibility::Team(team) => vec![AsciiString::from_str("team").unwrap(), team.to_rcon_format()],
+            Visibility::Squad(team, squad) => vec![AsciiString::from_str("squad").unwrap(), team.to_rcon_format(), squad.to_rcon_format()],
             Visibility::Player(player) => {
-                let mut ascii = AsciiString::from_str("player ").unwrap();
-                ascii.extend(player.into_iter());
-                ascii
+                vec![AsciiString::from_str("player").unwrap(), player.clone()]
             }
         }
     }
 
-    pub fn from_rcon_format(str: &AsciiStr) -> RconResult<Self> {
-        let split : Vec<_> = str.split(AsciiChar::Space).collect::<Vec<_>>();
+    /// Call this on a "tail" of a packet's words, as it checks if the slice is the *exact* right length.
+    pub(crate) fn from_rcon_format(split: &[AsciiString]) -> RconResult<Self> {
+        // let split : Vec<_> = str.split(AsciiChar::Space).collect::<Vec<_>>();
         if split.len() == 0 {
             return Err(RconError::protocol());
         }
@@ -136,7 +125,7 @@ impl Visibility {
                     Err(RconError::protocol())
                 } else {
                     Ok(Visibility::Player(
-                        split[1].into()
+                        split[1].clone()
                     ))
                 }
             }

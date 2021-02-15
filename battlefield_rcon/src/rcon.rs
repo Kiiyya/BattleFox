@@ -41,17 +41,36 @@ pub enum RconError {
     TimedOut,
 
     /// When Rcon says this command does not exist.
-    UnknownCommand,
+    UnknownCommand {
+        our_query: Vec<AsciiString>,
+    },
     /// When Rcon says that something's wrong with the arguments to the command.
-    InvalidArguments,
+    InvalidArguments {
+        our_query: Vec<AsciiString>,
+    },
     /// When *we* don't know what the fuck rcon just responded to us. More like unknown query response.
-    UnknownResponse,
+    UnknownResponse {
+        our_query: Vec<AsciiString>,
+        rcon_response: Vec<AsciiString>,
+    },
+    /// When *we* don't understand the arguments of a response / event.
+    MalformedPacket {
+        words: Vec<AsciiString>,
+        explanation: Option<String>,
+    },
 
     /// Some rare or very weird error.
     Other(String),
 }
 
 impl RconError {
+    pub fn malformed_packet(words: impl IntoIterator<Item = AsciiString>, explanation: impl Into<String>) -> Self {
+        Self::MalformedPacket {
+            words: words.into_iter().collect(),
+            explanation: Some(explanation.into()),
+        }
+    }
+
     pub fn other(str: impl Into<String>) -> Self {
         RconError::Other(str.into())
     }
@@ -508,9 +527,9 @@ impl RconClient {
         let res = self.query_raw(words).await?;
         match res[0].as_str() {
             "OK" => ok(&res),
-            "UnknownCommand" => Err(RconError::UnknownCommand.into()),
-            "InvalidArguments" => Err(RconError::InvalidArguments.into()),
-            word => Err(err(word).unwrap_or(RconError::UnknownResponse.into())),
+            "UnknownCommand" => Err(RconError::UnknownCommand{ our_query: words.clone() }.into()),
+            "InvalidArguments" => Err(RconError::InvalidArguments {our_query:words.clone()}.into()),
+            word => Err(err(word).unwrap_or(RconError::UnknownResponse { our_query: words.clone(), rcon_response: res.clone()}.into())),
         }
     }
 

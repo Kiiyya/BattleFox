@@ -8,7 +8,10 @@ edition = "2018"
 members = ["battlefield_rcon"]
 
 [dependencies]
-# battlefield_rcon = { git = "https://github.com/Kiiyya/battlefield_rcon", branch = "main" }
+# Cargo is smart enough to find a crate inside a bigger git repo.
+# battlefield_rcon = { git = "https://github.com/Kiiyya/BattleFox", branch = "main" }
 battlefield_rcon = { path = "battlefield_rcon" }
-tokio = "1.2.0"
-tokio-stream = "0.1.3"
+tokio = "1.2"
+tokio-stream = "0.1"
+
+dotenv = "0.15"

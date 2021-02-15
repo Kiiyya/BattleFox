@@ -5,7 +5,7 @@ use crate::rcon::RconError;
 #[derive(Debug, Clone)]
 pub enum Bf4Error {
     PlayerGuidResolveFailed{ player_name: AsciiString, rcon: Option<RconError> },
-    UnknownEvent(String),
+    UnknownEvent(Vec<AsciiString>),
     Rcon(RconError),
     Other(String),
 }
