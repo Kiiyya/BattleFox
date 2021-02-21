@@ -6,7 +6,7 @@ use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
 pub struct EaidParseError;
 
 /// EA GUID. Encoded as 32-long hex, without the EA_ prefix.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Eaid([AsciiChar; 32]);
 
 impl Eaid {

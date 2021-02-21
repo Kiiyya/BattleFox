@@ -1,3 +1,4 @@
+//! Utilities for parsing the Bf4 RCON "Map List" Packet type.
 use ascii::AsciiString;
 
 use crate::rcon::{RconError, RconResult};

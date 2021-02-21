@@ -1,7 +1,10 @@
 #![allow(unused_variables, unused_imports)]
+
+use super::stv::Ballot;
+use battlefield_rcon::bf4::Player;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 enum Bf4Map {
     Locker,
     Metro,
@@ -9,17 +12,15 @@ enum Bf4Map {
 }
 
 #[derive(Debug)]
-struct Ballot {
-    preferences: Vec<Bf4Map>,
-}
-
-#[derive(Debug)]
 struct MapVote {
-    votes: HashMap<String, Ballot>,
+    votes: HashMap<Player, Ballot<Bf4Map>>,
 }
 
 impl MapVote {
-    fn calculate_result(&self) {}
+    /// returns Some(old_ballot) if player had voted before.
+    pub fn vote(&mut self, player: Player, ballot: Ballot<Bf4Map>) -> Option<Ballot<Bf4Map>> {
+        self.votes.insert(player, ballot)
+    }
 }
 
 /*

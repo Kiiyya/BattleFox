@@ -8,6 +8,15 @@ use battlefield_rcon::{
 use dotenv::dotenv;
 use tokio_stream::StreamExt;
 
+pub mod mapvote;
+mod stv;
+
+pub trait Middleware {
+    fn run(ev: Event, inner: impl FnOnce());
+}
+
+pub struct ThingDoer {}
+
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
@@ -57,6 +66,9 @@ async fn main() -> rcon::RconResult<()> {
             }
             Err(err) => {
                 println!("Got error: {:?}", err);
+                if let Bf4Error::Rcon(RconError::Io(_)) = err {
+                    break;
+                }
             }
         }
     }

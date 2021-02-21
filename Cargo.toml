@@ -16,3 +16,8 @@ tokio = "1.2"
 tokio-stream = "0.1"
 
 dotenv = "0.15"
+
+# for voting
+num-rational = { version = "0.3", features = ["num-bigint"] }
+num-traits = "0.2.14"
+num-bigint = "0.3.1"

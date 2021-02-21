@@ -7,7 +7,7 @@ use std::{
 };
 
 // Maybe make it some flyweight or proxy, to enable `.kill()`, getting EA GUID, etc?
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Player {
     pub name: AsciiString,
     pub eaid: Eaid,
