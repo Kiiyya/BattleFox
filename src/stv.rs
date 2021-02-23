@@ -1,7 +1,7 @@
+use core::panic;
 use num_bigint::BigInt;
 use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use core::panic;
 use std::{cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, write};
 
 #[derive(Clone)]
@@ -13,12 +13,17 @@ pub struct Ballot<A> {
 }
 
 impl<A> Debug for Ballot<A>
-    where A: Debug
+where
+    A: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(weight) = self.weight.to_f64() {
             write!(f, "{}*[", weight)?;
-            let strings : Vec<_> = self.preferences.iter().map(|p| format!("{:?}", p)).collect();
+            let strings: Vec<_> = self
+                .preferences
+                .iter()
+                .map(|p| format!("{:?}", p))
+                .collect();
             f.write_str(strings.join(" > ").as_str())?;
             write!(f, "]")?;
         } else {
@@ -28,14 +33,20 @@ impl<A> Debug for Ballot<A>
     }
 }
 
-impl <A> Ballot<A>
-    where A: PartialEq + Clone + Eq + Hash
+impl<A> Ballot<A>
+where
+    A: PartialEq + Clone + Eq + Hash,
 {
     /// Removes all candidates in `a` in the ballot.
     pub fn strike_out(&self, a: &HashSet<A>) -> Self {
         Self {
             weight: self.weight.clone(),
-            preferences: self.preferences.iter().filter(|&aa| !a.contains(aa)).cloned().collect(),
+            preferences: self
+                .preferences
+                .iter()
+                .filter(|&aa| !a.contains(aa))
+                .cloned()
+                .collect(),
         }
     }
 }
@@ -51,39 +62,41 @@ pub struct Result<A> {
     pub d: HashSet<A>,
 }
 
-impl <A> Result<A>
-    where A: Eq + Hash + Clone,
-{
-    pub fn union3(&self, other: &Self) -> Self {
-        Self {
-            e: self.e.union(&other.e).cloned().collect(),
-            r: self.r.union(&other.r).cloned().collect(),
-            d: self.d.union(&other.d).cloned().collect(),
-        }
-    }
-}
-
 /// A set of ballots. Equivalent to one "election".
 #[derive(Clone)]
-pub struct Profile<A>
-{
+pub struct Profile<A> {
     pub alts: HashSet<A>,
     pub ballots: Vec<Ballot<A>>,
 }
 
 impl<A> Debug for Profile<A>
-    where A: Debug
+where
+    A: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Profile {{")?;
         // alts, all inline
-        f.write_str(self.alts.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ").as_str())?;
+        f.write_str(
+            self.alts
+                .iter()
+                .map(|p| format!("{:?}", p))
+                .collect::<Vec<_>>()
+                .join(", ")
+                .as_str(),
+        )?;
         if self.ballots.is_empty() {
             write!(f, "}} []")?;
         } else {
             write!(f, "}} [\n")?;
             // ballots, one per line
-            f.write_str(self.ballots.iter().fold(String::new(), |acc, p| acc + format!("  {:?},\n", p).as_str()).as_str())?;
+            f.write_str(
+                self.ballots
+                    .iter()
+                    .fold(String::new(), |acc, p| {
+                        acc + format!("  {:?},\n", p).as_str()
+                    })
+                    .as_str(),
+            )?;
             write!(f, "]")?;
         }
         Ok(())
@@ -93,7 +106,7 @@ impl<A> Debug for Profile<A>
 // impl <A> Display for Profile<A>
 // {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        
+
 //     }
 // }
 
@@ -103,12 +116,11 @@ where
 {
     /// total amount of first preferences votes for a given candidate.
     pub fn score(&self, alt: &A) -> Rat {
-        let score = self.ballots
+        let score = self
+            .ballots
             .iter()
             .filter(|ballot| !ballot.preferences.is_empty() && &ballot.preferences[0] == alt)
-            .fold(Rat::zero(), |acc, ballot| {
-                acc + &ballot.weight
-            });
+            .fold(Rat::zero(), |acc, ballot| acc + &ballot.weight);
         // println!("Score of {:?} in {:?}: {}", alt, self, score.to_f32().unwrap());
         score
     }
@@ -179,6 +191,7 @@ where
     /// Transfer votes from `a` to all other alternatives.
     pub fn t_to_all(&self, a: &A, s: &Rat) -> Self {
         let mut profile = self.clone();
+        // I think (for single seat at least), it's completely irrelavant in which order we do this?
         for b in self.alts.iter().filter(|&alt| alt != a) {
             profile = profile.elem_t(a, b, s);
         }
@@ -191,7 +204,11 @@ where
     pub fn strike_out(&self, eliminated: &HashSet<A>) -> Self {
         Self {
             alts: self.alts.difference(eliminated).cloned().collect(),
-            ballots: self.ballots.iter().map(|b| b.strike_out(eliminated)).collect(),
+            ballots: self
+                .ballots
+                .iter()
+                .map(|b| b.strike_out(eliminated))
+                .collect(),
         }
     }
 
@@ -226,7 +243,8 @@ where
         let b = self.score(b);
         if a == b {
             Ordering::Equal
-        } else if a < b { // not sure what the order is, < or >
+        } else if a < b {
+            // not sure what the order is, < or >
             Ordering::Less
         } else {
             Ordering::Greater
@@ -237,7 +255,12 @@ where
     /// Guarantees at `d` decreases by at least 1, unless we reached a fixed point.
     pub fn one_iteration(&self, q: &Rat) -> Result<A> {
         // get everyone who crossed quota
-        let elected : HashSet<_> = self.alts.iter().filter(|&alt| &self.score(alt) >= q).cloned().collect();
+        let elected: HashSet<_> = self
+            .alts
+            .iter()
+            .filter(|&alt| &self.score(alt) >= q)
+            .cloned()
+            .collect();
         if !elected.is_empty() {
             // elect them all
             let d = self.alts.difference(&elected).cloned().collect(); // d = A \ e
@@ -248,18 +271,19 @@ where
             }
         } else {
             // otherwise, eliminate the worst
+            // TODO: Maybe implement parallel universe tie breaking? (min_by just selects the first minimum found)
             if let Some(worst) = self.alts.iter().min_by(|&alt1, &alt2| self.cmp(alt1, alt2)) {
                 let r = [worst.clone()].iter().cloned().collect();
                 let d = self.alts.difference(&r).cloned().collect(); // d = A \ {worst}
                 Result {
                     e: HashSet::new(), // no elected, empty
-                    r, // just one element.
+                    r,                 // just one element.
                     d,
                 }
             } else {
                 Result {
-                    e: HashSet::new(), // empty
-                    r: HashSet::new(), // empty
+                    e: HashSet::new(),    // empty
+                    r: HashSet::new(),    // empty
                     d: self.alts.clone(), // we clone it for correctness, but this will always be empty, otherwise we wouldn't be here.
                 }
             }
@@ -275,13 +299,16 @@ where
 
     pub fn vanilla_stv(&self, seats: usize, q: &Rat) -> Result<A> {
         if self.alts.len() <= seats {
-            // if we only have `seats` candidates left, just elect everyone.
+            // if we only have `seats` candidates left, just elect everyone, even if they don't cross quota.
+            // case of one bf4map only: means only one map had been nominated.
             return Result {
                 e: self.alts.clone(),
                 r: HashSet::new(),
                 d: HashSet::new(),
             };
         }
+
+        // so now we have at least `seats + 1` alternatives left.
 
         let (result, profile) = self.vanilla_stv_step(q);
         assert_eq!(profile.alts, result.d);
@@ -291,7 +318,13 @@ where
         } else {
             // otherwise, recurive call to fill remaining open seats, and then append our thus-far elected candidates.
             let inner = profile.vanilla_stv(seats - result.e.len(), q);
-            result.union3(&inner)
+            Result {
+                e: result.e.union(&inner.e).cloned().collect(),
+                r: result.r.union(&inner.r).cloned().collect(),
+                d: inner.d, // d gets smaller each iterator. Ideally we return d = {}.
+            }
+
+            // result.union3(&inner)
         }
     }
 
@@ -312,7 +345,7 @@ where
 
 #[cfg(test)]
 pub mod test {
-    use super::{Profile, Ballot};
+    use super::{Ballot, Profile};
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
 
@@ -353,6 +386,6 @@ pub mod test {
         };
 
         let winner = profile.vanilla_stv_1().unwrap();
-        assert_eq!("Wolf", winner); // aaaaaaaaaa it's not deterministic, shit
+        assert_eq!("Wolf", winner);
     }
 }

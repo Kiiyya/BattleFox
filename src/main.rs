@@ -1,21 +1,42 @@
 #![allow(clippy::or_fun_call)]
-use std::env::var;
+use std::{env::var, sync::Arc, };
 
 use battlefield_rcon::{
-    bf4::{error::Bf4Error, Bf4Client, Event},
+    bf4::{
+        error::Bf4Error,
+        Bf4Client,
+    },
     rcon::{self, RconClient, RconError},
 };
 use dotenv::dotenv;
+// use futures::future::BoxFuture;
 use tokio_stream::StreamExt;
 
 pub mod mapvote;
+use mapvote::Mapvote;
 mod stv;
 
-pub trait Middleware {
-    fn run(ev: Event, inner: impl FnOnce());
-}
+// #[async_trait::async_trait]
+// pub trait Middleware {
+//     async fn event(
+//         &self,
+//         bf4: Arc<Bf4Client>,
+//         ev: Event,
+//         inner: impl FnOnce(Arc<Bf4Client>, Event) -> BoxFuture<'static, Bf4Result<()>> + Send + 'static
+//         // inner: impl FnOnce(
+//         //         Arc<Bf4Client>,
+//         //         Event,
+//         //     )
+//         //         -> Pin<Box<dyn Future<Output = Bf4Result<()>> + Send + Sync + 'static>>
+//         //     + Send
+//         //     + Sync
+//         //     + 'static,
+//     ) -> Bf4Result<()>
+//     where
+//         Self: Sized;
+// }
 
-pub struct ThingDoer {}
+// pub trait MiddlewareInit {}
 
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
@@ -32,34 +53,24 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::new(rcon).await.unwrap();
     println!("Connected!");
 
-    bf4.kill("player").await.unwrap_err();
-
-    // let votes = Vec::new();
+    let mapvote = Arc::new(Mapvote::init(&bf4).await);
 
     let mut event_stream = bf4.event_stream();
     while let Some(ev) = event_stream.next().await {
         match ev {
-            Ok(Event::Kill {
-                killer: Some(killer),
-                victim,
-                headshot: _,
-                weapon,
-            }) => {
-                println!("{} killed {} with a {}!", killer, victim, weapon);
-            }
-            Ok(Event::Chat { vis, player, msg }) => {
-                println!("{} said \"{}\" with vis {:?}", player, msg, vis);
-                if msg.as_str().starts_with("!vote") {
-                    // process votes
-                    // votes.push(/* something */);
-                }
-            }
-            // Ok(Event::OnRoundOver) => {
-            //     bf4.change_map(Map::Pearl_Market).await;
-            // }
-            Ok(Event::PunkBusterMessage(_)) => {} // ignore this terrible spam ugh.
+            // Ok(Event::Chat { vis, player, msg }) => {}
+            // Ok(Event::RoundOver { winning_team }) => {}
+            // Ok(_) => {}
             Ok(ev) => {
-                println!("Got other event: {:?}", ev);
+                // let end = Box::pin(async move |_, _| Ok(()));
+                let mapvote = mapvote.clone();
+                let bf4 = bf4.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = mapvote.event(bf4, ev).await {
+                        // TODO: handle joinhandle errors properly, not just logging, bleh.
+                        println!("Got a middleware error {:?}", e);
+                    }
+                });
             }
             Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => {
                 break;

@@ -2,7 +2,7 @@ use core::panic;
 use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc};
 
 // use crate::error::{Error, Result};
-use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
+use ascii::{AsciiStr, AsciiString, FromAsciiError, IntoAsciiString};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
@@ -151,11 +151,20 @@ pub struct RconClient {
     _connection_info: RconConnectionInfo,
 }
 
+// #[derive(Debug)]
+// struct Query(
+//     Vec<AsciiString>,
+//     oneshot::Sender<RconResult<Vec<AsciiString>>>,
+// );
+
 #[derive(Debug)]
-struct Query(
-    Vec<AsciiString>,
-    oneshot::Sender<RconResult<Vec<AsciiString>>>,
-);
+enum Query {
+    Single(
+        Vec<AsciiString>,
+        oneshot::Sender<RconResult<Vec<AsciiString>>>,
+    ),
+    Sequential(Vec<Query>),
+}
 
 pub trait RconEventPacketHandler {
     fn on_packet(&self, packet: Packet);
@@ -407,7 +416,7 @@ impl RconClient {
                 // queries from inside.
                 // send packets to the outside.
                 query = query_rx.recv() => match query {
-                    Some(Query(words, replier)) => {
+                    Some(Query::Single(words, replier)) => { //Query(words, replier)) => {
                         let packet = Packet {
                             sequence,
                             origin: PacketOrigin::Client,
@@ -429,6 +438,9 @@ impl RconClient {
                                 break;
                             },
                         }
+                    },
+                    Some(Query::Sequential(queries)) => {
+                        todo!()
                     },
                     None => {
                         break;
@@ -491,7 +503,7 @@ impl RconClient {
             w.replier.send(Err(RconError::ConnectionClosed)).unwrap();
         }
         // we don't accept new queries, but it is possible a query was sent before that and not seen by us yet.
-        while let Some(Query(_, tx)) = query_rx.recv().await {
+        while let Some(Query::Single(_, tx)) = query_rx.recv().await {
             tx.send(Err(RconError::ConnectionClosed)).unwrap();
         }
 
@@ -502,11 +514,15 @@ impl RconClient {
         let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
 
         self.queries
-            .send(Query(words, tx))
+            .send(Query::Single(words, tx))
             .map_err(|_: mpsc::error::SendError<_>| RconError::ConnectionClosed)?; // when mainloop did `rx.close()` at the end for example.
         rx.await.expect(
             "query_raw: failed to receive query response from main loop. This is likely a bug.",
         )
+    }
+
+    pub async fn query_sequential(&self, powerwords: &[[AsciiStr]]) -> RconResult<Vec<>> {
+
     }
 
     pub async fn command<T, E>(
@@ -540,6 +556,24 @@ impl RconClient {
         }
     }
 
+    /// # Example
+    /// ```
+    /// rcon.command(veca!["say", "Haha Kiiya sucks many"])
+    ///     .then(veca!["say", "biiiiiiiiiiiiiiiiiiiiiiiig"])
+    ///     .then(veca!["say", "dicks!"])
+    ///     .run().await;
+    /// ```
+    pub async fn commands<T, E>(
+        &self,
+        words: &[AsciiString],
+        ok: impl FnOnce(&[AsciiString]) -> Result<T, E>,
+        err: impl FnOnce(&str) -> Option<E>,
+    ) -> Result<T, E>
+        where E: From<RconError>
+    {
+        todo!()
+    }
+
     #[allow(clippy::useless_vec)]
     pub async fn events_enabled(&self, enabled: bool) -> RconResult<()> {
         // there exists a get version of this, but I assume it'll be never needed.
@@ -551,6 +585,10 @@ impl RconClient {
         .await
     }
 }
+struct Commands {
+    
+}
+
 
 /// Use this to assert that there is no more extra input. As in, we only expect
 /// the first word to be "OK" (already checked at a different place),

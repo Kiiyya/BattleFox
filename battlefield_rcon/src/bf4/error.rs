@@ -25,10 +25,4 @@ impl From<RconError> for Bf4Error {
     }
 }
 
-// impl From<ParsePacketError> for Bf4Error {
-//     fn from(e: ParsePacketError) -> Self {
-//         Self::other("Failed to parse packet")
-//     }
-// }
-
 pub type Bf4Result<T> = Result<T, Bf4Error>;

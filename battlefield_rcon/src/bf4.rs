@@ -17,8 +17,8 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 pub mod defs;
 pub mod ea_guid;
 pub mod error;
-mod map_list;
-mod player_info_block;
+pub mod map_list;
+pub mod player_info_block;
 mod util;
 
 pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
@@ -53,6 +53,8 @@ pub struct Bf4Client {
     /// - When parsing packets, e.g. from events.
     /// - When parsing replies to queries.
     player_cache: Mutex<HashMap<AsciiString, PlayerCacheEntry>>,
+    // /// Things that get periodically called.
+    // interval_timers: Vec<Interval>,
 }
 
 impl Bf4Client {
@@ -64,6 +66,7 @@ impl Bf4Client {
             rcon,
             events,
             player_cache: Mutex::new(HashMap::new()),
+            // interval_timers: Vec::new(),
         });
 
         tx.send(Arc::downgrade(&myself)).unwrap();
@@ -73,12 +76,22 @@ impl Bf4Client {
         Ok(myself)
     }
 
-    // async fn probe_player_cache(self: &Arc<Bf4Client>, name: &AsciiString) -> Option<PlayerCacheEntry> {
-    //     let cache = self.player_cache.lock().await;
-    //     match cache.get(name) {
-    //         Some(entry) => Some(*entry),
-    //         None => None,
-    //     }
+    // pub async fn mk_interval<T>(self: &Arc<Bf4Client>, duration: Duration, task: T)
+    // where
+    //     T: Fn(&Arc<Bf4Client>, Duration) -> Box<dyn Future<Output = ()>>
+    //     // T: Future + Send + Clone + 'static,
+    //     // T::Output: Send + 'static,
+    // {
+    //     let mut interval = tokio::time::interval(duration);
+    //     let weak = Arc::downgrade(self);
+    //     tokio::spawn(async move {
+    //         let weak = weak;
+    //         loop {
+    //             interval.tick().await;
+    //             todo!()
+    //             // task
+    //         }
+    //     });
     // }
 
     /// TODO: change cache policy to just fetch ALL players instead, that'll be quicker. Like if cache size is <5, just fetch ALL.
@@ -211,6 +224,17 @@ impl Bf4Client {
                     )))
                 }
             }
+            "server.onRoundOver" => {
+                if packet.words.len() != 2 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 2),
+                    )));
+                }
+                Ok(Event::RoundOver {
+                    winning_team: Team::rcon_decode(&packet.words[1])?,
+                })
+            }
             "punkBuster.onMessage" => {
                 assert_len(&packet, 2)?;
                 Ok(Event::PunkBusterMessage(packet.words[1].to_string()))
@@ -332,6 +356,36 @@ impl Bf4Client {
                 _ => None,
             })
             .await
+    }
+
+    /// Prints multiple lines at once.
+    /// Sends all `say` commands first, each in a `tokio::spawn(..)`, then waits until
+    /// they all complete, returning the first `Err(..)` if any, otherwise `Ok(())`.
+    ///
+    /// # Panics
+    /// When joining a joinhandle fails, i.e. when the future itself panicked.
+    pub async fn say_lines<Line>(
+        self: Arc<Self>,
+        lines: impl IntoIterator<Item = Line>,
+        vis: Visibility,
+    ) -> Result<(), SayError>
+        where Line: IntoAsciiString + Into<String> + 'static + Send,
+    {
+        let mut jhs = Vec::new();
+        for line in lines.into_iter() {
+            let myself = self.clone();
+            let vis = vis.clone();
+            jhs.push(tokio::task::spawn(async move {
+                myself.say(line, vis).await
+            }));
+        }
+
+        for jh in jhs {
+            // collect errors via `?`.
+            jh.await.expect("[Bf4Client::say_lines] Underlying `say` panicked! (failed to join JoinHandle).")?;
+        }
+
+        Ok(())
     }
 
     pub async fn maplist_clear(&self) -> Result<(), MapListError> {
