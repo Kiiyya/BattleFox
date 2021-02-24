@@ -38,6 +38,25 @@ mod stv;
 
 // pub trait MiddlewareInit {}
 
+pub mod cmd {
+    pub struct CommandContribution {
+
+    }
+
+    pub trait CommandMatcher {
+        
+    }
+}
+
+// pub trait Contributes {
+//     fn command<M>(&mut self, matcher: M) -> CommandContribution
+//         where M: cmd::CommandMatcher;
+// }
+
+pub struct BattleFox {
+    bf4: Arc<Bf4Client>,
+}
+
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.

@@ -3,7 +3,7 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{ea_guid::Eaid, RconEncoding};
+use super::{RconEncoding, ea_guid::Eaid};
 use crate::rcon::RconResult;
 use ascii::{AsciiStr, AsciiString};
 use std::{
@@ -26,6 +26,11 @@ pub struct Player {
     pub name: AsciiString,
     pub eaid: Eaid,
 }
+
+// pub const PLAYER_SERVER : Player = Player {
+//     name: AsciiString::from_str("Server").unwrap(),
+//     eaid: EAID_SERVER,
+// };
 
 impl Display for Player {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -93,6 +98,10 @@ pub enum Event {
         vis: Visibility,
         player: Player,
         msg: AsciiString,
+    },
+    ServerChat {
+        msg: AsciiString,
+        vis: Visibility,
     },
     Kill {
         killer: Option<Player>,

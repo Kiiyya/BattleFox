@@ -9,6 +9,8 @@ pub struct EaidParseError;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Eaid([AsciiChar; 32]);
 
+// pub const EAID_SERVER : Eaid = Eaid([AsciiChar::_0; 32]);
+
 impl Eaid {
     /// Input: "EA_FFFF..."
     pub fn from_rcon_format(ascii: &AsciiStr) -> Result<Eaid, EaidParseError> {

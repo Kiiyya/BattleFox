@@ -6,7 +6,7 @@ use std::{
 };
 
 use self::error::Bf4Result;
-use crate::rcon::{err_none, ok_eof, packet::Packet, RconClient, RconError, RconResult};
+use crate::rcon::{err_none, ok_eof, packet::Packet, RconClient, RconError, RconResult, RconQueryable};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
@@ -76,25 +76,6 @@ impl Bf4Client {
         Ok(myself)
     }
 
-    // pub async fn mk_interval<T>(self: &Arc<Bf4Client>, duration: Duration, task: T)
-    // where
-    //     T: Fn(&Arc<Bf4Client>, Duration) -> Box<dyn Future<Output = ()>>
-    //     // T: Future + Send + Clone + 'static,
-    //     // T::Output: Send + 'static,
-    // {
-    //     let mut interval = tokio::time::interval(duration);
-    //     let weak = Arc::downgrade(self);
-    //     tokio::spawn(async move {
-    //         let weak = weak;
-    //         loop {
-    //             interval.tick().await;
-    //             todo!()
-    //             // task
-    //         }
-    //     });
-    // }
-
-    /// TODO: change cache policy to just fetch ALL players instead, that'll be quicker. Like if cache size is <5, just fetch ALL.
     pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
         let entry: Option<PlayerCacheEntry> = {
             let cache = self.player_cache.lock().await;
@@ -112,9 +93,6 @@ impl Bf4Client {
         } else {
             // welp, gotta ask rcon and update cache...
             // println!("[Bf4Client::resolve_player] Cache miss for {}, resolving...", name);
-
-            // let pib = match self.list_players(Visibility::Player(name.clone())).await { // hm, sucks that you need clone for this :/
-            // let pib = match self.list_players(Visibility::Squad(Team::One, Squad::Alpha)).await { // hm, sucks that you need clone for this :/
             let mut pib = match self.list_players(Visibility::All).await {
                 // hm, sucks that you need clone for this :/
                 Ok(pib) => pib,
@@ -212,11 +190,19 @@ impl Bf4Client {
 
                 let (vis, consumed) = Visibility::rcon_decode(&packet.words[3..])?;
                 if consumed + 3 == packet.words.len() {
-                    Ok(Event::Chat {
-                        player: bf4.resolve_player(&packet.words[1]).await?,
-                        msg: packet.words[2].clone(),
-                        vis,
-                    })
+                    let player_name = &packet.words[1];
+                    if player_name == "Server" {
+                        Ok(Event::ServerChat {
+                            msg: packet.words[2].clone(),
+                            vis,
+                        })
+                    } else {
+                        Ok(Event::Chat {
+                            player: bf4.resolve_player(&packet.words[1]).await?,
+                            msg: packet.words[2].clone(),
+                            vis,
+                        })
+                    }
                 } else {
                     Err(Bf4Error::Rcon(RconError::malformed_packet(
                         packet.words,
@@ -305,7 +291,7 @@ impl Bf4Client {
         let mut words = veca!["admin.listPlayers"];
         words.append(&mut vis.rcon_encode());
         self.rcon
-            .command(
+            .query(
                 &words,
                 |ok| player_info_block::parse_pib(&ok).map_err(|rconerr| rconerr.into()),
                 err_none,
@@ -324,7 +310,7 @@ impl Bf4Client {
         // then it just creates an `RconError::UnknownResponse` error.
         let player = player.into_ascii_string()?;
         self.rcon
-            .command(
+            .query(
                 &veca!["admin.killPlayer", player],
                 ok_eof,
                 |err| match err {
@@ -344,7 +330,7 @@ impl Bf4Client {
         let mut words = veca!["admin.say", msg];
         words.append(&mut vis.rcon_encode());
         self.rcon
-            .command(&words, ok_eof, |err| match err {
+            .query(&words, ok_eof, |err| match err {
                 "InvalidTeam" => Some(SayError::Rcon(RconError::protocol_msg(
                     "Rcon did not understand our teamId",
                 ))),
@@ -358,12 +344,17 @@ impl Bf4Client {
             .await
     }
 
+
+
     /// Prints multiple lines at once.
     /// Sends all `say` commands first, each in a `tokio::spawn(..)`, then waits until
     /// they all complete, returning the first `Err(..)` if any, otherwise `Ok(())`.
     ///
-    /// # Panics
-    /// When joining a joinhandle fails, i.e. when the future itself panicked.
+    /// Panics when joining a joinhandle fails, i.e. when the future itself panicked.
+    /// You should never have to bother about this, if you encounter this, it's a bug.
+    /// 
+    /// # Other notes
+    /// This function is fucking ugly internally...
     pub async fn say_lines<Line>(
         self: Arc<Self>,
         lines: impl IntoIterator<Item = Line>,
@@ -371,18 +362,35 @@ impl Bf4Client {
     ) -> Result<(), SayError>
         where Line: IntoAsciiString + Into<String> + 'static + Send,
     {
-        let mut jhs = Vec::new();
-        for line in lines.into_iter() {
-            let myself = self.clone();
-            let vis = vis.clone();
-            jhs.push(tokio::task::spawn(async move {
-                myself.say(line, vis).await
-            }));
-        }
+        let vis_words = vis.rcon_encode();
+        let queries = lines.into_iter().map(|line| {
+            let mut words = vec![
+                "admin.say".into_ascii_string().unwrap(),
+                line.into_ascii_string().unwrap(),
+            ];
+            words.append(&mut vis_words.clone());
+            words
+        }).collect::<Vec<_>>();
 
-        for jh in jhs {
-            // collect errors via `?`.
-            jh.await.expect("[Bf4Client::say_lines] Underlying `say` panicked! (failed to join JoinHandle).")?;
+        match self.rcon.queries_raw(queries).await {
+            Some(responses) => {
+                for response in responses {
+                    let response = response?;
+                    match response[0].as_str() {
+                        "OK" => {},
+                        "InvalidTeam" => return Err(SayError::Rcon(RconError::protocol_msg(
+                            "Rcon did not understand our teamId",
+                        ))),
+                        "InvalidSquad" => return Err(SayError::Rcon(RconError::protocol_msg(
+                            "Rcon did not understand our squadId",
+                        ))),
+                        "MessageTooLong" => return Err(SayError::MessageTooLong),
+                        "PlayerNotFound" => return Err(SayError::PlayerNotFound),
+                        _ => return Err(SayError::Rcon(RconError::other("")))
+                    }
+                }
+            }
+            None => return Err(RconError::ConnectionClosed.into()),
         }
 
         Ok(())
@@ -390,7 +398,7 @@ impl Bf4Client {
 
     pub async fn maplist_clear(&self) -> Result<(), MapListError> {
         self.rcon
-            .command(&veca!["mapList.clear"], ok_eof, err_none)
+            .query(&veca!["mapList.clear"], ok_eof, err_none)
             .await
     }
 
@@ -402,13 +410,13 @@ impl Bf4Client {
         offset: i32,
     ) -> Result<(), MapListError> {
         self.rcon
-            .command(
+            .query(
                 &veca![
                     "mapList.add",
                     map.rcon_encode(),
                     game_mode.rcon_encode(),
-                    n_rounds.to_string().into_ascii_string().unwrap(),
-                    offset.to_string().into_ascii_string().unwrap(),
+                    n_rounds.to_string(),
+                    offset.to_string(),
                 ],
                 ok_eof,
                 |err| match err {
@@ -428,7 +436,7 @@ impl Bf4Client {
 
     pub async fn maplist_list(&self) -> Result<Vec<map_list::MapListEntry>, MapListError> {
         self.rcon
-            .command(
+            .query(
                 &veca!["maplist.list", "0"],
                 |ok| Ok(map_list::parse_map_list(&ok)?),
                 err_none,
@@ -439,25 +447,25 @@ impl Bf4Client {
     pub async fn maplist_run_next_round(&self) -> Result<(), MapListError> {
         // TODO errors
         self.rcon
-            .command(&veca!["mapList.runNextRound"], ok_eof, err_none)
+            .query(&veca!["mapList.runNextRound"], ok_eof, err_none)
             .await
     }
     pub async fn maplist_save(&self) -> Result<(), MapListError> {
         // TODO err
         self.rcon
-            .command(&veca!["mapList.save"], ok_eof, err_none)
+            .query(&veca!["mapList.save"], ok_eof, err_none)
             .await
     }
     pub async fn maplist_restart_round(&self) -> Result<(), MapListError> {
         // TODO err
         self.rcon
-            .command(&veca!["mapList.restartRound"], ok_eof, err_none)
+            .query(&veca!["mapList.restartRound"], ok_eof, err_none)
             .await
     }
     pub async fn maplist_set_next_map(&self, index: usize) -> Result<(), MapListError> {
         // TODO err
         self.rcon
-            .command(
+            .query(
                 &veca![
                     "mapList.setNextMapIndex",
                     index.to_string().into_ascii_string().unwrap()

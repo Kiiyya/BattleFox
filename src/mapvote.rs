@@ -13,6 +13,8 @@ use std::{
 };
 use tokio::{sync::Mutex, time::Interval};
 
+/// An alternative. As in, one thing you can vote on.
+/// This is a `(Map, GameMode)` tuple currently.
 pub type Alt = (Map, GameMode);
 
 #[derive(Debug)]
@@ -70,7 +72,20 @@ impl Mapvote {
                 let firstword = msg[0];
                 match firstword {
                     "!v" | "/v" => {
-                        
+                        bf4.say_lines(vec![
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                            "7",
+                            "8",
+                            "9",
+                            "10",
+                            "11",
+                            "12",
+                        ], Visibility::Player(player.into())).await.unwrap();
                     }
                     "/nominate" | "!nominate" | "/nom" | "!nom" => {
                         if msg.len() == 1 {

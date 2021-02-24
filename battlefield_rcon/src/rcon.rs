@@ -2,7 +2,7 @@ use core::panic;
 use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc};
 
 // use crate::error::{Error, Result};
-use ascii::{AsciiStr, AsciiString, FromAsciiError, IntoAsciiString};
+use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
@@ -143,7 +143,7 @@ pub struct RconClient {
     mainloop_shutdown: mpsc::UnboundedSender<()>,
 
     /// Sending a query to this will be handled by the mainloop.
-    queries: mpsc::UnboundedSender<Query>,
+    queries: mpsc::UnboundedSender<SendQuery>,
 
     nonresponse_rx: Option<mpsc::UnboundedReceiver<RconResult<Packet>>>,
 
@@ -158,12 +158,15 @@ pub struct RconClient {
 // );
 
 #[derive(Debug)]
-enum Query {
-    Single(
-        Vec<AsciiString>,
-        oneshot::Sender<RconResult<Vec<AsciiString>>>,
-    ),
-    Sequential(Vec<Query>),
+struct SendSingleQuery (
+    Vec<AsciiString>,
+    oneshot::Sender<RconResult<Vec<AsciiString>>>,
+);
+
+#[derive(Debug)]
+enum SendQuery {
+    Single(SendSingleQuery),
+    Sequential(Vec<SendSingleQuery>),
 }
 
 pub trait RconEventPacketHandler {
@@ -179,7 +182,7 @@ impl RconClient {
         let conn: RconConnectionInfo = conn.try_into()?;
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
 
-        let (query_tx, query_rx) = mpsc::unbounded_channel::<Query>();
+        let (query_tx, query_rx) = mpsc::unbounded_channel::<SendQuery>();
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel::<()>();
         let (nonresponses_tx, nonresponses_rx) = mpsc::unbounded_channel::<RconResult<Packet>>();
 
@@ -212,7 +215,7 @@ impl RconClient {
 
         // TODO: use salted passwords eventually.
         myself
-            .command(
+            .query(
                 &veca!["login.plainText", conn.password],
                 ok_eof::<RconError>,
                 |err| match err {
@@ -374,8 +377,10 @@ impl RconClient {
         // we drop shutdown_rx here.
     }
 
+
+
     async fn mainloop(
-        mut query_rx: mpsc::UnboundedReceiver<Query>,
+        mut query_rx: mpsc::UnboundedReceiver<SendQuery>,
         tx_nonresponses: mpsc::UnboundedSender<RconResult<Packet>>,
         tcp: TcpStream,
         mut shutdown: mpsc::UnboundedReceiver<()>,
@@ -416,7 +421,7 @@ impl RconClient {
                 // queries from inside.
                 // send packets to the outside.
                 query = query_rx.recv() => match query {
-                    Some(Query::Single(words, replier)) => { //Query(words, replier)) => {
+                    Some(SendQuery::Single(SendSingleQuery(words, replier))) => { //Query(words, replier)) => {
                         let packet = Packet {
                             sequence,
                             origin: PacketOrigin::Client,
@@ -439,8 +444,30 @@ impl RconClient {
                             },
                         }
                     },
-                    Some(Query::Sequential(queries)) => {
-                        todo!()
+                    Some(SendQuery::Sequential(queries)) => {
+                        for SendSingleQuery(words, replier) in queries {
+                            let packet = Packet {
+                                sequence,
+                                origin: PacketOrigin::Client,
+                                is_response: false,
+                                words,
+                            };
+                            waiting.insert(sequence, Waiting {
+                                replier,
+                                sent: std::time::Instant::now(),
+                            });
+                            sequence += 1;
+
+                            let bytes = packet.serialize();
+                            match tcp_write.write(&bytes.as_slice()).await {
+                                Ok(n) if n == bytes.len() => {},
+                                Ok(_) /* otherwise */     => panic!("Failed to send packet in its entirety"), // TODO potentially better error handling.
+                                Err(e) => {
+                                    println!("debg [RconClient::mainloop] Got error while writing to socket: {:?}", e);
+                                    break;
+                                },
+                            }
+                        }
                     },
                     None => {
                         break;
@@ -503,39 +530,66 @@ impl RconClient {
             w.replier.send(Err(RconError::ConnectionClosed)).unwrap();
         }
         // we don't accept new queries, but it is possible a query was sent before that and not seen by us yet.
-        while let Some(Query::Single(_, tx)) = query_rx.recv().await {
+        while let Some(SendQuery::Single(SendSingleQuery(_, tx))) = query_rx.recv().await {
             tx.send(Err(RconError::ConnectionClosed)).unwrap();
         }
 
         // println!("     [RconClient::mainloop] Ended gracefully");
     }
 
-    pub async fn query(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
-        let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
-
-        self.queries
-            .send(Query::Single(words, tx))
-            .map_err(|_: mpsc::error::SendError<_>| RconError::ConnectionClosed)?; // when mainloop did `rx.close()` at the end for example.
-        rx.await.expect(
-            "query_raw: failed to receive query response from main loop. This is likely a bug.",
+    // #[allow(clippy::useless_vec)]
+    pub async fn events_enabled(&self, enabled: bool) -> RconResult<()> {
+        // there exists a get version of this, but I assume it'll be never needed.
+        self.query(
+            veca!["admin.eventsEnabled", enabled.to_string()].as_slice(),
+            ok_eof,
+            err_none,
         )
+        .await
     }
 
-    pub async fn query_sequential(&self, powerwords: &[[AsciiStr]]) -> RconResult<Vec<>> {
+    // /// Multiple queries, guaranteed to be sent in order.
+    // /// This is (slightly) faster than doing multiple queries and awaiting each.
+    // /// 
+    // /// Sends all queries immediately, so if the first query returns an error,
+    // /// the next queries will have already been sent.
+    // pub async fn queries<T, E>(
+    //     &self,
+    // )
+}
 
-    }
+// #[derive(Debug)]
+// pub struct Queries {
+    
+// }
 
-    pub async fn command<T, E>(
+#[async_trait::async_trait]
+pub trait RconQueryable {
+    /// Send single query and await response, returning the words.
+    async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>>;
+
+    /// Send multiple queries, guaranteeing that they will be sent in that order.
+    /// Then awaits responses, and returns them.
+    /// 
+    /// # Returns
+    /// - `None`: Some error occured communicating with the main loop. This likely means connection was closed.
+    /// - `Some(vec)`: Each item contains a `RconResult<Vec<AsciiString>>`, as if it was just multiple calls to `query_raw`.
+    async fn queries_raw(&self, words: Vec<Vec<AsciiString>>) -> Option<Vec<RconResult<Vec<AsciiString>>>>;
+
+    /// More convenient way than `query_raw`.
+    async fn query<T, E, Ok, Err>(
         &self,
         words: &[AsciiString],
-        ok: impl FnOnce(&[AsciiString]) -> Result<T, E>,
-        err: impl FnOnce(&str) -> Option<E>,
+        ok: Ok,
+        err: Err,
     ) -> Result<T, E>
     where
         E: From<RconError>,
+        Ok: FnOnce(&[AsciiString]) -> Result<T, E> + Send,
+        Err: FnOnce(&str) -> Option<E> + Send,
     {
-        // println!("Command out: {:?}", words);
-        let res = self.query(words.to_vec()).await?;
+        // println!("Query::Single out: {:?}", words);
+        let res = self.query_raw(words.to_vec()).await?;
         match res[0].as_str() {
             "OK" => ok(&res[1..]),
             "UnknownCommand" => Err(RconError::UnknownCommand {
@@ -555,38 +609,45 @@ impl RconClient {
             })),
         }
     }
-
-    /// # Example
-    /// ```
-    /// rcon.command(veca!["say", "Haha Kiiya sucks many"])
-    ///     .then(veca!["say", "biiiiiiiiiiiiiiiiiiiiiiiig"])
-    ///     .then(veca!["say", "dicks!"])
-    ///     .run().await;
-    /// ```
-    pub async fn commands<T, E>(
-        &self,
-        words: &[AsciiString],
-        ok: impl FnOnce(&[AsciiString]) -> Result<T, E>,
-        err: impl FnOnce(&str) -> Option<E>,
-    ) -> Result<T, E>
-        where E: From<RconError>
-    {
-        todo!()
-    }
-
-    #[allow(clippy::useless_vec)]
-    pub async fn events_enabled(&self, enabled: bool) -> RconResult<()> {
-        // there exists a get version of this, but I assume it'll be never needed.
-        self.command(
-            &veca!["admin.eventsEnabled", enabled.to_string()],
-            ok_eof,
-            err_none,
-        )
-        .await
-    }
 }
-struct Commands {
-    
+
+#[async_trait::async_trait]
+impl RconQueryable for RconClient {
+    async fn query_raw(&self, words: Vec<AsciiString>) -> RconResult<Vec<AsciiString>> {
+        let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
+
+        self.queries
+            .send(SendQuery::Single(SendSingleQuery(words, tx)))
+            .map_err(|_: mpsc::error::SendError<_>| RconError::ConnectionClosed)?; // when mainloop did `rx.close()` at the end for example.
+        rx.await.expect(
+            "query_raw: failed to receive query response from main loop. This is likely a bug.",
+        )
+    }
+
+    async fn queries_raw(&self, wordses: Vec<Vec<AsciiString>>) -> Option<Vec<RconResult<Vec<AsciiString>>>> {
+        let mut single_queries = Vec::new();
+        let mut waiting = Vec::new();
+
+        for words in wordses {
+            let (tx, rx) = oneshot::channel::<RconResult<Vec<AsciiString>>>();
+            single_queries.push(SendSingleQuery(words, tx));
+            waiting.push(rx);
+        }
+
+        if let Err(_) = self.queries.send(SendQuery::Sequential(single_queries)) {
+            return None;
+        }
+
+        let mut result = Vec::new();
+        for rx in waiting {
+            let res = rx.await.expect(
+                "queries_raw: failed to receive query response from main loop. This is likely a bug.",
+            );
+            result.push(res);
+        }
+
+        Some(result)
+    }
 }
 
 
