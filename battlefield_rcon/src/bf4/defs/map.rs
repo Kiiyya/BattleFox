@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Display, Formatter},
-    str::FromStr,
-};
+use std::{collections::HashMap, fmt::{Display, Formatter}, str::FromStr};
 
 use ascii::{AsciiStr, AsciiString};
 
@@ -23,7 +20,7 @@ impl Map {
             Map::Locker => "Locker",
             Map::PearlMarket => "Pearl Market",
             Map::Oman => "Gulf of Oman",
-            Map::Other(_) => "(Some other map)", // FIXME some day we won't have "Other".
+            Map::Other(_) => "(Some unknown map)", // FIXME some day we won't have "Other".
         }
     }
 
@@ -32,7 +29,70 @@ impl Map {
         static ALL: [Map; 4] = [Map::Metro, Map::Locker, Map::PearlMarket, Map::Oman];
         ALL.iter()
     }
+
+    pub fn short_names(&self) -> std::slice::Iter<'static, &str> {
+        match self {
+            Map::Metro => {
+                static ALL: [&str; 4] = ["metro", "operationmetro", "operation_metro", "operation-metro"];
+                ALL.iter()
+            }
+            Map::Locker => {
+                static ALL: [&str; 4] = ["locker", "operationlocker", "operation_locker", "operation-locker"];
+                ALL.iter()
+            }
+            Map::PearlMarket => {
+                static ALL: [&str; 5] = ["pearl", "market", "pearlmarket", "pearl_market", "pearl-market"];
+                ALL.iter()
+            }
+            Map::Oman => {
+                static ALL: [&str; 11] = ["oman", "gulfofoman", "gulf", "gulfoman", "omangulf", "gulf_oman", "gulf-oman", "oman_gulf", "oman-gulf", "gulf_of_oman", "gulf-of-oman"];
+                ALL.iter()
+            }
+            Map::Other(_) => {
+                static ALL: [&str; 0] = [];
+                ALL.iter()
+            }
+        }
+    }
+
+    /// - "pearl" -> `Map::PearlMarket`,
+    /// - "market" -> `Map::PearlMarket`,
+    /// - "locker" -> `Map::Locker`,
+    /// - etc..
+    pub fn try_from_short<'a>(str: impl Into<&'a str>) -> Option<Map> {
+        // TODO: use strsim.
+        MAP_SHORTNAMES.get(str.into()).cloned()
+    }
+
+    // pub fn all_short_names() -> &'static HashMap<&'static str, Map> {
+    //     static shortnames : HashMap<&'static str, Map> = HashMap::new();
+    //     for map in Map::all() {
+    //         for shortname in map.short_names() {
+    //             shortnames.insert(shortname, map.clone());
+    //         }
+    //     }
+
+    //     &shortnames
+    // }
 }
+
+lazy_static! {
+    /// - "pearl" -> `Map::PearlMarket`,
+    /// - "market" -> `Map::PearlMarket`,
+    /// - "locker" -> `Map::Locker`,
+    /// - etc..
+    pub static ref MAP_SHORTNAMES: HashMap<&'static str, Map> = {
+        let mut shortnames : HashMap<&'static str, Map> = HashMap::new();
+        for map in Map::all() {
+            for shortname in map.short_names() {
+                shortnames.insert(shortname, map.clone());
+            }
+        }
+        shortnames
+    };
+}
+
+
 
 impl Display for Map {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

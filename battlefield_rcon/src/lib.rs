@@ -31,6 +31,9 @@ async fn main() -> rcon::RconResult<()> {
 */
 
 #[macro_use]
+extern crate lazy_static;
+
+#[macro_use]
 pub mod macros;
 pub mod bf4;
 pub mod rcon;

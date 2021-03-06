@@ -1,4 +1,5 @@
 //! Utilities for parsing the Bf4 RCON "Map List" Packet type.
+//! Has nothing to do with the MapList extension/plugin/whatchamacallit of BattleFox.
 use ascii::AsciiString;
 
 use crate::rcon::{RconError, RconResult};

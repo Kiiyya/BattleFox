@@ -4,6 +4,8 @@ use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 
 use crate::{rcon::RconError, rcon::RconResult};
 
+use super::Player;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Team {
     Neutral = 0,
@@ -143,5 +145,17 @@ impl Visibility {
                 vec![AsciiString::from_str("player").unwrap(), player.clone()]
             }
         }
+    }
+}
+
+impl From<&Player> for Visibility {
+    fn from(p: &Player) -> Self {
+        Visibility::Player(p.name.clone())
+    }
+}
+
+impl From<Player> for Visibility {
+    fn from(p: Player) -> Self {
+        Visibility::Player(p.name.clone())
     }
 }

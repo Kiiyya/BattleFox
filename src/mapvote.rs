@@ -13,6 +13,9 @@ use std::{
 };
 use tokio::{sync::Mutex, time::Interval};
 
+use num_rational::BigRational as Rat;
+use num_traits::One;
+
 /// An alternative. As in, one thing you can vote on.
 /// This is a `(Map, GameMode)` tuple currently.
 pub type Alt = (Map, GameMode);
@@ -29,8 +32,7 @@ pub struct Mapvote {
 }
 
 impl Mapvote {
-    pub async fn init(_bf4: &Arc<Bf4Client>) -> Self {
-        // bf4.mk_interval(tokio::time::Duration::from_secs(15), async { |bf4: &Weak<Bf4Client>| async {} });
+    pub fn new() -> Self {
         Self {
             inner: Mutex::new(MapvoteInner {
                 alternatives: HashSet::new(),
@@ -39,18 +41,27 @@ impl Mapvote {
         }
     }
 
-    pub async fn format_status(&self) -> String {
-        let mut ret = String::new();
+    pub fn format_status(&self) -> Vec<String> {
+        let mut ret = Vec::new();
 
         
 
         ret
     }
 
+    // #[periodic(self.spam_interval)]
+    // async fn spam_votes(&self) { ... }
+
     /// returns Some(old_ballot) if player had voted before.
-    pub async fn vote(&self, player: Player, ballot: Ballot<Alt>) -> Option<Ballot<Alt>> {
+    // #[command("vote", "v")]
+    pub async fn vote(&self, player: &Player, alts: &[Alt]) -> Option<Ballot<Alt>> {
+        let ballot = Ballot {
+            weight: Rat::one(),
+            preferences: alts.to_owned()
+        };
+
         let mut lock = self.inner.lock().await;
-        lock.votes.insert(player, ballot)
+        lock.votes.insert(player.clone(), ballot)
     }
 
     pub async fn compute_result(&self) -> Option<Alt> {
@@ -64,88 +75,46 @@ impl Mapvote {
         };
         profile.vanilla_stv_1()
     }
-
-    pub async fn event(&self, bf4: Arc<Bf4Client>, ev: Event) -> Bf4Result<()> {
-        match ev {
-            Event::Chat { vis, player, msg } => {
-                let msg : Vec<_> = msg.as_str().split(" ").collect(); // split guarantees at least one elem.
-                let firstword = msg[0];
-                match firstword {
-                    "!v" | "/v" => {
-                        bf4.say_lines(vec![
-                            "1",
-                            "2",
-                            "3",
-                            "4",
-                            "5",
-                            "6",
-                            "7",
-                            "8",
-                            "9",
-                            "10",
-                            "11",
-                            "12",
-                        ], Visibility::Player(player.into())).await.unwrap();
-                    }
-                    "/nominate" | "!nominate" | "/nom" | "!nom" => {
-                        if msg.len() == 1 {
-                            bf4.say_lines(vec![
-                                "Usage: \"!nominate metro\" or \"/nom metro@rush\" or \"/nom pearl\"",
-                                "Usage: Adds a map to the current vote, so everyone can vote on it!",
-                                "Usage: For more details see \"/help nom\""
-                            ], Visibility::Player(player.into())).await.unwrap();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::RoundOver { winning_team } => {
-                let winner = self.compute_result().await;
-                bf4.say(
-                    format!("{:?} won the mapvote!", winner.unwrap()),
-                    Visibility::All,
-                )
-                .await
-                .unwrap();
-
-                // TODO actually switch to the new map
-            }
-            _ => {} // ignore other stuff
-        }
-
-        Ok(())
-    }
 }
 
-// use super::Middleware;
-
-// #[async_trait::async_trait]
-// impl Middleware for Mapvote {
-//     async fn event(
-//         &self,
-//         bf4: Arc<Bf4Client>,
-//         ev: Event,
-//         inner: impl FnOnce(Arc<Bf4Client>, Event) -> BoxFuture<'static, Bf4Result<()>> + Send + 'static,
-//     ) -> Bf4Result<()>
-//     where
-//         Self: Sized,
-//     {
-//         match ev.clone() {
-//             Event::Chat { vis, player, msg } => {}
-//             Event::RoundOver { winning_team } => {
-//                 let winner = self.compute_result().await;
-//                 bf4.say(
-//                     format!("{} won the mapvote!", winner.unwrap()),
-//                     Visibility::All,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//                 // TODO actually switch to the new map
-//             }
-//             _ => {} // ignore other stuff
-//         }
-
-//         inner(bf4, ev).await
-//     }
+// impl ContributesPeriodic for Mapvote {
+//      
 // }
+// 
+// impl ContributesCommand for Mapvote {
+//      eh no, this would mean it only contributes a single command, hm..
+// }
+// 
+
+
+pub enum ParseMapsResult {
+    Ok(Vec<Alt>),
+    /// Nothing, silently fail. E.g. when someone entered a normal command and not a map name.
+    /// Returned when the first map name wasn't exact.
+    Nothing,
+    NotAMapName { orig: String, /*suggestions: Vec<(AsciiString, f64)> */},
+}
+
+/// expects a space-delimited list of maps with optional gamemode specifiers
+/// 
+/// The first map name must be exact, after that it'll trigger and give proper error messages.
+/// If the first map is not an exact map name, it will just return `Nothing`.
+pub fn parse_maps(str: &str) -> ParseMapsResult {
+    let mut res = Vec::new();
+    let words = str.split(' ').collect::<Vec<_>>();
+
+    for i in 0..words.len() {
+        // TODO: Add map@mode or map/mode or map:mode syntax
+        if let Some(map) = Map::try_from_short(words[i]) {
+            res.push((map.clone(), GameMode::Rush));
+        } else {
+            if i == 0 {
+                return ParseMapsResult::Nothing;
+            } else {
+                return ParseMapsResult::NotAMapName { orig: words[i].to_owned(), };
+            }
+        }
+    }
+
+    ParseMapsResult::Ok(res)
+}

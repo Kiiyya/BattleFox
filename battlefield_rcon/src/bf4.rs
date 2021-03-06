@@ -325,10 +325,10 @@ impl Bf4Client {
     pub async fn say(
         &self,
         msg: impl IntoAsciiString + Into<String>,
-        vis: Visibility,
+        vis: impl Into<Visibility>,
     ) -> Result<(), SayError> {
         let mut words = veca!["admin.say", msg];
-        words.append(&mut vis.rcon_encode());
+        words.append(&mut vis.into().rcon_encode());
         self.rcon
             .query(&words, ok_eof, |err| match err {
                 "InvalidTeam" => Some(SayError::Rcon(RconError::protocol_msg(
@@ -356,12 +356,13 @@ impl Bf4Client {
     /// # Other notes
     /// This function is fucking ugly internally...
     pub async fn say_lines<Line>(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         lines: impl IntoIterator<Item = Line>,
-        vis: Visibility,
+        vis: impl Into<Visibility>,
     ) -> Result<(), SayError>
         where Line: IntoAsciiString + Into<String> + 'static + Send,
     {
+        let vis = vis.into();
         let vis_words = vis.rcon_encode();
         let queries = lines.into_iter().map(|line| {
             let mut words = vec![
@@ -489,6 +490,7 @@ mod test {
     use crate::rcon;
     use std::time::Instant;
 
+    #[allow(dead_code)]
     async fn spammer(i: usize) -> rcon::RconResult<()> {
         let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
         let bf4 = Bf4Client::new(rcon).await.unwrap();
@@ -515,7 +517,7 @@ mod test {
     }
 
     #[tokio::test]
-    // #[ignore]
+    #[cfg(rcon_test)]
     async fn spam() -> rcon::RconResult<()> {
         let mut joinhandles = Vec::new();
         for i in 0..10 {
@@ -530,6 +532,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg(rcon_test)]
     async fn lifetimes() -> RconResult<()> {
         let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
         let bf4 = Bf4Client::new(rcon).await.unwrap();

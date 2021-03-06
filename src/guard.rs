@@ -68,9 +68,15 @@ use std::ops::{Deref, DerefMut};
 
 use either::Either;
 
+pub trait Cases {
+    type Cases;
+
+    fn cases(self) -> Self::Cases;
+}
+
 /// Instances of this type are proofs which express that `A` *and* `B` hold.
 /// 
-/// - You introduce `A and B` with `A::and(a, b)`.
+/// - You introduce `A and B` with `And::and(a, b)`.
 /// - You obtain just `A` from `A and B` via `my_and.left()`.
 /// 
 /// # Example
@@ -109,7 +115,7 @@ impl<A: Copy, B: Copy> Copy for And<A, B> {}
 pub struct Or<A, B>(Either<A, B>);
 
 impl<A, B> Or<A, B> {
-    pub fn cases<Target>(
+    pub fn fork<Target>(
         self,
         left: impl FnOnce(A) -> Target,
         right: impl FnOnce(B) -> Target,
@@ -120,9 +126,9 @@ impl<A, B> Or<A, B> {
         }
     }
 
-    pub fn expose(self) -> Either<A, B> {
-        self.0
-    }
+    // pub fn cases(self) -> Either<A, B> {
+    //     self.0
+    // }
 
     /// Constructs a proof of `Or<A, B>` from one branch.
     /// If you know that `A` is true, then you know that `A or B` is true.
@@ -133,6 +139,14 @@ impl<A, B> Or<A, B> {
     /// If you know that `B` is true, then you know that `A or B` is true.
     pub fn right(p2: B) -> Or<A, B> {
         Or(Either::Right(p2))
+    }
+}
+
+impl <A, B> Cases for Or<A, B> {
+    type Cases = Either<A, B>;
+
+    fn cases(self) -> Self::Cases {
+        self.0
     }
 }
 
@@ -157,7 +171,7 @@ impl<A: Copy, B: Copy> Copy for Or<A, B> {}
 // }
 
 /// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
-pub trait Judgement<T>: Clone {}
+pub trait Judgement<T> {}
 
 impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for And<A, B> {}
 impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for Or<A, B> {}
@@ -234,8 +248,25 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
         }
     }
 
-    pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
-        match self.judgement.expose() {
+    // pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
+    //     match self.judgement.cases() {
+    //         Either::Left(l) => Either::Left(Guard {
+    //             inner: self.inner,
+    //             judgement: l,
+    //         }),
+    //         Either::Right(r) => Either::Right(Guard {
+    //             inner: self.inner,
+    //             judgement: r,
+    //         }),
+    //     }
+    // }
+}
+
+impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {
+    type Cases = Either<Guard<T, A>, Guard<T, B>>;
+
+    fn cases(self) -> Self::Cases {
+        match self.judgement.cases() {
             Either::Left(l) => Either::Left(Guard {
                 inner: self.inner,
                 judgement: l,
@@ -276,6 +307,20 @@ impl<T, J: Judgement<T>> DerefMut for Guard<T, J> {
     
 
 // }
+
+pub mod enum_subset {
+    use super::Judgement;
+
+    pub trait EnumSubset<E> {
+
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Subset<E> {
+
+    }
+    impl <E: Clone> Judgement<E> for Subset<E> {}
+}
 
 /////////////////////////////////////////////////////
 
