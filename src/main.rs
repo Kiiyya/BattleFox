@@ -1,5 +1,5 @@
 // #![feature(generic_associated_types)]
-#![feature(arbtrary_self_type)]
+// #![feature(arbitrary_self_type)]
 #![allow(unused_imports)]
 
 #[macro_use]
@@ -7,8 +7,10 @@ extern crate async_trait;
 
 use std::{any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc};
 use ascii::AsciiChar;
+use cmd::SimpleCommands;
 use dotenv::dotenv;
 use futures::future::BoxFuture;
+use rounds::{Rounds, RoundsCtx};
 use tokio_stream::StreamExt;
 
 use battlefield_rcon::{
@@ -18,74 +20,64 @@ use battlefield_rcon::{
     },
     rcon::{self, RconClient, RconError},
 };
-use maplist::Maplist;
-use mapvote::{parse_maps, Mapvote, ParseMapsResult};
-use lifeguard::Lifeguard;
+// use maplist::Maplist;
+// use mapvote::{parse_maps, Mapvote, ParseMapsResult};
+// use lifeguard::Lifeguard;
 
-pub mod maplist;
-pub mod mapvote;
+// pub mod maplist;
+// pub mod mapvote;
 // pub mod guard;
-pub mod lifeguard;
+// pub mod lifeguard;
 mod stv;
 pub mod cmd;
 pub mod rounds;
 
 ////////////////////////////////
 
-pub trait Context {
-    fn has<T>(&mut self, data: T);
+pub struct Usage<N: Node> {
+    _ph: PhantomData<N>
 }
-
-pub trait Scoped<T, S: Context> : Deref<Target = T>
-    // where Self::Target: T,
-{
-    // type Target = T;
-}
-
-struct Usage {
-    ty: TypeId,
-    f: Box<dyn Fn() -> BoxFuture<'static, ()>>,
-}
-pub struct RootContext {
-    uses: Vec<Usage>,
-}
-impl Context for RootContext {
-    fn has<T>(&mut self, data: T) {
+impl <N: Node> Usage<N> {
+    pub fn with<F: Fn(&mut N::Ctx)>(&mut self, f: F) {
         todo!()
     }
 }
 
-pub trait ExtUp {
-    fn uses<T: Extension, S: Context, F: Fn(&S) -> Bf4Result<()>>(&mut self, f: F);
-
-    // fn composition(&mut self);
-
-    fn has<T>(&mut self, data: T);
-
-    // fn has_persistent<T: Data>(&mut self);
-    // no, no persistent. Instead, you store data in a scope. And maybe you want to store data
-    // in your parent scope, which lives longer.
+pub trait Context {
+    fn uses<'ctx, N: Node>(&'ctx mut self) -> &'ctx mut Usage<N>;
 }
 
+pub trait Node {
+    type Ctx : Context;
 
-pub trait Extension {
-    fn define(scope: &mut impl ExtUp) -> Self
+    fn define(ctx: &mut Self::Ctx) -> Self
     where
         Self: Sized;
 }
 
-pub struct BattleFox<T: Extension> {
+pub struct BattleFox<M: Node> {
     bf4: Arc<Bf4Client>,
     // extensions: Vec<Box<dyn Extension>>,
-    main: T,
+    main: M,
 }
 
-impl <T: Extension> BattleFox<T> {
+pub struct BattleFoxCtx {
+
+}
+
+impl Context for BattleFoxCtx {
+    #[must_use]
+    fn uses<'ctx, N: Node>(&'ctx mut self) -> &'ctx mut Usage<N> {
+        todo!()
+    }
+}
+
+impl <T: Node<Ctx = BattleFoxCtx>> BattleFox<T> {
     pub async fn run(bf4: Arc<Bf4Client>) -> Self {
-        let root = RootContext {
-            uses: Vec::new(),
+        let mut root = BattleFoxCtx {
+            // uses: Vec::new(),
         };
-        let main = T::define(&root);
+        let main = T::define(&mut root);
         Self {
             bf4,
             // extensions: Vec::new(),
@@ -112,24 +104,23 @@ impl <T: Extension> BattleFox<T> {
 //////////////
 
 struct Main;
-impl Extension for Main {
-    fn define(scope: &mut impl ExtUp) -> Self
+impl Node for Main {
+    type Ctx = BattleFoxCtx;
+
+    fn define(ctx: &mut BattleFoxCtx) -> Self
     where
         Self: Sized
     {
-        // scope.uses::<InitScope<Mapvote>>(|&mut mv| {
-        //      mv.has_setting(...);
-        // });
-        
-        scope.uses::<Rounds>(|rounds: &mut RootScope<Rounds>| {
-            rounds.each::<Mapvote>(|mapvote: &mut RoundScope<MapVote>| {
-                mapvote.
-            });
+        ctx.uses::<Rounds>().with(|rounds: &mut RoundsCtx| {
+            rounds.uses::<SimpleCommands>();
         });
 
-        scope.uses::<Mapvote>(|&mut mv| {
-            // mv.
-        });
+
+        // root.uses::<Rounds>(|rounds: &mut RootScope<Rounds>| {
+        //     rounds.each::<Mapvote>(|mapvote: &mut RoundScope<MapVote>| {
+        //         mapvote.
+        //     });
+        // });
 
         Self
     }

@@ -27,3 +27,4 @@ async-trait = "0.1.42"
 futures = "0.3.12"
 
 either = "1.6"
+multimap = "0.8"

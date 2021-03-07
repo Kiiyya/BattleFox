@@ -1,12 +1,12 @@
-use crate::{Extension, ExtUp};
+// use crate::Node;
 
-pub struct Maplist {}
+// pub struct Maplist {}
 
-impl Extension for Maplist {
-    fn define(scope: &mut impl ExtUp) -> Self
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
-}
+// impl Node for Maplist {
+//     fn define(scope: &mut impl ExtUp) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         todo!()
+//     }
+// }

@@ -1,6 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{ExtUp, Extension, SomeScope, Scoped, cmd::SimpleCommands, maplist::Maplist, stv::Profile};
+use crate::{ExtUp, Node, SomeScope, Scoped, cmd::SimpleCommands, maplist::Maplist, stv::Profile};
 
 use super::stv::Ballot;
 use battlefield_rcon::{
@@ -28,7 +28,7 @@ pub struct Mapvote {
     inner: Mutex<MapvoteInner>,
 }
 
-impl Extension for Mapvote {
+impl Node for Mapvote {
     fn define(scope: &mut impl ExtUp) -> Self
     where
         Self: Sized
