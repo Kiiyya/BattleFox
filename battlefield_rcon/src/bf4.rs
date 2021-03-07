@@ -6,7 +6,9 @@ use std::{
 };
 
 use self::error::Bf4Result;
-use crate::rcon::{err_none, ok_eof, packet::Packet, RconClient, RconError, RconResult, RconQueryable};
+use crate::rcon::{
+    err_none, ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult,
+};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
@@ -344,15 +346,13 @@ impl Bf4Client {
             .await
     }
 
-
-
     /// Prints multiple lines at once.
     /// Sends all `say` commands first, each in a `tokio::spawn(..)`, then waits until
     /// they all complete, returning the first `Err(..)` if any, otherwise `Ok(())`.
     ///
     /// Panics when joining a joinhandle fails, i.e. when the future itself panicked.
     /// You should never have to bother about this, if you encounter this, it's a bug.
-    /// 
+    ///
     /// # Other notes
     /// This function is fucking ugly internally...
     pub async fn say_lines<Line>(
@@ -360,34 +360,42 @@ impl Bf4Client {
         lines: impl IntoIterator<Item = Line>,
         vis: impl Into<Visibility>,
     ) -> Result<(), SayError>
-        where Line: IntoAsciiString + Into<String> + 'static + Send,
+    where
+        Line: IntoAsciiString + Into<String> + 'static + Send,
     {
         let vis = vis.into();
         let vis_words = vis.rcon_encode();
-        let queries = lines.into_iter().map(|line| {
-            let mut words = vec![
-                "admin.say".into_ascii_string().unwrap(),
-                line.into_ascii_string().unwrap(),
-            ];
-            words.append(&mut vis_words.clone());
-            words
-        }).collect::<Vec<_>>();
+        let queries = lines
+            .into_iter()
+            .map(|line| {
+                let mut words = vec![
+                    "admin.say".into_ascii_string().unwrap(),
+                    line.into_ascii_string().unwrap(),
+                ];
+                words.append(&mut vis_words.clone());
+                words
+            })
+            .collect::<Vec<_>>();
 
         match self.rcon.queries_raw(queries).await {
             Some(responses) => {
                 for response in responses {
                     let response = response?;
                     match response[0].as_str() {
-                        "OK" => {},
-                        "InvalidTeam" => return Err(SayError::Rcon(RconError::protocol_msg(
-                            "Rcon did not understand our teamId",
-                        ))),
-                        "InvalidSquad" => return Err(SayError::Rcon(RconError::protocol_msg(
-                            "Rcon did not understand our squadId",
-                        ))),
+                        "OK" => {}
+                        "InvalidTeam" => {
+                            return Err(SayError::Rcon(RconError::protocol_msg(
+                                "Rcon did not understand our teamId",
+                            )))
+                        }
+                        "InvalidSquad" => {
+                            return Err(SayError::Rcon(RconError::protocol_msg(
+                                "Rcon did not understand our squadId",
+                            )))
+                        }
                         "MessageTooLong" => return Err(SayError::MessageTooLong),
                         "PlayerNotFound" => return Err(SayError::PlayerNotFound),
-                        _ => return Err(SayError::Rcon(RconError::other("")))
+                        _ => return Err(SayError::Rcon(RconError::other(""))),
                     }
                 }
             }

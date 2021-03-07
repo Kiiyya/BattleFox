@@ -158,7 +158,7 @@ pub struct RconClient {
 // );
 
 #[derive(Debug)]
-struct SendSingleQuery (
+struct SendSingleQuery(
     Vec<AsciiString>,
     oneshot::Sender<RconResult<Vec<AsciiString>>>,
 );
@@ -377,8 +377,6 @@ impl RconClient {
         // we drop shutdown_rx here.
     }
 
-
-
     async fn mainloop(
         mut query_rx: mpsc::UnboundedReceiver<SendQuery>,
         tx_nonresponses: mpsc::UnboundedSender<RconResult<Packet>>,
@@ -550,7 +548,7 @@ impl RconClient {
 
     // /// Multiple queries, guaranteed to be sent in order.
     // /// This is (slightly) faster than doing multiple queries and awaiting each.
-    // /// 
+    // ///
     // /// Sends all queries immediately, so if the first query returns an error,
     // /// the next queries will have already been sent.
     // pub async fn queries<T, E>(
@@ -560,7 +558,7 @@ impl RconClient {
 
 // #[derive(Debug)]
 // pub struct Queries {
-    
+
 // }
 
 #[async_trait::async_trait]
@@ -570,19 +568,17 @@ pub trait RconQueryable {
 
     /// Send multiple queries, guaranteeing that they will be sent in that order.
     /// Then awaits responses, and returns them.
-    /// 
+    ///
     /// # Returns
     /// - `None`: Some error occured communicating with the main loop. This likely means connection was closed.
     /// - `Some(vec)`: Each item contains a `RconResult<Vec<AsciiString>>`, as if it was just multiple calls to `query_raw`.
-    async fn queries_raw(&self, words: Vec<Vec<AsciiString>>) -> Option<Vec<RconResult<Vec<AsciiString>>>>;
+    async fn queries_raw(
+        &self,
+        words: Vec<Vec<AsciiString>>,
+    ) -> Option<Vec<RconResult<Vec<AsciiString>>>>;
 
     /// More convenient way than `query_raw`.
-    async fn query<T, E, Ok, Err>(
-        &self,
-        words: &[AsciiString],
-        ok: Ok,
-        err: Err,
-    ) -> Result<T, E>
+    async fn query<T, E, Ok, Err>(&self, words: &[AsciiString], ok: Ok, err: Err) -> Result<T, E>
     where
         E: From<RconError>,
         Ok: FnOnce(&[AsciiString]) -> Result<T, E> + Send,
@@ -624,7 +620,10 @@ impl RconQueryable for RconClient {
         )
     }
 
-    async fn queries_raw(&self, wordses: Vec<Vec<AsciiString>>) -> Option<Vec<RconResult<Vec<AsciiString>>>> {
+    async fn queries_raw(
+        &self,
+        wordses: Vec<Vec<AsciiString>>,
+    ) -> Option<Vec<RconResult<Vec<AsciiString>>>> {
         let mut single_queries = Vec::new();
         let mut waiting = Vec::new();
 
@@ -649,7 +648,6 @@ impl RconQueryable for RconClient {
         Some(result)
     }
 }
-
 
 /// Use this to assert that there is no more extra input. As in, we only expect
 /// the first word to be "OK" (already checked at a different place),

@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::{Display, Formatter}, str::FromStr};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use ascii::{AsciiStr, AsciiString};
 
@@ -33,19 +37,47 @@ impl Map {
     pub fn short_names(&self) -> std::slice::Iter<'static, &str> {
         match self {
             Map::Metro => {
-                static ALL: [&str; 4] = ["metro", "operationmetro", "operation_metro", "operation-metro"];
+                static ALL: [&str; 4] = [
+                    "metro",
+                    "operationmetro",
+                    "operation_metro",
+                    "operation-metro",
+                ];
                 ALL.iter()
             }
             Map::Locker => {
-                static ALL: [&str; 4] = ["locker", "operationlocker", "operation_locker", "operation-locker"];
+                static ALL: [&str; 4] = [
+                    "locker",
+                    "operationlocker",
+                    "operation_locker",
+                    "operation-locker",
+                ];
                 ALL.iter()
             }
             Map::PearlMarket => {
-                static ALL: [&str; 5] = ["pearl", "market", "pearlmarket", "pearl_market", "pearl-market"];
+                static ALL: [&str; 5] = [
+                    "pearl",
+                    "market",
+                    "pearlmarket",
+                    "pearl_market",
+                    "pearl-market",
+                ];
                 ALL.iter()
             }
             Map::Oman => {
-                static ALL: [&str; 11] = ["oman", "gulfofoman", "gulf", "gulfoman", "omangulf", "gulf_oman", "gulf-oman", "oman_gulf", "oman-gulf", "gulf_of_oman", "gulf-of-oman"];
+                static ALL: [&str; 11] = [
+                    "oman",
+                    "gulfofoman",
+                    "gulf",
+                    "gulfoman",
+                    "omangulf",
+                    "gulf_oman",
+                    "gulf-oman",
+                    "oman_gulf",
+                    "oman-gulf",
+                    "gulf_of_oman",
+                    "gulf-of-oman",
+                ];
                 ALL.iter()
             }
             Map::Other(_) => {
@@ -91,8 +123,6 @@ lazy_static! {
         shortnames
     };
 }
-
-
 
 impl Display for Map {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

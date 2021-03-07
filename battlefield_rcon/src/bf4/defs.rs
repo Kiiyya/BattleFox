@@ -3,7 +3,7 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{RconEncoding, ea_guid::Eaid};
+use super::{ea_guid::Eaid, RconEncoding};
 use crate::rcon::RconResult;
 use ascii::{AsciiStr, AsciiString};
 use std::{
@@ -47,7 +47,6 @@ impl Into<AsciiString> for Player {
 /////////////////////////////////////////////////////////////////////
 /////////////////////// Weapon //////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Weapon {

@@ -1,16 +1,13 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::stv::Profile;
+use crate::{ExtUp, Extension, SomeScope, State, cmd::SimpleCommands, maplist::Maplist, stv::Profile};
 
 use super::stv::Ballot;
-use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::Bf4Result}, rcon::RconResult};
-use std::{
-    collections::{HashMap, HashSet},
-    future::Future,
-    pin::Pin,
-    sync::{Arc, Weak},
-    time::Duration,
+use battlefield_rcon::{
+    bf4::{error::Bf4Result, Bf4Client, Event, GameMode, Map, Player, Visibility},
+    rcon::RconResult,
 };
+use std::{any::Any, collections::{HashMap, HashSet}, future::Future, pin::Pin, sync::{Arc, Weak}, time::Duration};
 use tokio::{sync::Mutex, time::Interval};
 
 use num_rational::BigRational as Rat;
@@ -31,8 +28,42 @@ pub struct Mapvote {
     inner: Mutex<MapvoteInner>,
 }
 
-impl Mapvote {
-    pub fn new() -> Self {
+impl Extension for Mapvote {
+    fn define(scope: &mut impl ExtUp) -> Self
+    where
+        Self: Sized
+    {
+        // let dependency_lifeguard = scope.uses(|ml: &SomeScope<Maplist>| {
+        //     Ok(())
+        // });
+
+        scope.uses::<Maplist>(|_| {});
+            //.derp(|&ml| { });
+
+        // let _ = scope.uses(|rounds: &InitScope<Rounds>| {
+        //     rounds.each_round(|round_scope: &RoundScope<Rounds>| {
+        //     });
+        // });
+
+        scope.uses::<Rounds>(|&rounds| { // rounds: impl State<>
+            rounds.each
+        });
+
+        scope.uses::<SimpleCommands>(|&mut cmds| { // cmds: ServerScope<Commands>
+            cmds.simple_command("!vote", |&words| { // words: ServerScope<>
+
+            });
+
+            // hm, when calling on `cmds.dothing()` you need to somehow pass which context/scope
+            // it is coming from. in our case, that we're the mapvote plugin.
+            // and even when you have another plugin doing a thing on behalf of a third plugin, you
+            // will want that to be handled properly too. with the lifetimes and ownership properly.
+            // (scope, cmds).add_command("!vote");
+            // Have an arbitrary type like that. scope == context.
+            // Or Scope<Commands>
+            Ok(())
+        });
+
         Self {
             inner: Mutex::new(MapvoteInner {
                 alternatives: HashSet::new(),
@@ -40,11 +71,11 @@ impl Mapvote {
             }),
         }
     }
+}
 
+impl Mapvote {
     pub fn format_status(&self) -> Vec<String> {
         let mut ret = Vec::new();
-
-        
 
         ret
     }
@@ -57,7 +88,7 @@ impl Mapvote {
     pub async fn vote(&self, player: &Player, alts: &[Alt]) -> Option<Ballot<Alt>> {
         let ballot = Ballot {
             weight: Rat::one(),
-            preferences: alts.to_owned()
+            preferences: alts.to_owned(),
         };
 
         let mut lock = self.inner.lock().await;
@@ -77,26 +108,18 @@ impl Mapvote {
     }
 }
 
-// impl ContributesPeriodic for Mapvote {
-//      
-// }
-// 
-// impl ContributesCommand for Mapvote {
-//      eh no, this would mean it only contributes a single command, hm..
-// }
-// 
-
-
 pub enum ParseMapsResult {
     Ok(Vec<Alt>),
     /// Nothing, silently fail. E.g. when someone entered a normal command and not a map name.
     /// Returned when the first map name wasn't exact.
     Nothing,
-    NotAMapName { orig: String, /*suggestions: Vec<(AsciiString, f64)> */},
+    NotAMapName {
+        orig: String, /*suggestions: Vec<(AsciiString, f64)> */
+    },
 }
 
 /// expects a space-delimited list of maps with optional gamemode specifiers
-/// 
+///
 /// The first map name must be exact, after that it'll trigger and give proper error messages.
 /// If the first map is not an exact map name, it will just return `Nothing`.
 pub fn parse_maps(str: &str) -> ParseMapsResult {
@@ -111,7 +134,9 @@ pub fn parse_maps(str: &str) -> ParseMapsResult {
             if i == 0 {
                 return ParseMapsResult::Nothing;
             } else {
-                return ParseMapsResult::NotAMapName { orig: words[i].to_owned(), };
+                return ParseMapsResult::NotAMapName {
+                    orig: words[i].to_owned(),
+                };
             }
         }
     }

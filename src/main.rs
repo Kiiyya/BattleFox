@@ -1,34 +1,130 @@
-use std::{env::var, sync::Arc};
+#![feature(generic_associated_types)]
+#![feature(arbtrary_self_type)]
+#![allow(unused_imports)]
+
+use std::{any::TypeId, env::var, marker::PhantomData, ops::Deref, sync::Arc};
 use ascii::AsciiChar;
 use dotenv::dotenv;
-use tokio::time::sleep;
+use futures::future::BoxFuture;
 use tokio_stream::StreamExt;
 
-use battlefield_rcon::{bf4::{Bf4Client, Event, error::{Bf4Error, Bf4Result}}, rcon::{self, RconClient, RconError}};
-use mapvote::{Mapvote, ParseMapsResult, parse_maps};
+use battlefield_rcon::{
+    bf4::{
+        error::{Bf4Error, Bf4Result},
+        Bf4Client, Event,
+    },
+    rcon::{self, RconClient, RconError},
+};
 use maplist::Maplist;
+use mapvote::{parse_maps, Mapvote, ParseMapsResult};
+use lifeguard::Lifeguard;
 
-pub mod mapvote;
 pub mod maplist;
+pub mod mapvote;
 // pub mod guard;
+pub mod lifeguard;
 mod stv;
+pub mod cmd;
+pub mod rounds;
 
-// pub struct BattleFox {
-//     bf4: Arc<Bf4Client>,
+pub trait Data {}
+pub trait CrdtData {}
+// ...
+
+
+////////////////////////////////
+
+pub trait Scope {
+    fn has<T>(&mut self, data: T);
+}
+
+pub trait State<T, S: Scope> : Deref {
+    // type Target = T;
+}
+
+// impl <T, S: Scope, St: State<T, S>> Deref for St {
+//     type Target = T;
+
+//     fn deref(&self) -> &Self::Target {
+//         todo!()
+//     }
 // }
 
-// impl BattleFox {
-//     pub async fn new(bf4: Arc<Bf4Client>) -> Self {
-//         Self {
-//             bf4,
-//         }
-//     }
 
-//     pub async fn run(&mut self) -> Bf4Result<()> {
+pub struct SomeScope<T> {
+    _x: PhantomData<T>
+}
 
-//         Ok(())
-//     }
-// }
+pub trait ExtUp {
+    fn uses<T: Extension, S: Scope, F: Fn(&S) -> Bf4Result<()>>(&mut self, f: F);
+
+    // fn composition(&mut self);
+
+    fn has<T>(&mut self, data: T);
+
+    // fn has_persistent<T: Data>(&mut self);
+    // no, no persistent. Instead, you store data in a scope. And maybe you want to store data
+    // in your parent scope, which lives longer.
+}
+
+
+pub trait Extension {
+    fn define(scope: &mut impl ExtUp) -> Self
+    where
+        Self: Sized;
+}
+
+pub struct BattleFox<T: Extension> {
+    bf4: Arc<Bf4Client>,
+    // extensions: Vec<Box<dyn Extension>>,
+    main: T,
+}
+
+impl <T: Extension> BattleFox<T> {
+    pub async fn run(bf4: Arc<Bf4Client>) -> Self {
+        let main = T::define(todo!());
+        Self {
+            bf4,
+            // extensions: Vec::new(),
+            main,
+        }
+    }
+
+    // pub fn add_ext<T: Extension + 'static>(&mut self) {
+    //     let mut scope = ExtUpImpl {
+    //         // cmds: Vec::new(),
+    //     };
+    //     let ext = T::up(&mut scope);
+    //     self.extensions.push(Box::new(ext));
+    // }
+
+    // pub async fn run<T: Extension>(&mut self) {
+    //     let mut events = self.bf4.event_stream();
+    //     while let Some(event) = events.next().await {
+
+    //     }
+    // }
+}
+
+//////////////
+
+struct Main;
+impl Extension for Main {
+    fn define(scope: &mut impl ExtUp) -> Self
+    where
+        Self: Sized
+    {
+        // scope.uses::<InitScope<Mapvote>>(|&mut mv| {
+        //      mv.has_setting(...);
+        // });
+
+        scope.uses::<Mapvote>(|&mv| {
+            // mv.
+        });
+
+        Self
+    }
+}
 
 #[allow(clippy::or_fun_call)]
 #[tokio::main]
@@ -41,78 +137,13 @@ async fn main() -> rcon::RconResult<()> {
         .parse::<u16>()
         .unwrap();
     let password = var("BFOX_RCON_PASSWORD").unwrap_or("smurf".into());
-    println!("Connecting to {}:{}...", ip, port);
+
+    println!("Connecting to {}:{} with password ***...", ip, port);
     let rcon = RconClient::connect((ip.as_str(), port, password.as_str())).await?;
     let bf4 = Bf4Client::new(rcon).await.unwrap();
     println!("Connected!");
 
-    tokio::spawn(async move {
-        let mapvote = Arc::new(Mapvote::new());
-
-        let mut event_stream = bf4.event_stream();
-        while let Some(ev) = event_stream.next().await {
-            match ev {
-                Ok(Event::Chat { vis, player, msg }) => {
-                    if msg[0] == AsciiChar::Exclamation || msg[0] == AsciiChar::Slash {
-                        match parse_maps(&msg[1..].as_str()) {
-                            ParseMapsResult::Ok(maps) => {
-                                mapvote.vote(&player, &maps).await;
-                                let _ = bf4.say(format!("{} voted for {:?}", player, maps), vis).await;
-                            }
-                            ParseMapsResult::NotAMapName { orig } => { // actually error
-                                let _ = bf4.say(format!("{}: \"{}\" is not a map name, try again!", player, orig), player).await;
-                            }
-                            ParseMapsResult::Nothing => { // mapvote didn't consume event, so now we handle all other commands.
-                                let words = msg[1..].as_str().split(" ").collect::<Vec<_>>();
-                                match words[0] {
-                                    "!v" | "/v" => {
-                                        bf4.say_lines(mapvote.format_status(), vis).await.unwrap();
-                                    }
-                                    // "/nominate" | "!nominate" | "/nom" | "!nom" => {
-                                    //     if msg.len() == 1 {
-                                    //         bf4.say_lines(vec![
-                                    //             "Usage: \"!nominate metro\" or \"/nom metro@rush\" or \"/nom pearl\"",
-                                    //             "Usage: Adds a map to the current vote, so everyone can vote on it!",
-                                    //             "Usage: For more details see \"/help nom\""
-                                    //         ], Visibility::Player(player.into())).await.unwrap();
-                                    //     }
-                                    //     // now we know msg.len >= 2.
-                                    // }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
-                Ok(Event::RoundOver { winning_team: _ }) => {
-    
-                }
-                Ok(_) => {}
-                // Ok(ev) => {
-                //     // let end = Box::pin(async move |_, _| Ok(()));
-                //     let mapvote = mapvote.clone();
-                //     let bf4 = bf4.clone();
-                //     tokio::spawn(async move {
-                //         if let Err(e) = mapvote.event(bf4, ev).await {
-                //             // TODO: handle joinhandle errors properly, not just logging, bleh.
-                //             println!("Got a middleware error {:?}", e);
-                //         }
-                //     });
-                // }
-                Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => {
-                    break;
-                }
-                Err(err) => {
-                    println!("Got error: {:?}", err);
-                    if let Bf4Error::Rcon(RconError::Io(_)) = err {
-                        break;
-                    }
-                }
-            }
-        }
-    });
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    BattleFox::<Main>::run(bf4).await;
 
     Ok(())
 }
