@@ -18,14 +18,12 @@ tokio-stream = "0.1"
 dotenv = "0.15"
 
 # for voting
-num-rational = { version = "0.3", features = ["num-bigint"] }
+num-rational = { version = "0.4.0", features = ["num-bigint"] }
 num-traits = "0.2.14"
-num-bigint = "0.3.1"
+num-bigint = "0.4.0"
 
 # for weird middleware stuff, inner(), etc.
-# async-trait = "0.1.42"
-# futures = "0.3.12"
+async-trait = "0.1.42"
+futures = "0.3.12"
 
 either = "1.6"
-
-futures = "0.3"

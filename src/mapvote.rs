@@ -1,6 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{ExtUp, Extension, SomeScope, State, cmd::SimpleCommands, maplist::Maplist, stv::Profile};
+use crate::{ExtUp, Extension, SomeScope, Scoped, cmd::SimpleCommands, maplist::Maplist, stv::Profile};
 
 use super::stv::Ballot;
 use battlefield_rcon::{
@@ -33,17 +33,8 @@ impl Extension for Mapvote {
     where
         Self: Sized
     {
-        // let dependency_lifeguard = scope.uses(|ml: &SomeScope<Maplist>| {
-        //     Ok(())
-        // });
-
         scope.uses::<Maplist>(|_| {});
             //.derp(|&ml| { });
-
-        // let _ = scope.uses(|rounds: &InitScope<Rounds>| {
-        //     rounds.each_round(|round_scope: &RoundScope<Rounds>| {
-        //     });
-        // });
 
         scope.uses::<Rounds>(|&rounds| { // rounds: impl State<>
             rounds.each

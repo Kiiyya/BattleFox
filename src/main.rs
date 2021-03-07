@@ -1,8 +1,11 @@
-#![feature(generic_associated_types)]
+// #![feature(generic_associated_types)]
 #![feature(arbtrary_self_type)]
 #![allow(unused_imports)]
 
-use std::{any::TypeId, env::var, marker::PhantomData, ops::Deref, sync::Arc};
+#[macro_use]
+extern crate async_trait;
+
+use std::{any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc};
 use ascii::AsciiChar;
 use dotenv::dotenv;
 use futures::future::BoxFuture;
@@ -27,36 +30,33 @@ mod stv;
 pub mod cmd;
 pub mod rounds;
 
-pub trait Data {}
-pub trait CrdtData {}
-// ...
-
-
 ////////////////////////////////
 
-pub trait Scope {
+pub trait Context {
     fn has<T>(&mut self, data: T);
 }
 
-pub trait State<T, S: Scope> : Deref {
+pub trait Scoped<T, S: Context> : Deref<Target = T>
+    // where Self::Target: T,
+{
     // type Target = T;
 }
 
-// impl <T, S: Scope, St: State<T, S>> Deref for St {
-//     type Target = T;
-
-//     fn deref(&self) -> &Self::Target {
-//         todo!()
-//     }
-// }
-
-
-pub struct SomeScope<T> {
-    _x: PhantomData<T>
+struct Usage {
+    ty: TypeId,
+    f: Box<dyn Fn() -> BoxFuture<'static, ()>>,
+}
+pub struct RootContext {
+    uses: Vec<Usage>,
+}
+impl Context for RootContext {
+    fn has<T>(&mut self, data: T) {
+        todo!()
+    }
 }
 
 pub trait ExtUp {
-    fn uses<T: Extension, S: Scope, F: Fn(&S) -> Bf4Result<()>>(&mut self, f: F);
+    fn uses<T: Extension, S: Context, F: Fn(&S) -> Bf4Result<()>>(&mut self, f: F);
 
     // fn composition(&mut self);
 
@@ -82,7 +82,10 @@ pub struct BattleFox<T: Extension> {
 
 impl <T: Extension> BattleFox<T> {
     pub async fn run(bf4: Arc<Bf4Client>) -> Self {
-        let main = T::define(todo!());
+        let root = RootContext {
+            uses: Vec::new(),
+        };
+        let main = T::define(&root);
         Self {
             bf4,
             // extensions: Vec::new(),
@@ -117,8 +120,14 @@ impl Extension for Main {
         // scope.uses::<InitScope<Mapvote>>(|&mut mv| {
         //      mv.has_setting(...);
         // });
+        
+        scope.uses::<Rounds>(|rounds: &mut RootScope<Rounds>| {
+            rounds.each::<Mapvote>(|mapvote: &mut RoundScope<MapVote>| {
+                mapvote.
+            });
+        });
 
-        scope.uses::<Mapvote>(|&mv| {
+        scope.uses::<Mapvote>(|&mut mv| {
             // mv.
         });
 

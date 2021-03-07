@@ -1,21 +1,21 @@
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 
 use futures::future::BoxFuture;
 
-use crate::{ExtUp, Extension, Scope, SomeScope, State};
+use crate::{ExtUp, Extension, Context, SomeScope, Scoped};
 
 pub trait Chat {}
 
 pub struct SimpleCommands {
-
+    commands: HashMap<String, Box<dyn Fn()>>,
 }
 
 impl SimpleCommands {
-    pub fn has_command<F, S, St>(self: &St, firstword: &str, f: F)
+    pub fn simple_command<F, S, St>(self: &St, firstword: impl Into<String>, f: F)
         where
             F: Fn(&[&str]) -> BoxFuture<'static, ()> + 'static,
-            S: Chat + Scope,
-            St: State<Self, S> + Deref,
+            S: Chat + Context,
+            St: Scoped<Self, S> + Deref<Target = Self>,
     {
 
     }
@@ -42,3 +42,8 @@ impl Extension for SimpleCommands {
 }
 
 pub struct CommandContribution {}
+
+#[async_trait]
+pub trait PlayerChatThing {
+    async fn reply();
+}
