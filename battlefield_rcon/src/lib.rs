@@ -35,5 +35,6 @@ extern crate lazy_static;
 
 #[macro_use]
 pub mod macros;
+#[cfg(feature = "bf4")]
 pub mod bf4;
 pub mod rcon;

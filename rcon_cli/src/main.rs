@@ -32,13 +32,20 @@ async fn main() -> RconResult<()> {
 
     let matches = clap::App::new("rcon-cli")
         .version("0.1")
-        .about("Extremely simple and BF4-specifics-unaware library to send and receive strings.")
+        .about("Extremely simple and BF4-specifics-unaware (yet) library to send and receive strings. Uses the BFOX_RCON_IP, BFOX_RCON_PORT, and BFOX_RCON_PASSWORD environment variables for connection info. Alternatively, put a `.env` file in the working directory with those environment variables set.")
         .author("Kiiya (snoewflaek@gmail.com)")
+        .arg(Arg::with_name("raw")
+            .short("r")
+            .long("--raw")
+            .help("Prevents color output and ->, <-. Use this for automated scripts.")
+        )
         .subcommand(SubCommand::with_name("query")
             .about("Send single query and print result, instead of going into interactive mode")
             .arg(Arg::with_name("query-words").min_values(1))
         )
         .get_matches();
+    
+    let raw = matches.is_present("raw");
 
     // println!("Connecting to {}:{} with password ***...", ip, port);
     let rcon = match RconClient::connect(&coninfo).await {
@@ -54,24 +61,28 @@ async fn main() -> RconResult<()> {
     // if user provided "query" subcommand, just do that. Otherwise, go into interactive mode.
     if let Some(singlequery) = matches.subcommand_matches("query") {
         let words = singlequery.values_of("query-words").unwrap().collect::<Vec<_>>();
-        handle_input_line(words, &rcon).await?;
+        handle_input_line(words, &rcon, raw).await?;
     } else {
-        print!("-> ");
-        std::io::stdout().flush()?;
+        if !raw {
+            print!("-> ");
+            std::io::stdout().flush()?;
+        }
         let stdin = std::io::stdin();
         for line in stdin.lock().lines() {
             let line = line?;
             let words = line.split(" ");
-            handle_input_line(words, &rcon).await?;
-            print!("-> ");
-            std::io::stdout().flush()?;
+            handle_input_line(words, &rcon, raw).await?;
+            if !raw {
+                print!("-> ");
+                std::io::stdout().flush()?;
+            }
         }
     }
 
     Ok(())
 }
 
-async fn handle_input_line(words: impl IntoIterator<Item = &str>, rcon: &RconClient) -> RconResult<()> {
+async fn handle_input_line(words: impl IntoIterator<Item = &str>, rcon: &RconClient, raw: bool) -> RconResult<()> {
     let mut words_ascii = Vec::new();
     for word in words {
         words_ascii.push(word.into_ascii_string()?);
@@ -87,64 +98,81 @@ async fn handle_input_line(words: impl IntoIterator<Item = &str>, rcon: &RconCli
                 str.push(' ');
                 str.push_str(word.as_str());
             }
-            execute!(
-                stdout(),
-                SetForegroundColor(Color::Black),
-                SetBackgroundColor(Color::Green),
-                Print("<- OK".to_string()),
-                SetForegroundColor(Color::Green),
-                SetBackgroundColor(Color::Reset),
-                Print(str),
-                ResetColor,
-                Print("\n".to_string())
-            ).unwrap();
+            if raw {
+                println!("OK {}", str);
+            } else {
+                execute!(
+                    stdout(),
+                    SetForegroundColor(Color::Black),
+                    SetBackgroundColor(Color::Green),
+                    Print("<- OK".to_string()),
+                    SetForegroundColor(Color::Green),
+                    SetBackgroundColor(Color::Reset),
+                    Print(str),
+                    ResetColor,
+                    Print("\n".to_string())
+                ).unwrap();
+            }
         }
         Err(err) => {
-            execute!(
-                stdout(),
-                SetForegroundColor(Color::Black),
-                SetBackgroundColor(Color::Red),
-            ).unwrap();
+            if !raw {
+                execute!(
+                    stdout(),
+                    SetForegroundColor(Color::Black),
+                    SetBackgroundColor(Color::Red),
+                ).unwrap();
+            }
 
             match err {
                 RconError::Other(str) => {
                     // println!("{}", str.on_dark_red());
-                    execute!(
-                        stdout(),
-                        Print("<- Error".to_string()),
-                        SetForegroundColor(Color::Red),
-                        SetBackgroundColor(Color::Reset),
-                        Print(" ".to_string()),
-                        Print(str)
-                    ).unwrap();
+                    if raw {
+                        println!("Error: {}", str);
+                    } else {
+                        execute!(
+                            stdout(),
+                            Print("<- Error".to_string()),
+                            SetForegroundColor(Color::Red),
+                            SetBackgroundColor(Color::Reset),
+                            Print(" ".to_string()),
+                            Print(str)
+                        ).unwrap();
+                    }
                 },
                 RconError::ConnectionClosed => {
-                    print_error_type("Connection Closed").unwrap();
+                    print_error_type("Connection Closed", raw).unwrap();
                 },
                 RconError::InvalidArguments {our_query: _} => {
-                    print_error_type("Invalid Arguments").unwrap();
+                    print_error_type("Invalid Arguments", raw).unwrap();
                 },
                 RconError::UnknownCommand {our_query: _} => {
-                    print_error_type("Unknown Command").unwrap();
+                    print_error_type("Unknown Command", raw).unwrap();
                 },
                 _ => panic!("Unexpected error: {:?}", err),
             };
-            execute!(
-                stdout(),
-                ResetColor,
-                Print("\n".to_string())
-            ).unwrap();
+            if !raw {
+                execute!(
+                    stdout(),
+                    ResetColor,
+                    Print("\n".to_string())
+                ).unwrap();
+            }
         }
     }
 
     Ok(())
 }
 
-fn print_error_type(typ: &str) -> Result<(), crossterm::ErrorKind> {
-    execute!(
-        stdout(),
-        SetBackgroundColor(Color::DarkRed),
-        Print("<- ".to_string()),
-        Print(typ),
-    )
+fn print_error_type(typ: &str, raw: bool) -> Result<(), crossterm::ErrorKind> {
+    if raw {
+        println!("{}", typ);
+        Ok(())
+    } else {
+        execute!(
+            stdout(),
+            SetBackgroundColor(Color::DarkRed),
+            Print("<- ".to_string()),
+            Print(typ),
+        )
+    }
 }

@@ -5,7 +5,13 @@ authors = ["Kiiya <snoewflaek@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["battlefield_rcon"]
+members = ["battlefield_rcon", "rcon_cli"]
+
+[profile.release]
+lto = true
+codegen-units = 1 # Reduce number of codegen units to increase optimizations.
+opt-level = 3 # AFAIK default is 2.
+# panic = 'abort'     # Abort on panic. Supposedly helps reduzing binary size.
 
 [dependencies]
 # Cargo is smart enough to find a crate inside a bigger git repo.
