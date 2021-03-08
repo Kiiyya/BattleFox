@@ -1,8 +1,9 @@
 use core::panic;
-use std::{collections::HashMap, convert::TryInto, io::ErrorKind, str::FromStr, sync::Arc};
+use std::{collections::HashMap, convert::TryInto, io::ErrorKind, num::ParseIntError, str::FromStr, sync::Arc};
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
+use crypto::{digest::Digest, md5::Md5};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
@@ -213,21 +214,38 @@ impl RconClient {
         // at this point we should have a fully functional async way to query.
         // so we just login and set stuff up, and done!
 
-        // TODO: use salted passwords eventually.
-        myself
-            .query(
-                &veca!["login.plainText", conn.password],
-                ok_eof::<RconError>,
-                |err| match err {
-                    "InvalidPassword" => Some(RconError::WrongPassword),
-                    "PasswordNotSet" => Some(RconError::other("There is no password at all!")),
-                    _ => None,
-                },
-            )
-            .await?;
+        let salt = myself.query(&veca!["login.hashed"],
+            |ok| {
+                if ok.len() != 1 {
+                    Err(RconError::protocol_msg(format!("Expected one return value (the salt), but got {} instead!", ok.len())))
+                } else {
+                    Ok(decode_hex(ok[0].as_str()).map_err(|_| RconError::protocol_msg("Server replied with an invalid hash"))?)
+                }
+            },
+            |err| match err {
+                "PasswordNotSet" => Some(RconError::other("The server has no password set. Login is impossible.")),
+                _ => None,
+            }
+        ).await?;
+
+        let mut hasher = Md5::new();
+        hasher.input(&salt);
+        hasher.input_str(myself._connection_info.password.as_str());
+        let hash = hasher.result_str().as_str().to_uppercase();
+
+        myself.query(&veca!["login.hashed", hash], 
+            ok_eof,
+            |err| match err {
+                "InvalidPasswordHash" => Some(RconError::WrongPassword),
+                "PasswordNotSet" => Some(RconError::other("The server has no password set. Login is impossible.")),
+                _ => None,
+            },
+        ).await?;
 
         Ok(myself)
     }
+
+
 
     pub fn take_nonresponse_rx(&mut self) -> Option<mpsc::UnboundedReceiver<RconResult<Packet>>> {
         self.nonresponse_rx.take()
@@ -543,7 +561,7 @@ impl RconClient {
         self.query(
             veca!["admin.eventsEnabled", enabled.to_string()].as_slice(),
             ok_eof,
-            err_none,
+            |_| None,
         )
         .await
     }
@@ -666,16 +684,9 @@ where
     }
 }
 
-pub(crate) fn err_none<E>(_errorcode: &str) -> Option<E>
-where
-    E: From<RconError>,
-{
-    None
-}
-
 impl Drop for RconClient {
     fn drop(&mut self) {
-        let _ = self.mainloop_shutdown.send(()).unwrap(); // if we get a SendError, that means the main loop already dropped its Receiver. So the .unwrap() might cause more damage than safety. But for now, I'm leaving it here until we run into issues.
+        let _ = self.mainloop_shutdown.send(()); // ignore potential SendError. If the TCP connection gets closed by remote, mainloop will `break;` and close/drop the shutdown receirver, thus the send here might actually fail. But in that case, we can ignore it, since that's what we want anyway.
         if self.mainloop.is_some() {
             self.mainloop
                 .take()
@@ -684,4 +695,11 @@ impl Drop for RconClient {
                 .expect("[RconClient::drop] Could not join mainloop");
         }
     }
+}
+
+fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
 }

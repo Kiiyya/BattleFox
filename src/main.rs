@@ -145,8 +145,7 @@ async fn main() -> rcon::RconResult<()> {
     let coninfo = get_rcon_coninfo()?;
 
     println!("Connecting to {}:{} with password ***...", coninfo.ip, coninfo.port);
-    let rcon = RconClient::connect(&coninfo).await?;
-    let bf4 = Bf4Client::new(rcon).await.unwrap();
+    let bf4 = Bf4Client::connect(&coninfo).await.unwrap();
     println!("Connected!");
 
     BattleFox::<Main>::run(bf4).await;

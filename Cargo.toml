@@ -5,7 +5,7 @@ authors = ["Kiiya <snoewflaek@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["battlefield_rcon", "rcon_cli"]
+members = ["battlefield_rcon"]
 
 [profile.release]
 lto = true

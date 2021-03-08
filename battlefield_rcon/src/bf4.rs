@@ -1,20 +1,14 @@
 #![allow(clippy::useless_vec)]
-use std::{
-    collections::HashMap,
-    sync::{Arc, Weak},
-    time::Instant,
-};
+use std::{collections::HashMap, sync::{Arc, Mutex, Weak}, time::Instant};
 
 use self::error::Bf4Result;
-use crate::rcon::{
-    err_none, ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult,
-};
+use crate::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult, ok_eof, packet::Packet};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::PlayerInfo;
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
-use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio_stream::{StreamExt, empty, wrappers::BroadcastStream};
 
 pub mod defs;
 pub mod ea_guid;
@@ -49,24 +43,28 @@ struct PlayerCacheEntry {
 pub struct Bf4Client {
     rcon: RconClient,
     /// You can `.subscribe()` to this and you'll received Events.
-    events: broadcast::Sender<Bf4Result<Event>>,
+    /// The mutex is here only as a thread-safe `Cell<T>`.
+    events: Mutex<Option<broadcast::Sender<Bf4Result<Event>>>>,
 
     /// Needs to be in Bf4Client and behind a cache, since we'll be accessing this from two places:
     /// - When parsing packets, e.g. from events.
     /// - When parsing replies to queries.
     player_cache: Mutex<HashMap<AsciiString, PlayerCacheEntry>>,
-    // /// Things that get periodically called.
-    // interval_timers: Vec<Interval>,
 }
 
 impl Bf4Client {
-    pub async fn new(mut rcon: RconClient) -> RconResult<Arc<Self>> {
+    pub async fn connect(coninfo: &RconConnectionInfo) -> RconResult<Arc<Self>> {
+        let rcon = RconClient::connect(coninfo).await?;
+        Bf4Client::new_from(rcon).await
+    }
+
+    pub async fn new_from(mut rcon: RconClient) -> RconResult<Arc<Self>> {
         let (tx, rx) = oneshot::channel::<Weak<Bf4Client>>();
 
         let events = Bf4Client::packet_to_event_stream(rx, rcon.take_nonresponse_rx().expect("Bf4Client requires Rcon's `take_nonresponse_tx()` to succeed. If you are calling this yourself, then please don't."));
         let myself = Arc::new(Self {
             rcon,
-            events,
+            events: Mutex::new(Some(events)),
             player_cache: Mutex::new(HashMap::new()),
             // interval_timers: Vec::new(),
         });
@@ -80,7 +78,7 @@ impl Bf4Client {
 
     pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
         let entry: Option<PlayerCacheEntry> = {
-            let cache = self.player_cache.lock().await;
+            let cache = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
             cache.get(name).copied()
             // make sure we unlock the mutex quickly, especially since we might query.
         };
@@ -106,7 +104,7 @@ impl Bf4Client {
                 }
             };
 
-            let mut cache = self.player_cache.lock().await;
+            let mut cache = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
             // technically it's possible someone else updated the cache meanwhile, but that's fine.
             for pi in &mut pib {
                 cache.insert(
@@ -239,6 +237,8 @@ impl Bf4Client {
         let (tx, _) = broadcast::channel::<Bf4Result<Event>>(128);
         let tx2 = tx.clone();
         tokio::spawn(async move {
+            // Just for initialization: bf4client constructor sends us an instance of itself.
+            // Has to be like this since we can't pass an instance via parameter here.
             let bf4client: Weak<Bf4Client> = bf4client_rx.await.unwrap();
             while let Some(packet) = packets.recv().await {
                 // println!("[Bf4Clinet::packet_to_event_stream] Received {:?}", packet);
@@ -262,15 +262,39 @@ impl Bf4Client {
                     }
                 }
             }
+            if let Some(bf4client) = bf4client.upgrade() {
+                // that's it, no more events.
+                // close all the event_streams, make them return `None` and end the while let loop.
+                bf4client.drop_events_sender();
+            } else {
+                // bf4client is already dropped
+                // ==> `events` inside it is already dropped
+                // ==> that's what we wanted anyway, so... nothing to do :).
+            }
             // println!("[Bf4Client::packet_to_event_stream] Ended");
         });
 
         tx
     }
 
+    /// Drops events sender, causing all event_streams to end.
+    fn drop_events_sender(&self) {
+        let mut lock = self.events.lock().expect("Failed to acquire mutex lock Bf4Client::events");
+        lock.take();
+    }
+
+    /// Errors:
+    /// When the underlying events stream has already ended, returns `Err(())`
     fn event_stream_raw(&self) -> BroadcastStream<Bf4Result<Event>> {
-        let rx = self.events.subscribe();
-        tokio_stream::wrappers::BroadcastStream::new(rx)
+        let lock = self.events.lock().expect("Failed to acquire mutex lock Bf4Client::events");
+        if let Some(events) = lock.as_ref() {
+            let rx = events.subscribe();
+            tokio_stream::wrappers::BroadcastStream::new(rx)
+        } else {
+            // create a dummy empty stream which immediately closes
+            let (_, rx) = tokio::sync::broadcast::channel(1);
+            tokio_stream::wrappers::BroadcastStream::new(rx)
+        }
     }
 
     /// This function differs from the raw version by unpacking potential broadcast errors,
@@ -296,7 +320,7 @@ impl Bf4Client {
             .query(
                 &words,
                 |ok| player_info_block::parse_pib(&ok).map_err(|rconerr| rconerr.into()),
-                err_none,
+                |_| None,
             )
             .await
     }
@@ -407,7 +431,7 @@ impl Bf4Client {
 
     pub async fn maplist_clear(&self) -> Result<(), MapListError> {
         self.rcon
-            .query(&veca!["mapList.clear"], ok_eof, err_none)
+            .query(&veca!["mapList.clear"], ok_eof, |_| None)
             .await
     }
 
@@ -448,7 +472,7 @@ impl Bf4Client {
             .query(
                 &veca!["maplist.list", "0"],
                 |ok| Ok(map_list::parse_map_list(&ok)?),
-                err_none,
+                |_| None,
             )
             .await
     }
@@ -456,19 +480,19 @@ impl Bf4Client {
     pub async fn maplist_run_next_round(&self) -> Result<(), MapListError> {
         // TODO errors
         self.rcon
-            .query(&veca!["mapList.runNextRound"], ok_eof, err_none)
+            .query(&veca!["mapList.runNextRound"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_save(&self) -> Result<(), MapListError> {
         // TODO err
         self.rcon
-            .query(&veca!["mapList.save"], ok_eof, err_none)
+            .query(&veca!["mapList.save"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_restart_round(&self) -> Result<(), MapListError> {
         // TODO err
         self.rcon
-            .query(&veca!["mapList.restartRound"], ok_eof, err_none)
+            .query(&veca!["mapList.restartRound"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_set_next_map(&self, index: usize) -> Result<(), MapListError> {
@@ -480,9 +504,13 @@ impl Bf4Client {
                     index.to_string().into_ascii_string().unwrap()
                 ],
                 ok_eof,
-                err_none,
+                |_| None,
             )
             .await
+    }
+
+    pub fn get_underlying_rcon_client(&self) -> &RconClient {
+        &self.rcon
     }
 }
 
@@ -507,7 +535,7 @@ mod test {
             password: "smurf".into_ascii_string()?,
         };
         let rcon = RconClient::connect(&coninfo).await?;
-        let bf4 = Bf4Client::new(rcon).await.unwrap();
+        let bf4 = Bf4Client::new_from(rcon).await.unwrap();
         let start = Instant::now();
 
         let mut joinhandles = Vec::new();

@@ -26,3 +26,6 @@ async-trait = "0.1.42"
 
 lazy_static = "1.4"
 # strsim = "0.10"
+
+# for login.hashed
+rust-crypto = "0.2"
