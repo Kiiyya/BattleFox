@@ -1,20 +1,21 @@
 #![allow(clippy::useless_vec)]
-use std::{collections::HashMap, sync::{Arc, Mutex, Weak}, time::Instant};
+use std::sync::{Arc, Mutex, Weak};
 
-use self::error::Bf4Result;
+use self::{error::Bf4Result, player_cache::PlayerEaidCache};
 use crate::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult, ok_eof, packet::Packet};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::PlayerInfo;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_stream::{StreamExt, empty, wrappers::BroadcastStream};
+use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 
 pub mod defs;
 pub mod ea_guid;
 pub mod error;
 pub mod map_list;
 pub mod player_info_block;
+pub(crate) mod player_cache;
 mod util;
 
 pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
@@ -31,12 +32,6 @@ pub(crate) trait RconEncoding: Sized {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self>;
 }
 
-#[derive(Debug, Copy, Clone)]
-struct PlayerCacheEntry {
-    freshness: Instant,
-    eaid: Eaid,
-}
-
 /// You should never need to worry about the `F` generic parameter.
 /// It should be automatically inferred from the event handler you provide upon creation.
 #[derive(Debug)]
@@ -49,7 +44,7 @@ pub struct Bf4Client {
     /// Needs to be in Bf4Client and behind a cache, since we'll be accessing this from two places:
     /// - When parsing packets, e.g. from events.
     /// - When parsing replies to queries.
-    player_cache: Mutex<HashMap<AsciiString, PlayerCacheEntry>>,
+    player_cache: Mutex<PlayerEaidCache>,
 }
 
 impl Bf4Client {
@@ -65,22 +60,19 @@ impl Bf4Client {
         let myself = Arc::new(Self {
             rcon,
             events: Mutex::new(Some(events)),
-            player_cache: Mutex::new(HashMap::new()),
+            player_cache: Mutex::new(PlayerEaidCache::new()),
             // interval_timers: Vec::new(),
         });
 
         tx.send(Arc::downgrade(&myself)).unwrap();
 
-        myself.rcon.events_enabled(true).await?;
-
         Ok(myself)
     }
 
     pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
-        let entry: Option<PlayerCacheEntry> = {
-            let cache = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
-            cache.get(name).copied()
-            // make sure we unlock the mutex quickly, especially since we might query.
+        let entry = {
+            let mut cache = self.player_cache.lock().expect("Could not lock player cache, it is poisoned");
+            cache.try_get(name)
         };
 
         if let Some(entry) = entry {
@@ -108,11 +100,8 @@ impl Bf4Client {
             // technically it's possible someone else updated the cache meanwhile, but that's fine.
             for pi in &mut pib {
                 cache.insert(
-                    pi.player_name.clone(),
-                    PlayerCacheEntry {
-                        freshness: Instant::now(),
-                        eaid: pi.eaid,
-                    },
+                    &pi.player_name,
+                    &pi.eaid,
                 );
 
                 // println!("Resolved");
@@ -285,15 +274,17 @@ impl Bf4Client {
 
     /// Errors:
     /// When the underlying events stream has already ended, returns `Err(())`
-    fn event_stream_raw(&self) -> BroadcastStream<Bf4Result<Event>> {
+    async fn event_stream_raw(&self) -> RconResult<BroadcastStream<Bf4Result<Event>>> {
+        self.rcon.events_enabled(true).await?;
+
         let lock = self.events.lock().expect("Failed to acquire mutex lock Bf4Client::events");
         if let Some(events) = lock.as_ref() {
             let rx = events.subscribe();
-            tokio_stream::wrappers::BroadcastStream::new(rx)
+            Ok(tokio_stream::wrappers::BroadcastStream::new(rx))
         } else {
             // create a dummy empty stream which immediately closes
             let (_, rx) = tokio::sync::broadcast::channel(1);
-            tokio_stream::wrappers::BroadcastStream::new(rx)
+            Ok(tokio_stream::wrappers::BroadcastStream::new(rx))
         }
     }
 
@@ -301,8 +292,8 @@ impl Bf4Client {
     /// which only occur when the backlog of unhandled events gets too big (128 currently).
     /// In that case, those events are simply ignored and only a warning is emitted.
     /// If you want to handle the overflow error yourself, use `event_stream_raw`.
-    pub fn event_stream(&self) -> impl Stream<Item = Bf4Result<Event>> {
-        self.event_stream_raw().filter_map(|ev| {
+    pub async fn event_stream(&self) -> RconResult<impl Stream<Item = Bf4Result<Event>>> {
+        Ok(self.event_stream_raw().await?.filter_map(|ev| {
             match ev {
                 Ok(x) => Some(x),
                 Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
@@ -310,7 +301,7 @@ impl Bf4Client {
                     None // filter out errors like this.
                 },
             }
-        })
+        }))
     }
 
     pub async fn list_players(&self, vis: Visibility) -> Result<Vec<PlayerInfo>, ListPlayersError> {
