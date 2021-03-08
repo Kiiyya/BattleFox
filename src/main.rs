@@ -6,20 +6,17 @@
 extern crate async_trait;
 
 use std::{any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc};
-use ascii::AsciiChar;
+use ascii::{AsciiChar, IntoAsciiString};
 use cmd::SimpleCommands;
 use dotenv::dotenv;
 use futures::future::BoxFuture;
 use rounds::{Rounds, RoundsCtx};
 use tokio_stream::StreamExt;
 
-use battlefield_rcon::{
-    bf4::{
+use battlefield_rcon::{bf4::{
         error::{Bf4Error, Bf4Result},
         Bf4Client, Event,
-    },
-    rcon::{self, RconClient, RconError},
-};
+    }, rcon::{self, RconClient, RconConnectionInfo, RconError}};
 // use maplist::Maplist;
 // use mapvote::{parse_maps, Mapvote, ParseMapsResult};
 // use lifeguard::Lifeguard;
@@ -126,20 +123,29 @@ impl Node for Main {
     }
 }
 
-#[allow(clippy::or_fun_call)]
-#[tokio::main]
-async fn main() -> rcon::RconResult<()> {
-    dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
-
+fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or("127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
         .unwrap_or("47200".into())
         .parse::<u16>()
         .unwrap();
     let password = var("BFOX_RCON_PASSWORD").unwrap_or("smurf".into());
+    Ok(RconConnectionInfo {
+        ip,
+        port,
+        password: password.into_ascii_string()?,
+    })
+}
 
-    println!("Connecting to {}:{} with password ***...", ip, port);
-    let rcon = RconClient::connect((ip.as_str(), port, password.as_str())).await?;
+#[allow(clippy::or_fun_call)]
+#[tokio::main]
+async fn main() -> rcon::RconResult<()> {
+    dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
+
+    let coninfo = get_rcon_coninfo()?;
+
+    println!("Connecting to {}:{} with password ***...", coninfo.ip, coninfo.port);
+    let rcon = RconClient::connect(&coninfo).await?;
     let bf4 = Bf4Client::new(rcon).await.unwrap();
     println!("Connected!");
 

@@ -106,7 +106,7 @@ impl<T: Into<String>> From<FromAsciiError<T>> for RconError {
 
 pub type RconResult<T> = Result<T, RconError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RconConnectionInfo {
     pub ip: String,
     pub port: u16,
@@ -177,9 +177,9 @@ pub trait RconEventPacketHandler {
 impl RconClient {
     #[allow(clippy::useless_vec)]
     pub async fn connect(
-        conn: impl TryInto<RconConnectionInfo, Error = RconError>,
+        conn: &RconConnectionInfo,
     ) -> RconResult<Self> {
-        let conn: RconConnectionInfo = conn.try_into()?;
+        let conn = conn.clone();
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
 
         let (query_tx, query_rx) = mpsc::unbounded_channel::<SendQuery>();
@@ -498,7 +498,9 @@ impl RconClient {
                     },
                     Some(Err(e)) if std::mem::discriminant(&e) == std::mem::discriminant(&RconError::ConnectionClosed) => {
                         // end of stream, but not very graceful connection shutdown.
-                        println!("warn [RconClient::mainloop] Tcp read loop ungracefully closed connection: {:?}", e);
+                        // println!("warn [RconClient::mainloop] Tcp read loop ungracefully closed connection: {:?}", e);
+                        // At least on nitrado, this is what happens when you shut the server down via `admin.shutdown` rcon.
+                        // So I'm removing it from the "ungraceful" status.
                         break;
                     },
                     Some(Err(e)) => {

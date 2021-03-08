@@ -497,10 +497,16 @@ mod test {
     use super::*;
     use crate::rcon;
     use std::time::Instant;
+    use crate::rcon::RconConnectionInfo;
 
     #[allow(dead_code)]
     async fn spammer(i: usize) -> rcon::RconResult<()> {
-        let rcon = RconClient::connect(("127.0.0.1", 47200, "smurf")).await?;
+        let coninfo = RconConnectionInfo {
+            ip: "127.0.0.1".to_string(),
+            port: 47200,
+            password: "smurf".into_ascii_string()?,
+        };
+        let rcon = RconClient::connect(&coninfo).await?;
         let bf4 = Bf4Client::new(rcon).await.unwrap();
         let start = Instant::now();
 

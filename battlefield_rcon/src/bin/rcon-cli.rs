@@ -4,22 +4,31 @@ use std::{io::{BufRead, Write, stdout}, process::exit};
 extern crate crossterm;
 
 use ascii::IntoAsciiString;
-use battlefield_rcon::rcon::{RconClient, RconError, RconQueryable, RconResult};
+use battlefield_rcon::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult};
 use clap::{Arg, SubCommand};
 use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
 use dotenv::{dotenv, var};
 
-#[allow(clippy::or_fun_call)]
-#[tokio::main]
-async fn main() -> RconResult<()> {
-    dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
-
+fn get_rcon_coninfo() -> RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or("127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
         .unwrap_or("47200".into())
         .parse::<u16>()
         .unwrap();
     let password = var("BFOX_RCON_PASSWORD").unwrap_or("smurf".into());
+    Ok(RconConnectionInfo {
+        ip,
+        port,
+        password: password.into_ascii_string()?,
+    })
+}
+
+#[allow(clippy::or_fun_call)]
+#[tokio::main]
+async fn main() -> RconResult<()> {
+    dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
+
+    let coninfo = get_rcon_coninfo()?;
 
     let matches = clap::App::new("rcon-cli")
         .version("0.1")
@@ -32,10 +41,10 @@ async fn main() -> RconResult<()> {
         .get_matches();
 
     // println!("Connecting to {}:{} with password ***...", ip, port);
-    let rcon = match RconClient::connect((ip.as_str(), port, password.as_str())).await {
+    let rcon = match RconClient::connect(&coninfo).await {
         Ok(rcon) => rcon,
         Err(err) => {
-            println!("Failed to connect to Rcon at {}:{} with password ***: {:?}", ip, port, err);
+            println!("Failed to connect to Rcon at {}:{} with password ***: {:?}", coninfo.ip, coninfo.port, err);
             exit(-1);
         }
     };
