@@ -7,45 +7,57 @@ use ascii::IntoAsciiString;
 use battlefield_rcon::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult};
 use clap::{Arg, SubCommand};
 use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
-use dotenv::{dotenv, var};
+use dotenv::dotenv;
 
-fn get_rcon_coninfo() -> RconResult<RconConnectionInfo> {
-    let ip = var("BFOX_RCON_IP").unwrap_or("127.0.0.1".into());
-    let port = var("BFOX_RCON_PORT")
-        .unwrap_or("47200".into())
-        .parse::<u16>()
-        .unwrap();
-    let password = var("BFOX_RCON_PASSWORD").unwrap_or("smurf".into());
-    Ok(RconConnectionInfo {
-        ip,
-        port,
-        password: password.into_ascii_string()?,
-    })
-}
-
-#[allow(clippy::or_fun_call)]
 #[tokio::main]
 async fn main() -> RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
 
-    let coninfo = get_rcon_coninfo()?;
-
-    let matches = clap::App::new("rcon-cli")
+    let matches = clap::App::new("rcon_cli")
         .version("0.1")
-        .about("Extremely simple and BF4-specifics-unaware (yet) library to send and receive strings. Uses the BFOX_RCON_IP, BFOX_RCON_PORT, and BFOX_RCON_PASSWORD environment variables for connection info. Alternatively, put a `.env` file in the working directory with those environment variables set.")
+        .about("Extremely simple and BF4-specifics-unaware (yet) library to send and receive strings. Hint: I also read in environment variables (one per line) from a .env file in the current working directory or up!")
         .author("Kiiya (snoewflaek@gmail.com)")
         .arg(Arg::with_name("raw")
             .short("r")
             .long("--raw")
-            .help("Prevents color output and ->, <-. Use this for automated scripts.")
+            .takes_value(false)
+            .help("Prevents color output and ->, <-. Use this for automated scripts")
+        )
+        .arg(Arg::with_name("rcon_ip")
+            .env("BFOX_RCON_IP")
+            .long("--ip")
+            .takes_value(true)
+            .required(true)
+            .help("Sets the RCON IP")
+        )
+        .arg(Arg::with_name("rcon_port")
+            .env("BFOX_RCON_PORT")
+            .long("--port")
+            .required(true)
+            .takes_value(true)
+            .help("Sets the RCON port")
+        )
+        .arg(Arg::with_name("rcon_password")
+            .env("BFOX_RCON_PASSWORD")
+            .long("--password")
+            .required(true)
+            .takes_value(true)
+            .help("Sets the RCON password. If possible, please use an environment variable or .env file instead!")
         )
         .subcommand(SubCommand::with_name("query")
             .about("Send single query and print result, instead of going into interactive mode")
             .arg(Arg::with_name("query-words").min_values(1))
         )
         .get_matches();
-    
+
     let raw = matches.is_present("raw");
+
+    let password = matches.value_of("rcon_password").unwrap();
+    let coninfo = RconConnectionInfo {
+        ip: matches.value_of("rcon_ip").unwrap().to_owned(),
+        port: matches.value_of("rcon_port").unwrap().parse::<u16>().expect("Could not parse port number"),
+        password: password.into_ascii_string().expect(&format!("Could not parse password: \"{}\" is not an ASCII string", password)),
+    };
 
     // println!("Connecting to {}:{} with password ***...", ip, port);
     let rcon = match RconClient::connect(&coninfo).await {
@@ -70,7 +82,7 @@ async fn main() -> RconResult<()> {
         let stdin = std::io::stdin();
         for line in stdin.lock().lines() {
             let line = line?;
-            let words = line.split(" ");
+            let words = line.split(' ');
             handle_input_line(words, &rcon, raw).await?;
             if !raw {
                 print!("-> ");

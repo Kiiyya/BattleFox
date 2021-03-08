@@ -156,6 +156,6 @@ impl From<&Player> for Visibility {
 
 impl From<Player> for Visibility {
     fn from(p: Player) -> Self {
-        Visibility::Player(p.name.clone())
+        Visibility::Player(p.name)
     }
 }

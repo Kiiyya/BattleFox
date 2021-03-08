@@ -635,7 +635,7 @@ impl RconQueryable for RconClient {
             waiting.push(rx);
         }
 
-        if let Err(_) = self.queries.send(SendQuery::Sequential(single_queries)) {
+        if self.queries.send(SendQuery::Sequential(single_queries)).is_err() {
             return None;
         }
 
