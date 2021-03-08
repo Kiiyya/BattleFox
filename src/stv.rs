@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use core::panic;
 use num_bigint::BigInt;
 use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
@@ -87,7 +88,7 @@ where
         if self.ballots.is_empty() {
             write!(f, "}} []")?;
         } else {
-            write!(f, "}} [\n")?;
+            writeln!(f, "}} [")?;
             // ballots, one per line
             f.write_str(
                 self.ballots
@@ -241,14 +242,7 @@ where
     pub fn cmp(&self, a: &A, b: &A) -> Ordering {
         let a = self.score(a);
         let b = self.score(b);
-        if a == b {
-            Ordering::Equal
-        } else if a < b {
-            // not sure what the order is, < or >
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        }
+        a.cmp(&b)
     }
 
     /// `it = (threshold q || drop 1 (worst))`.

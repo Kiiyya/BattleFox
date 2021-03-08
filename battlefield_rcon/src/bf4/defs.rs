@@ -38,11 +38,17 @@ impl Display for Player {
     }
 }
 
-impl Into<AsciiString> for Player {
-    fn into(self) -> AsciiString {
-        self.name
+impl From<&Player> for AsciiString {
+    fn from(pl: &Player) -> Self {
+        pl.name.clone()
     }
 }
+
+// impl Into<AsciiString> for Player {
+//     fn into(self) -> AsciiString {
+//         self.name
+//     }
+// }
 
 /////////////////////////////////////////////////////////////////////
 /////////////////////// Weapon //////////////////////////////////////

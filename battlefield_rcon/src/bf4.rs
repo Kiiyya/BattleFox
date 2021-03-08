@@ -149,12 +149,13 @@ impl Bf4Client {
             "player.onKill" => {
                 assert_len(&packet, 5)?;
                 let bf4 = upgrade(bf4client)?;
+                let killer = if packet.words[1].is_empty() {
+                    None
+                } else {
+                    Some(bf4.resolve_player(&packet.words[1]).await?)
+                };
                 Ok(Event::Kill {
-                    killer: if packet.words[1].is_empty() {
-                        None
-                    } else {
-                        Some(bf4.resolve_player(&packet.words[1]).await?)
-                    },
+                    killer,
                     victim: bf4.resolve_player(&packet.words[2]).await?,
                     weapon: Weapon::Other(packet.words[3].clone()),
                     headshot: false,

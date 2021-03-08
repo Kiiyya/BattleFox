@@ -124,12 +124,12 @@ mod stv;
 // }
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
-    let ip = var("BFOX_RCON_IP").unwrap_or("127.0.0.1".into());
+    let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
-        .unwrap_or("47200".into())
+        .unwrap_or_else(|_| "47200".into())
         .parse::<u16>()
         .unwrap();
-    let password = var("BFOX_RCON_PASSWORD").unwrap_or("smurf".into());
+    let password = var("BFOX_RCON_PASSWORD").unwrap_or_else(|_| "smurf".into());
     Ok(RconConnectionInfo {
         ip,
         port,

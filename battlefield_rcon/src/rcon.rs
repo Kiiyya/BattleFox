@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::HashMap, convert::TryInto, io::ErrorKind, num::ParseIntError, str::FromStr, sync::Arc};
+use std::{collections::HashMap, convert::TryInto, io::ErrorKind, num::ParseIntError, sync::Arc};
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
@@ -114,27 +114,27 @@ pub struct RconConnectionInfo {
     pub password: AsciiString,
 }
 
-impl Into<RconConnectionInfo> for (String, u16, AsciiString) {
-    fn into(self) -> RconConnectionInfo {
-        RconConnectionInfo {
-            ip: self.0,
-            port: self.1,
-            password: self.2,
-        }
-    }
-}
+// impl Into<RconConnectionInfo> for (String, u16, AsciiString) {
+//     fn into(self) -> RconConnectionInfo {
+//         RconConnectionInfo {
+//             ip: self.0,
+//             port: self.1,
+//             password: self.2,
+//         }
+//     }
+// }
 
-impl<'a> TryInto<RconConnectionInfo> for (&str, u16, &str) {
-    type Error = RconError;
-    fn try_into(self) -> std::result::Result<RconConnectionInfo, RconError> {
-        Ok(RconConnectionInfo {
-            ip: self.0.into(),
-            port: self.1,
-            password: AsciiString::from_str(self.2)
-                .map_err(|_| RconError::NotAscii(self.2.to_string()))?,
-        })
-    }
-}
+// impl<'a> TryInto<RconConnectionInfo> for (&str, u16, &str) {
+//     type Error = RconError;
+//     fn try_into(self) -> std::result::Result<RconConnectionInfo, RconError> {
+//         Ok(RconConnectionInfo {
+//             ip: self.0.into(),
+//             port: self.1,
+//             password: AsciiString::from_str(self.2)
+//                 .map_err(|_| RconError::NotAscii(self.2.to_string()))?,
+//         })
+//     }
+// }
 
 #[derive(Debug)]
 pub struct RconClient {
