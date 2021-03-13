@@ -5,123 +5,32 @@
 #[macro_use]
 extern crate async_trait;
 
-use std::{any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc};
-use ascii::{AsciiChar, IntoAsciiString};
+#[macro_use]
+extern crate frunk;
+
+use std::{any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc, time::Duration};
+use ascii::{AsciiChar, AsciiString, IntoAsciiString};
 // use cmd::SimpleCommands;
 use dotenv::dotenv;
-use futures::future::BoxFuture;
+use futures::{Stream, future::BoxFuture};
+use mapvote::{Mapvote, ParseMapsResult, parse_maps};
 // use rounds::{Rounds, RoundsCtx};
 use tokio_stream::StreamExt;
 
-use battlefield_rcon::{bf4::{
-        error::{Bf4Error, Bf4Result},
-        Bf4Client, Event,
-    }, rcon::{self, RconClient, RconConnectionInfo, RconError}};
+use battlefield_rcon::{bf4::{Bf4Client, Event, Player, Visibility, error::{Bf4Error, Bf4Result}}, rcon::{self, RconClient, RconConnectionInfo, RconError}};
 // use maplist::Maplist;
 // use mapvote::{parse_maps, Mapvote, ParseMapsResult};
 // use lifeguard::Lifeguard;
 
-// pub mod maplist;
-// pub mod mapvote;
+pub mod maplist;
+pub mod mapvote;
 // pub mod guard;
 // pub mod lifeguard;
 mod stv;
 // pub mod cmd;
+// mod experiments;
 // pub mod rounds;
 
-////////////////////////////////
-
-// pub struct Usage<N: Node> {
-//     _ph: PhantomData<N>
-// }
-// impl <N: Node> Usage<N> {
-//     pub fn with<F: Fn(&mut N::Ctx)>(&mut self, f: F) {
-//         todo!()
-//     }
-// }
-
-// pub trait Context {
-//     fn uses<'ctx, N: Node>(&'ctx mut self) -> &'ctx mut Usage<N>;
-// }
-
-// pub trait Node {
-//     type Ctx : Context;
-
-//     fn define(ctx: &mut Self::Ctx) -> Self
-//     where
-//         Self: Sized;
-// }
-
-// pub struct BattleFox<M: Node> {
-//     bf4: Arc<Bf4Client>,
-//     // extensions: Vec<Box<dyn Extension>>,
-//     main: M,
-// }
-
-// pub struct BattleFoxCtx {
-
-// }
-
-// impl Context for BattleFoxCtx {
-//     #[must_use]
-//     fn uses<'ctx, N: Node>(&'ctx mut self) -> &'ctx mut Usage<N> {
-//         todo!()
-//     }
-// }
-
-// impl <T: Node<Ctx = BattleFoxCtx>> BattleFox<T> {
-//     pub async fn run(bf4: Arc<Bf4Client>) -> Self {
-//         let mut root = BattleFoxCtx {
-//             // uses: Vec::new(),
-//         };
-//         let main = T::define(&mut root);
-//         Self {
-//             bf4,
-//             // extensions: Vec::new(),
-//             main,
-//         }
-//     }
-
-//     // pub fn add_ext<T: Extension + 'static>(&mut self) {
-//     //     let mut scope = ExtUpImpl {
-//     //         // cmds: Vec::new(),
-//     //     };
-//     //     let ext = T::up(&mut scope);
-//     //     self.extensions.push(Box::new(ext));
-//     // }
-
-//     // pub async fn run<T: Extension>(&mut self) {
-//     //     let mut events = self.bf4.event_stream();
-//     //     while let Some(event) = events.next().await {
-
-//     //     }
-//     // }
-// }
-
-// //////////////
-
-// struct Main;
-// impl Node for Main {
-//     type Ctx = BattleFoxCtx;
-
-//     fn define(ctx: &mut BattleFoxCtx) -> Self
-//     where
-//         Self: Sized
-//     {
-//         ctx.uses::<Rounds>().with(|rounds: &mut RoundsCtx| {
-//             rounds.uses::<SimpleCommands>();
-//         });
-
-
-//         // root.uses::<Rounds>(|rounds: &mut RootScope<Rounds>| {
-//         //     rounds.each::<Mapvote>(|mapvote: &mut RoundScope<MapVote>| {
-//         //         mapvote.
-//         //     });
-//         // });
-
-//         Self
-//     }
-// }
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -148,7 +57,57 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::connect(&coninfo).await.unwrap();
     println!("Connected!");
 
-    // BattleFox::<Main>::run(bf4).await;
+    let events = bf4.event_stream().await?;
+    mapvote_loop(bf4, events).await;
 
     Ok(())
+}
+
+async fn mapvote_loop(bf4: Arc<Bf4Client>, mut events: impl Stream<Item = Result<Event, Bf4Error>> + Unpin) {
+    let mapvote = Arc::new(Mapvote::new());
+
+    let jh1 = {
+        let mapvote = mapvote.clone();
+        let bf4 = bf4.clone();
+        tokio::spawn(async move {
+            mapvote.spam_status(bf4).await;
+            println!("mapvote spammer sutatus done");
+        })
+    };
+
+    let jh2 = {
+        let mapvote = mapvote.clone();
+        let bf4 = bf4.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(313)).await;
+            mapvote.spam_voting_guide(bf4).await;
+            println!("mapvote spammer voting guide done");
+        })
+    };
+
+    while let Some(event) = events.next().await {
+        match event {
+            Ok(Event::Chat { vis, player, msg }) => {
+                let bf4 = bf4.clone();
+                let mapvote = mapvote.clone();
+                // fire and forget about it, so we don't block other events. Yay concurrency!
+                tokio::spawn(async move {
+                    mapvote.handle_chat_msg(bf4, vis, player, msg).await;
+                });
+            },
+            Ok(Event::RoundOver { winning_team: _ }) => {
+                let bf4 = bf4.clone();
+                let mapvote = mapvote.clone();
+                // fire and forget about it, so we don't block other events. Yay concurrency!
+                tokio::spawn(async move {
+                    mapvote.handle_round_over(bf4).await;
+                });
+            },
+            Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
+            _ => {}, // ignore everything else.
+        }
+    }
+
+    jh1.await.unwrap();
+    jh2.await.unwrap();
 }

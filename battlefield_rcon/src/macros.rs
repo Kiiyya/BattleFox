@@ -18,6 +18,16 @@ macro_rules! cmd_err {
             $($error),*
         }
 
+        // impl <T> Result<T, $error_name> {
+        //     fn unwrap_rcon(self) -> Result<T, RconError> {
+        //         match self {
+        //             Ok(val) => Ok(val),
+        //             $error_name::Rcon(e) => Err(e),
+        //             _ => panic!("Whoops, unwrapped non-rcon-error!"),
+        //         }
+        //     }
+        // }
+
         impl From<RconError> for $error_name {
             fn from(e: RconError) -> Self {
                 $error_name::Rcon(e)

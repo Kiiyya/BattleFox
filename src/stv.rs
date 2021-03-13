@@ -3,7 +3,7 @@ use core::panic;
 use num_bigint::BigInt;
 use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use std::{cmp::Ordering, collections::HashSet, fmt::Debug, hash::Hash, write};
+use std::{cmp::Ordering, collections::HashSet, fmt::{Debug, Display}, hash::Hash, write};
 
 #[derive(Clone)]
 pub struct Ballot<A> {
@@ -31,6 +31,13 @@ where
             write!(f, "(failed to represent ballot)")?;
         }
         Ok(())
+    }
+}
+
+impl <A: Display> Display for Ballot<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let x = self.preferences.iter().map(|p| format!("{}", p)).collect::<Vec<_>>();
+        f.write_str(x.join(" > ").as_str())
     }
 }
 
@@ -330,8 +337,9 @@ where
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
     pub fn vanilla_stv_1(&self) -> Option<A> {
+        dbg!(self);
         let q = &Rat::from_integer(BigInt::from_usize(self.ballots.len()).unwrap());
-        let result = self.vanilla_stv(1, q);
+        let result = dbg!(self.vanilla_stv(1, q));
 
         result.e.iter().find(|_| true).cloned()
     }
@@ -362,6 +370,14 @@ pub mod test {
             }
         }}
     }
+
+    // #[test]
+    // fn stv1() {
+    //     let profile = Profile {
+    //         alts: (),
+    //         ballots: (),
+    //     };
+    // }
 
     #[test]
     fn stv() {
