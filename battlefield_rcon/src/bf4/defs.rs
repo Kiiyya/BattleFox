@@ -4,7 +4,7 @@
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
 use super::{ea_guid::Eaid, RconEncoding};
-use crate::rcon::RconResult;
+use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
 use std::{
     fmt::{Display, Formatter},
@@ -121,5 +121,37 @@ pub enum Event {
     RoundOver {
         winning_team: Team,
     },
+    Join {
+        player: Player,
+    },
+    Leave {
+        player: AsciiString,
+    },
     PunkBusterMessage(String),
+}
+
+#[derive(Debug)]
+pub enum Preset {
+    Custom,
+    Hardcore,
+    Normal,
+}
+
+impl RconEncoding for Preset {
+    fn rcon_encode(&self) -> AsciiString {
+        match self {
+            Preset::Custom => AsciiString::from_str("CUSTOM").unwrap(),
+            Preset::Hardcore => AsciiString::from_str("HARDCORE").unwrap(),
+            Preset::Normal => AsciiString::from_str("NORMAL").unwrap(),
+        }
+    }
+
+    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
+        match ascii.as_str().to_lowercase().as_str() {
+            "hardcore" => Ok(Self::Hardcore),
+            "custom" => Ok(Self::Custom),
+            "normal" => Ok(Self::Normal),
+            _ => Err(RconError::other("Unknown preset type")),
+        }
+    }
 }

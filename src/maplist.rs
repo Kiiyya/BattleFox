@@ -1,9 +1,10 @@
 //! Manages map lists based on player population
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use battlefield_rcon::{bf4::{Bf4Client, GameMode, Map}, rcon::RconResult};
+use battlefield_rcon::{bf4::{Bf4Client, GameMode, Map, Visibility, defs::Preset}, rcon::{RconError, RconResult}};
 use futures::lock::Mutex;
+use tokio::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MapMode {
@@ -71,14 +72,40 @@ impl MapList {
     }
 
     pub async fn set_maplist(&self, bf4: &Arc<Bf4Client>, popstate: PopState) -> RconResult<()> {
-        bf4.maplist_clear().await;
-        
+        bf4.maplist_clear().await.unwrap();
+        let list = pop_maplist(popstate);
+
+        for (i, mapmode) in list.iter().enumerate() {
+            bf4.maplist_add(&mapmode.map, &mapmode.mode, 1, i as i32).await.unwrap();
+        }
 
         Ok(())
     }
 
     pub async fn init(&self, bf4: &Arc<Bf4Client>) -> RconResult<()> {
         bf4.maplist_clear().await.expect("Couldn't clear maplist");
+
+        let n = bf4.list_players(Visibility::All).await.unwrap().len();
+        let popstate = count_to_popstate(n);
+        self.set_maplist(bf4, popstate).await.unwrap();
+
+        Ok(())
+    }
+
+    pub async fn switch_to(&self, bf4: &Arc<Bf4Client>, map: Map, mode: GameMode, vehicles: bool) -> RconResult<()> {
+        bf4.maplist_clear().await.unwrap();
+        bf4.maplist_add(&map, &mode, 1, 0).await.unwrap();
+        bf4.maplist_set_next_map(0).await.unwrap();
+
+        let _ = bf4.set_preset(Preset::Custom).await;
+        bf4.set_vehicles_spawn_allowed(vehicles).await.unwrap();
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        bf4.maplist_run_next_round().await.unwrap();
+        tokio::time::sleep(Duration::from_secs(10)).await;
+
+        bf4.set_vehicles_spawn_allowed(true).await.unwrap();
+        let _ = bf4.set_preset(Preset::Hardcore).await;
 
         Ok(())
     }

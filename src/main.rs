@@ -13,6 +13,7 @@ use ascii::{AsciiChar, AsciiString, IntoAsciiString};
 // use cmd::SimpleCommands;
 use dotenv::dotenv;
 use futures::{Stream, future::BoxFuture};
+use maplist::{MapList, PopState};
 use mapvote::{Mapvote, ParseMapsResult, parse_maps};
 // use rounds::{Rounds, RoundsCtx};
 use tokio_stream::StreamExt;
@@ -65,6 +66,8 @@ async fn main() -> rcon::RconResult<()> {
 
 async fn mapvote_loop(bf4: Arc<Bf4Client>, mut events: impl Stream<Item = Result<Event, Bf4Error>> + Unpin) {
     let mapvote = Arc::new(Mapvote::new());
+    let maplist = Arc::new(MapList::new());
+    maplist.init(&bf4).await.unwrap();
 
     let jh1 = {
         let mapvote = mapvote.clone();
@@ -91,18 +94,32 @@ async fn mapvote_loop(bf4: Arc<Bf4Client>, mut events: impl Stream<Item = Result
                 let bf4 = bf4.clone();
                 let mapvote = mapvote.clone();
                 // fire and forget about it, so we don't block other events. Yay concurrency!
-                tokio::spawn(async move {
-                    mapvote.handle_chat_msg(bf4, vis, player, msg).await;
-                });
+
+                if msg.as_str().starts_with("/haha next map") {
+                    let maplist = maplist.clone();
+                    tokio::spawn(async move {
+                        mapvote.handle_round_over(&bf4, &maplist).await;
+                    });
+                } else {
+                    tokio::spawn(async move {
+                        mapvote.handle_chat_msg(bf4, vis, player, msg).await;
+                    });
+                }
             },
             Ok(Event::RoundOver { winning_team: _ }) => {
                 let bf4 = bf4.clone();
                 let mapvote = mapvote.clone();
+                let maplist = maplist.clone();
                 // fire and forget about it, so we don't block other events. Yay concurrency!
                 tokio::spawn(async move {
-                    mapvote.handle_round_over(bf4).await;
+                    // let's wait like 10 seconds because people might still vote in the end screen.
+                    tokio::time::sleep(Duration::from_secs(12)).await;
+
+                    mapvote.handle_round_over(&bf4, &maplist).await;
                 });
             },
+            // Ok(Event::Join) => {
+            // }
             Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
             _ => {}, // ignore everything else.
         }

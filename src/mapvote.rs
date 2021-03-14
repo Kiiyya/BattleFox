@@ -1,6 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{maplist::MapMode, stv::Profile};
+use crate::{maplist::{MapList, MapMode}, stv::Profile};
 
 use super::stv::Ballot;
 use ascii::AsciiString;
@@ -54,15 +54,15 @@ impl MapvoteInner {
         // }
     }
 
-    pub fn format_status(&self, lead: &Option<MapMode>) -> Vec<String> {
-        let mut msg = Vec::new();
-        if let Some(wannabe_winner) = lead {
-            msg.push(format!("Mapvote: {} is in the lead! Vote now!", wannabe_winner.map));
-            msg.push("You can vote first, second, third, preferences like this:".to_string());
-            msg.push("!metro gulf-of-oman pearlmarket".to_string());
-        }
-        msg
-    }
+    // pub fn format_status(&self, lead: &Option<MapMode>) -> Vec<String> {
+    //     let mut msg = Vec::new();
+    //     if let Some(wannabe_winner) = lead {
+    //         msg.push(format!("Mapvote: {} is in the lead! Vote now!", wannabe_winner.map));
+    //         msg.push("You can vote first, second, third, preferences like this:".to_string());
+    //         msg.push("!metro gulf-of-oman pearlmarket".to_string());
+    //     }
+    //     msg
+    // }
 
     // pub fn format_personal_status(&self, ) -> Vec<String> {
     //     let mut msg = Vec::new();
@@ -93,12 +93,12 @@ impl Mapvote {
 
     pub async fn spam_status(&self, bf4: Arc<Bf4Client>) {
         loop {
-            tokio::time::sleep(Duration::from_secs(20)).await;
+            tokio::time::sleep(Duration::from_secs(60)).await;
             let lock = self.inner.lock().await;
             let profile = lock.to_profile();
             drop(lock); // drop lock before we spend 33ms in rcon call.
 
-            let mut msg = Vec::new();
+            let mut msg = vec!["========================================".to_string()];
             let current_winner = dbg!(&profile).vanilla_stv_1();
             if let Some(winner) = current_winner {
                 msg.push(format!("[[MAPVOTE]] {} is in the lead! Vote now!", winner));
@@ -130,7 +130,7 @@ impl Mapvote {
             // msg.push("!metro gulf-of-oman pearlmarket".to_string());
             let _ = bf4.say_lines(vec![
                 "We use a fancy voting rule here: Single Transferable Vote (STV) :)",
-                "You vote will not be spoiled, vote your conscience!",
+                // "You vote will not be spoiled, vote your conscience!",
                 "If your first preference doesn't win, it gets transfered to 2nd, 3rd, etc..",
             ], Visibility::All).await;
         }
@@ -199,10 +199,7 @@ impl Mapvote {
         }
     }
 
-    pub async fn handle_round_over(&self, bf4: Arc<Bf4Client>) {
-        // let's wait like 10 seconds because people might still vote in the end screen.
-        tokio::time::sleep(Duration::from_secs(12)).await;
-
+    pub async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapList>) {
         let profile = {
             let mut lock = self.inner.lock().await;
             let ret = lock.to_profile();
@@ -213,6 +210,7 @@ impl Mapvote {
 
         if let Some(Alt(map, mode)) = profile.vanilla_stv_1() {
             bf4.say(format!("[[MAPVOTE]] Winner: {:?}", map), Visibility::All).await.unwrap();
+            maplist.switch_to(bf4, map, mode, false).await.unwrap();
             // TODO: switch map !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         } else {
@@ -240,6 +238,7 @@ pub fn parse_maps(str: &str) -> ParseMapsResult {
     let mut res = Vec::new();
     let words = str.split(' ').collect::<Vec<_>>();
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..words.len() {
         // TODO: Add map@mode or map/mode or map:mode syntax
         if let Some(map) = Map::try_from_short(words[i]) {

@@ -337,9 +337,8 @@ where
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
     pub fn vanilla_stv_1(&self) -> Option<A> {
-        dbg!(self);
         let q = &Rat::from_integer(BigInt::from_usize(self.ballots.len()).unwrap());
-        let result = dbg!(self.vanilla_stv(1, q));
+        let result = dbg!(dbg!(self).vanilla_stv(1, q));
 
         result.e.iter().find(|_| true).cloned()
     }

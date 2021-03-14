@@ -1,7 +1,7 @@
 #![allow(clippy::useless_vec)]
 use std::sync::{Arc, Mutex, Weak};
 
-use self::{error::Bf4Result, player_cache::PlayerEaidCache};
+use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
 use crate::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult, ok_eof, packet::Packet};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
@@ -199,6 +199,30 @@ impl Bf4Client {
                         "More words than expected",
                     )))
                 }
+            }
+            "player.onJoin" => {
+                if packet.words.len() != 3 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 2),
+                    )));
+                }
+                let bf4 = upgrade(bf4client)?;
+                Ok(Event::Join {
+                    player: bf4.resolve_player(&packet.words[1]).await?,
+                    // TODO maybe use the GUID from here directly instead of resolving, but oh well...
+                })
+            }
+            "player.onLeave" => {
+                if packet.words.len() != 3 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 2),
+                    )));
+                }
+                Ok(Event::Leave {
+                    player: packet.words[1].to_owned(),
+                })
             }
             "server.onRoundOver" => {
                 if packet.words.len() != 2 {
@@ -429,8 +453,8 @@ impl Bf4Client {
 
     pub async fn maplist_add(
         &self,
-        map: Map,
-        game_mode: GameMode,
+        map: &Map,
+        game_mode: &GameMode,
         n_rounds: i32,
         offset: i32,
     ) -> Result<(), MapListError> {
@@ -504,7 +528,22 @@ impl Bf4Client {
     pub fn get_underlying_rcon_client(&self) -> &RconClient {
         &self.rcon
     }
+
+    pub async fn set_preset(&self, preset: Preset) -> RconResult<()> {
+        self.rcon.query(&veca!["vars.preset", preset.rcon_encode(), "false"],
+            ok_eof,
+            |_| None,
+        ).await
+    }
+
+    pub async fn set_vehicles_spawn_allowed(&self, allowed: bool) -> RconResult<()> {
+        self.rcon.query(&veca!["vars.vehicleSpawnAllowed", allowed.to_string()],
+            ok_eof,
+            |_| None,
+        ).await
+    }
 }
+
 
 // impl Drop for Bf4Client {
 //     fn drop(&mut self) {
