@@ -331,14 +331,15 @@ where
 
     /// Stops as soon as the first candidate is elected.
     ///
-    /// Works with `q = 100%` (i.e. Hare Quota with one seat), meaning that a candidate eventually needs to get 100% of the votes.
+    /// Works with droop quota with one seat.
     ///
     /// # Returns
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
     pub fn vanilla_stv_1(&self) -> Option<A> {
-        let q = &Rat::from_integer(BigInt::from_usize(self.ballots.len()).unwrap());
-        let result = dbg!(dbg!(self).vanilla_stv(1, q));
+        let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
+        let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
+        let result = dbg!(dbg!(self).vanilla_stv(1, &q));
 
         result.e.iter().find(|_| true).cloned()
     }
