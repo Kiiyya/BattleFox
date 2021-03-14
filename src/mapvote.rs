@@ -3,6 +3,7 @@
 use crate::{maplist::{MapList, MapMode}, stv::Profile};
 
 use super::stv::Ballot;
+use super::stv::tracing::NoTracer;
 use ascii::AsciiString;
 use battlefield_rcon::{
     bf4::{error::Bf4Result, Bf4Client, Event, GameMode, Map, Player, Visibility},
@@ -99,14 +100,10 @@ impl Mapvote {
             drop(lock); // drop lock before we spend 33ms in rcon call.
 
             let mut msg = vec!["========================================".to_string()];
-            let current_winner = dbg!(&profile).vanilla_stv_1();
-            if let Some(winner) = current_winner {
+            if let Some((winner, runnerup)) = dbg!(&profile).vanilla_stv_1_with_runnerup(&mut NoTracer) {
                 msg.push(format!("[[MAPVOTE]] {} is in the lead! Vote now!", winner));
 
-                let mut current_winners = HashSet::new();
-                current_winners.insert(winner);
-                let profile2 = profile.strike_out(&current_winners);
-                if let Some(runner_up) = profile2.vanilla_stv_1() {
+                if let Some(runner_up) = runnerup {
                     msg.push(format!("Current runner-up: {}", runner_up));
                 }
             } else {
@@ -208,7 +205,7 @@ impl Mapvote {
             ret
         };
 
-        if let Some(Alt(map, mode)) = profile.vanilla_stv_1() {
+        if let Some(Alt(map, mode)) = profile.vanilla_stv_1(&mut NoTracer) {
             bf4.say(format!("[[MAPVOTE]] Winner: {:?}", map), Visibility::All).await.unwrap();
             maplist.switch_to(bf4, map, mode, false).await.unwrap();
             // TODO: switch map !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

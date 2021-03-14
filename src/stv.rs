@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 use core::panic;
 use num_bigint::BigInt;
-use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
+pub use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use std::{cmp::Ordering, collections::HashSet, fmt::{Debug, Display}, hash::Hash, write};
+
+use self::tracing::StvTracer;
+
+pub mod tracing;
 
 #[derive(Clone)]
 pub struct Ballot<A> {
@@ -138,7 +142,7 @@ where
     /// Transfers from `a` to `b`, exactly `s` much. Where `s` is a number between 0 and 1.
     /// - `s = 0`: This function is a no-op, nothing is transferred.
     /// - `s = 1`: Transfer everything, leave no residual.
-    pub fn elem_t(&self, a: &A, b: &A, s: &Rat) -> Self {
+    pub fn elem_t<T: StvTracer<A>>(&self, a: &A, b: &A, s: &Rat, tracer: &mut T) -> Self {
         if *s < Rat::zero() || *s > Rat::one() {
             panic!(
                 "Single Transferable Vote elem_t got s out of bounds! s = {}",
@@ -146,6 +150,7 @@ where
             );
         }
         if Rat::is_zero(s) {
+            tracer.elem_t(a, b, s, self);
             return self.clone();
         }
 
@@ -190,19 +195,25 @@ where
             }
         }
 
-        Self {
+        let profile = Profile {
             alts: self.alts.clone(),
             ballots: ret,
-        }
+        };
+
+        tracer.elem_t(a, b, s, &profile);
+
+        profile
     }
 
     /// Transfer votes from `a` to all other alternatives.
-    pub fn t_to_all(&self, a: &A, s: &Rat) -> Self {
+    pub fn t_to_all<T: StvTracer<A>>(&self, a: &A, s: &Rat, tracer: &mut T) -> Self {
         let mut profile = self.clone();
         // I think (for single seat at least), it's completely irrelavant in which order we do this?
         for b in self.alts.iter().filter(|&alt| alt != a) {
-            profile = profile.elem_t(a, b, s);
+            profile = profile.elem_t(a, b, s, tracer);
         }
+
+        tracer.t_toall(a, s, &profile);
 
         profile
     }
@@ -222,25 +233,29 @@ where
 
     /// `limit_to` basically.
     /// Removes candidate `a` from all ballots, and from `alts`
-    pub fn strike_out_single(&self, eliminated: &A) -> Self {
-        self.strike_out(&[eliminated.clone()].iter().cloned().collect())
+    pub fn strike_out_single<T: StvTracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
+        let profile = self.strike_out(&[eliminated.clone()].iter().cloned().collect());
+        tracer.strike_out(eliminated, &profile);
+        profile
     }
 
     /// Expects quota in absolute form.
     #[allow(non_snake_case)]
-    pub fn vanilla_T(&self, q: &Rat, result: &Result<A>) -> Self {
+    pub fn vanilla_T<T: StvTracer<A>>(&self, q: &Rat, result: &Result<A>, tracer: &mut T) -> Self {
         let mut profile = self.clone();
         for e in &result.e {
             let score = self.score(e);
             // transfer surplus
-            profile = profile.t_to_all(e, &(&score - q));
-            profile = profile.strike_out_single(e);
+            profile = profile.t_to_all(e, &(&score - q), tracer);
+            profile = profile.strike_out_single(e, tracer);
         }
+        tracer.electing(&result.e, &profile);
 
         for r in &result.r {
             // transfer everything
-            profile = profile.t_to_all(r, &Rat::one());
-            profile = profile.strike_out_single(r);
+            profile = profile.t_to_all(r, &Rat::one(), tracer);
+            profile = profile.strike_out_single(r, tracer);
+            tracer.eliminating(&r, &profile);
         }
 
         profile
@@ -253,8 +268,8 @@ where
     }
 
     /// `it = (threshold q || drop 1 (worst))`.
-    /// Guarantees at `d` decreases by at least 1, unless we reached a fixed point.
-    pub fn one_iteration(&self, q: &Rat) -> Result<A> {
+    /// Guarantees that `d` decreases by at least 1, unless we reached a fixed point.
+    pub fn elect_or_reject(&self, q: &Rat) -> Result<A> {
         // get everyone who crossed quota
         let elected: HashSet<_> = self
             .alts
@@ -292,16 +307,17 @@ where
     }
 
     /// performs a single iteration of vSTV.
-    pub fn vanilla_stv_step(&self, q: &Rat) -> (Result<A>, Self) {
-        let result = self.one_iteration(q);
-        let profile = self.vanilla_T(q, &result);
+    pub fn vanilla_stv_step<T: StvTracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
+        let result = self.elect_or_reject(q);
+        let profile = self.vanilla_T(q, &result, tracer);
         (result, profile)
     }
 
-    pub fn vanilla_stv(&self, seats: usize, q: &Rat) -> Result<A> {
+    pub fn vanilla_stv<T: StvTracer<A>>(&self, seats: usize, q: &Rat, tracer: &mut T) -> Result<A> {
         if self.alts.len() <= seats {
             // if we only have `seats` candidates left, just elect everyone, even if they don't cross quota.
             // case of one bf4map only: means only one map had been nominated.
+            tracer.electing(&self.alts, self); // no profile change.
             return Result {
                 e: self.alts.clone(),
                 r: HashSet::new(),
@@ -311,14 +327,14 @@ where
 
         // so now we have at least `seats + 1` alternatives left.
 
-        let (result, profile) = self.vanilla_stv_step(q);
+        let (result, profile) = self.vanilla_stv_step(q, tracer);
         assert_eq!(profile.alts, result.d);
         if result.d.is_empty() || result.e.len() >= seats {
             // if we either filled all seats, or exhausted candidates, we're done.
             result
         } else {
-            // otherwise, recurive call to fill remaining open seats, and then append our thus-far elected candidates.
-            let inner = profile.vanilla_stv(seats - result.e.len(), q);
+            // otherwise, recursive call to fill remaining open seats, and then append our thus-far elected candidates.
+            let inner = profile.vanilla_stv(seats - result.e.len(), q, tracer);
             Result {
                 e: result.e.union(&inner.e).cloned().collect(),
                 r: result.r.union(&inner.r).cloned().collect(),
@@ -336,18 +352,36 @@ where
     /// # Returns
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
-    pub fn vanilla_stv_1(&self) -> Option<A> {
+    pub fn vanilla_stv_1<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<A> {
         let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
         let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
-        let result = dbg!(dbg!(self).vanilla_stv(1, &q));
+        let result = dbg!(dbg!(self).vanilla_stv(1, &q, tracer));
 
         result.e.iter().find(|_| true).cloned()
+    }
+
+    /// Stops as soon as the first candidate is elected.
+    ///
+    /// Works with droop quota with one seat.
+    ///
+    /// # Returns
+    /// - `Some((winner, X))` if there was a winner.
+    ///    - The X is the runner-up, with similar Some(runnerup) or None. 
+    /// - `None` if winner couldn't be determined.
+    pub fn vanilla_stv_1_with_runnerup<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<(A, Option<A>)> {
+        if let Some(winner) = self.vanilla_stv_1(tracer) {
+            let runnerup = self.strike_out_single(&winner, tracer).vanilla_stv_1(tracer);
+            Some((winner, runnerup))
+        } else {
+            None
+        }
     }
 }
 
 #[cfg(test)]
 pub mod test {
     use super::{Ballot, Profile};
+    use super::tracing::*;
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
 
@@ -395,7 +429,7 @@ pub mod test {
             ],
         };
 
-        let winner = profile.vanilla_stv_1().unwrap();
+        let winner = profile.vanilla_stv_1(&mut NoTracer).unwrap();
         assert_eq!("Wolf", winner);
     }
 }
