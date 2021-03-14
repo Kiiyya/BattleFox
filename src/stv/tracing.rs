@@ -10,7 +10,9 @@ pub trait StvTracer<A> {
 
     fn electing(&mut self, alts: &HashSet<A>, profile_after: &Profile<A>) { }
     fn eliminating(&mut self, alt: &A, profile_after: &Profile<A>) { }
-    fn tie_breaking(&mut self, left: &A, right: &A, chosen: &A, profile_after: &Profile<A>) { }
+
+    fn tie_breaking(&mut self, between: &HashSet<A>, chosen: &A) { }
+    fn stv_1winner_tiebreak(&mut self, between: &HashSet<A>, chosen: &A) { }
 }
 
 ////////////////////////////////////
@@ -21,7 +23,8 @@ impl <A> StvTracer<A> for NoTracer { }
 ////////////////////////////////////
 
 pub enum StvAction<A> {
-    Electing(HashSet<A>),
+    Elected(HashSet<A>),
+    Eliminated(A),
 }
 
 pub struct StvLog<A> {
@@ -36,7 +39,14 @@ pub struct LoggingTracer<A> {
 impl <A: Clone> StvTracer<A> for LoggingTracer<A> {
     fn electing(&mut self, alts: &HashSet<A>, profile_after: &Profile<A>) {
         self.traces.push(StvLog {
-            action: StvAction::Electing(alts.to_owned()),
+            action: StvAction::Elected(alts.to_owned()),
+            profile_afterwards: profile_after.to_owned(),
+        });
+    }
+
+    fn eliminating(&mut self, alt: &A, profile_after: &Profile<A>) {
+        self.traces.push(StvLog {
+            action: StvAction::Eliminated(alt.to_owned()),
             profile_afterwards: profile_after.to_owned(),
         });
     }
@@ -44,4 +54,6 @@ impl <A: Clone> StvTracer<A> for LoggingTracer<A> {
 
 /////////////////////////////////
 
-// pub struct TextTracer
+// pub struct PrintlnTracer<A> {
+
+// }

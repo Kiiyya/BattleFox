@@ -9,6 +9,15 @@ use self::tracing::StvTracer;
 
 pub mod tracing;
 
+// from https://stackoverflow.com/questions/28392008/more-concise-hashmap-initialization
+macro_rules! hashset {
+    ($( $key: expr),*) => {{
+            let mut map = ::std::collections::HashSet::new();
+            $( map.insert($key); )*
+            map
+    }}
+}
+
 #[derive(Clone)]
 pub struct Ballot<A> {
     /// some value between 0 and 1
@@ -269,7 +278,7 @@ where
 
     /// `it = (threshold q || drop 1 (worst))`.
     /// Guarantees that `d` decreases by at least 1, unless we reached a fixed point.
-    pub fn elect_or_reject(&self, q: &Rat) -> Result<A> {
+    pub fn elect_or_reject<T: StvTracer<A>>(&self, q: &Rat, tracer: &mut T) -> Result<A> {
         // get everyone who crossed quota
         let elected: HashSet<_> = self
             .alts
@@ -288,8 +297,28 @@ where
         } else {
             // otherwise, eliminate the worst
             // TODO: Maybe implement parallel universe tie breaking? (min_by just selects the first minimum found)
-            if let Some(worst) = self.alts.iter().min_by(|&alt1, &alt2| self.cmp(alt1, alt2)) {
-                let r = [worst.clone()].iter().cloned().collect();
+
+            // Find the score minimum.
+            let mut min : Option<Rat> = None;
+            for alt in self.alts.iter() {
+                let score = self.score(alt);
+                if let Some(min2) = &min {
+                    if &score < min2 {
+                        min = Some(score);
+                    }
+                } else {
+                    min = Some(score);
+                }
+            }
+
+            // it is possible that we may not have a minimum (e.g. alts empty).
+            if let Some(min) = min {
+                let worst_set = self.alts.iter().filter(|alt| self.score(alt) == min).cloned().collect::<HashSet<_>>();
+                let worst = worst_set.iter().find(|_| true).unwrap(); // if we have a minimum, worst_set can not be empty. Thus the unwrap is safe.
+                if worst_set.len() > 1 {
+                    tracer.tie_breaking(&worst_set, worst);
+                }
+                let r = hashset![worst.clone()];
                 let d = self.alts.difference(&r).cloned().collect(); // d = A \ {worst}
                 Result {
                     e: HashSet::new(), // no elected, empty
@@ -308,7 +337,7 @@ where
 
     /// performs a single iteration of vSTV.
     pub fn vanilla_stv_step<T: StvTracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
-        let result = self.elect_or_reject(q);
+        let result = self.elect_or_reject(q, tracer);
         let profile = self.vanilla_T(q, &result, tracer);
         (result, profile)
     }
@@ -357,7 +386,12 @@ where
         let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
         let result = dbg!(dbg!(self).vanilla_stv(1, &q, tracer));
 
-        result.e.iter().find(|_| true).cloned()
+        let winner = result.e.iter().find(|_| true).cloned();
+        if result.e.len() > 1 {
+            let winner = winner.clone().unwrap(); // len > 1, means find definitely finds something, so unwrap is safe here.
+            tracer.stv_1winner_tiebreak(&result.e, &winner);
+        }
+        winner
     }
 
     /// Stops as soon as the first candidate is elected.
@@ -384,15 +418,6 @@ pub mod test {
     use super::tracing::*;
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
-
-    // from https://stackoverflow.com/questions/28392008/more-concise-hashmap-initialization
-    macro_rules! hashset {
-        ($( $key: expr),*) => {{
-             let mut map = ::std::collections::HashSet::new();
-             $( map.insert($key); )*
-             map
-        }}
-    }
 
     macro_rules! ballot {
         [$($pref: expr),*] => {{
