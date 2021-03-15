@@ -2,20 +2,22 @@
 use std::sync::{Arc, Mutex, Weak};
 
 use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
-use crate::rcon::{RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult, ok_eof, packet::Packet};
+use crate::rcon::{
+    ok_eof, packet::Packet, RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult,
+};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::PlayerInfo;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_stream::{StreamExt, wrappers::BroadcastStream};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 pub mod defs;
 pub mod ea_guid;
 pub mod error;
 pub mod map_list;
-pub mod player_info_block;
 pub(crate) mod player_cache;
+pub mod player_info_block;
 mod util;
 
 pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
@@ -26,6 +28,8 @@ cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
 cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
 cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
+cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull);
+cmd_err!(pub GameAdminError, Full, AlreadyInList);
 
 pub(crate) trait RconEncoding: Sized {
     fn rcon_encode(&self) -> AsciiString;
@@ -71,7 +75,10 @@ impl Bf4Client {
 
     pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
         let entry = {
-            let mut cache = self.player_cache.lock().expect("Could not lock player cache, it is poisoned");
+            let mut cache = self
+                .player_cache
+                .lock()
+                .expect("Could not lock player cache, it is poisoned");
             cache.try_get(name)
         };
 
@@ -96,13 +103,13 @@ impl Bf4Client {
                 }
             };
 
-            let mut cache = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
+            let mut cache = self
+                .player_cache
+                .lock()
+                .expect("Failed to acquire mutex lock on player cache");
             // technically it's possible someone else updated the cache meanwhile, but that's fine.
             for pi in &mut pib {
-                cache.insert(
-                    &pi.player_name,
-                    &pi.eaid,
-                );
+                cache.insert(&pi.player_name, &pi.eaid);
 
                 // println!("Resolved");
             }
@@ -293,7 +300,10 @@ impl Bf4Client {
 
     /// Drops events sender, causing all event_streams to end.
     fn drop_events_sender(&self) {
-        let mut lock = self.events.lock().expect("Failed to acquire mutex lock Bf4Client::events");
+        let mut lock = self
+            .events
+            .lock()
+            .expect("Failed to acquire mutex lock Bf4Client::events");
         lock.take();
     }
 
@@ -302,7 +312,10 @@ impl Bf4Client {
     async fn event_stream_raw(&self) -> RconResult<BroadcastStream<Bf4Result<Event>>> {
         self.rcon.events_enabled(true).await?;
 
-        let lock = self.events.lock().expect("Failed to acquire mutex lock Bf4Client::events");
+        let lock = self
+            .events
+            .lock()
+            .expect("Failed to acquire mutex lock Bf4Client::events");
         if let Some(events) = lock.as_ref() {
             let rx = events.subscribe();
             Ok(tokio_stream::wrappers::BroadcastStream::new(rx))
@@ -525,25 +538,99 @@ impl Bf4Client {
             .await
     }
 
+    /// # You probably shouldn't be using this unless you know what you're doing.
     pub fn get_underlying_rcon_client(&self) -> &RconClient {
         &self.rcon
     }
 
     pub async fn set_preset(&self, preset: Preset) -> RconResult<()> {
-        self.rcon.query(&veca!["vars.preset", preset.rcon_encode(), "false"],
-            ok_eof,
-            |_| None,
-        ).await
+        self.rcon
+            .query(
+                &veca!["vars.preset", preset.rcon_encode(), "false"],
+                ok_eof,
+                |_| None,
+            )
+            .await
     }
 
     pub async fn set_vehicles_spawn_allowed(&self, allowed: bool) -> RconResult<()> {
-        self.rcon.query(&veca!["vars.vehicleSpawnAllowed", allowed.to_string()],
-            ok_eof,
-            |_| None,
-        ).await
+        self.rcon
+            .query(
+                &veca!["vars.vehicleSpawnAllowed", allowed.to_string()],
+                ok_eof,
+                |_| None,
+            )
+            .await
+    }
+
+    /// add player name to reserved slots list.
+    pub async fn reserved_add(&self, player: &Player) -> Result<(), ReservedSlotsError> {
+        self.rcon
+            .query(
+                &veca!["reservedSlotsList.add", player.name.as_str()],
+                ok_eof,
+                |err| match err {
+                    "Full" => Some(ReservedSlotsError::ReservedSlotsFull),
+                    "PlayerAlreadyInList" => Some(ReservedSlotsError::PlayerAlreadyInList),
+                    _ => None,
+                },
+            )
+            .await
+    }
+
+    /// Saves the reserved slots to file. (can fail, remote rcon io error, no error code yet.)
+    pub async fn reserved_save(&self) -> Result<(), ReservedSlotsError> {
+        // TODO err
+        self.rcon
+            .query(&veca!["reservedSlotsList.save"], ok_eof, |_| None)
+            .await
+    }
+
+    /// Lists reserved slots + level
+    pub async fn reserved_list(&self) -> Result<Vec<AsciiString>, ReservedSlotsError> {
+        self.rcon
+            .query(&veca!["reservedSlotsList.list", "0"], 
+                |ok| Ok(ok.to_owned()),
+                |_| None,
+            ).await
+    }
+
+    pub async fn admin_add(&self, player: &Player, level: usize) -> Result<(), ReservedSlotsError> {
+        self.rcon
+            .query(
+                &veca!["gameAdmin.add", player.name.as_str(), level.to_string()],
+                ok_eof,
+                |err| match err {
+                    "Full" => Some(ReservedSlotsError::ReservedSlotsFull),
+                    "PlayerAlreadyInList" => Some(ReservedSlotsError::PlayerAlreadyInList),
+                    _ => None,
+                },
+            )
+            .await
+    }
+
+    /// Lists the game Admins (undocumented in the PDF), together with their level (1, 2, 3).
+    pub async fn admin_list(&self) -> Result<Vec<(AsciiString, usize)>, GameAdminError> {
+        self.rcon
+            .query(&veca!["gameAdmin.list", "0"], 
+                |ok| {
+                    if ok.len() == 2 {
+                        let mut vec = Vec::new();
+                        let mut offset = 0;
+                        while offset < ok.len() {
+                            let level = ok[offset + 1].as_str().parse::<usize>().map_err(|_| RconError::protocol_msg("Expected int, received garbage."))?;
+                            vec.push((ok[offset].clone(), level));
+                            offset += 2;
+                        }
+                        Ok(vec)
+                    } else {
+                        Err(GameAdminError::Rcon(RconError::other("Bad argument amount returned by RCON, must be divisible by two.")))
+                    }
+                },
+                |_| None,
+            ).await
     }
 }
-
 
 // impl Drop for Bf4Client {
 //     fn drop(&mut self) {
@@ -555,8 +642,8 @@ impl Bf4Client {
 mod test {
     use super::*;
     use crate::rcon;
-    use std::time::Instant;
     use crate::rcon::RconConnectionInfo;
+    use std::time::Instant;
 
     #[allow(dead_code)]
     async fn spammer(i: usize) -> rcon::RconResult<()> {

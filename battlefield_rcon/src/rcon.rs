@@ -177,9 +177,7 @@ pub trait RconEventPacketHandler {
 /// Just used internally to do a remote procedure call.
 impl RconClient {
     #[allow(clippy::useless_vec)]
-    pub async fn connect(
-        conn: &RconConnectionInfo,
-    ) -> RconResult<Self> {
+    pub async fn connect(conn: &RconConnectionInfo) -> RconResult<Self> {
         let conn = conn.clone();
         let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
 
@@ -214,38 +212,47 @@ impl RconClient {
         // at this point we should have a fully functional async way to query.
         // so we just login and set stuff up, and done!
 
-        let salt = myself.query(&veca!["login.hashed"],
-            |ok| {
-                if ok.len() != 1 {
-                    Err(RconError::protocol_msg(format!("Expected one return value (the salt), but got {} instead!", ok.len())))
-                } else {
-                    Ok(decode_hex(ok[0].as_str()).map_err(|_| RconError::protocol_msg("Server replied with an invalid hash"))?)
-                }
-            },
-            |err| match err {
-                "PasswordNotSet" => Some(RconError::other("The server has no password set. Login is impossible.")),
-                _ => None,
-            }
-        ).await?;
+        let salt = myself
+            .query(
+                &veca!["login.hashed"],
+                |ok| {
+                    if ok.len() != 1 {
+                        Err(RconError::protocol_msg(format!(
+                            "Expected one return value (the salt), but got {} instead!",
+                            ok.len()
+                        )))
+                    } else {
+                        Ok(decode_hex(ok[0].as_str()).map_err(|_| {
+                            RconError::protocol_msg("Server replied with an invalid hash")
+                        })?)
+                    }
+                },
+                |err| match err {
+                    "PasswordNotSet" => Some(RconError::other(
+                        "The server has no password set. Login is impossible.",
+                    )),
+                    _ => None,
+                },
+            )
+            .await?;
 
         let mut hasher = Md5::new();
         hasher.input(&salt);
         hasher.input_str(myself._connection_info.password.as_str());
         let hash = hasher.result_str().as_str().to_uppercase();
 
-        myself.query(&veca!["login.hashed", hash], 
-            ok_eof,
-            |err| match err {
+        myself
+            .query(&veca!["login.hashed", hash], ok_eof, |err| match err {
                 "InvalidPasswordHash" => Some(RconError::WrongPassword),
-                "PasswordNotSet" => Some(RconError::other("The server has no password set. Login is impossible.")),
+                "PasswordNotSet" => Some(RconError::other(
+                    "The server has no password set. Login is impossible.",
+                )),
                 _ => None,
-            },
-        ).await?;
+            })
+            .await?;
 
         Ok(myself)
     }
-
-
 
     pub fn take_nonresponse_rx(&mut self) -> Option<mpsc::UnboundedReceiver<RconResult<Packet>>> {
         self.nonresponse_rx.take()
@@ -653,7 +660,11 @@ impl RconQueryable for RconClient {
             waiting.push(rx);
         }
 
-        if self.queries.send(SendQuery::Sequential(single_queries)).is_err() {
+        if self
+            .queries
+            .send(SendQuery::Sequential(single_queries))
+            .is_err()
+        {
             return None;
         }
 
