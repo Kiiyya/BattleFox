@@ -3,7 +3,13 @@ use core::panic;
 use num_bigint::BigInt;
 pub use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use std::{cmp::Ordering, collections::HashSet, fmt::{Debug, Display}, hash::Hash, write};
+use std::{
+    cmp::Ordering,
+    collections::HashSet,
+    fmt::{Debug, Display},
+    hash::Hash,
+    write,
+};
 
 use self::tracing::StvTracer;
 
@@ -47,9 +53,13 @@ where
     }
 }
 
-impl <A: Display> Display for Ballot<A> {
+impl<A: Display> Display for Ballot<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let x = self.preferences.iter().map(|p| format!("{}", p)).collect::<Vec<_>>();
+        let x = self
+            .preferences
+            .iter()
+            .map(|p| format!("{}", p))
+            .collect::<Vec<_>>();
         f.write_str(x.join(" > ").as_str())
     }
 }
@@ -299,7 +309,7 @@ where
             // TODO: Maybe implement parallel universe tie breaking? (min_by just selects the first minimum found)
 
             // Find the score minimum.
-            let mut min : Option<Rat> = None;
+            let mut min: Option<Rat> = None;
             for alt in self.alts.iter() {
                 let score = self.score(alt);
                 if let Some(min2) = &min {
@@ -313,7 +323,12 @@ where
 
             // it is possible that we may not have a minimum (e.g. alts empty).
             if let Some(min) = min {
-                let worst_set = self.alts.iter().filter(|alt| self.score(alt) == min).cloned().collect::<HashSet<_>>();
+                let worst_set = self
+                    .alts
+                    .iter()
+                    .filter(|alt| self.score(alt) == min)
+                    .cloned()
+                    .collect::<HashSet<_>>();
                 let worst = worst_set.iter().find(|_| true).unwrap(); // if we have a minimum, worst_set can not be empty. Thus the unwrap is safe.
                 if worst_set.len() > 1 {
                     tracer.tie_breaking(&worst_set, worst);
@@ -400,11 +415,16 @@ where
     ///
     /// # Returns
     /// - `Some((winner, X))` if there was a winner.
-    ///    - The X is the runner-up, with similar Some(runnerup) or None. 
+    ///    - The X is the runner-up, with similar Some(runnerup) or None.
     /// - `None` if winner couldn't be determined.
-    pub fn vanilla_stv_1_with_runnerup<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<(A, Option<A>)> {
+    pub fn vanilla_stv_1_with_runnerup<T: StvTracer<A>>(
+        &self,
+        tracer: &mut T,
+    ) -> Option<(A, Option<A>)> {
         if let Some(winner) = self.vanilla_stv_1(tracer) {
-            let runnerup = self.strike_out_single(&winner, tracer).vanilla_stv_1(tracer);
+            let runnerup = self
+                .strike_out_single(&winner, tracer)
+                .vanilla_stv_1(tracer);
             Some((winner, runnerup))
         } else {
             None
@@ -414,8 +434,8 @@ where
 
 #[cfg(test)]
 pub mod test {
-    use super::{Ballot, Profile};
     use super::tracing::*;
+    use super::{Ballot, Profile};
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
 

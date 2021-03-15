@@ -1,16 +1,25 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{maplist::{MapList, MapMode}, stv::Profile};
+use crate::{mapmanager::{MapChoice, MapManager, MapPool}, stv::Profile};
 
-use super::stv::Ballot;
 use super::stv::tracing::NoTracer;
+use super::stv::Ballot;
 use ascii::AsciiString;
-use battlefield_rcon::{
-    bf4::{error::Bf4Result, Bf4Client, Event, GameMode, Map, Player, Visibility},
-    rcon::RconResult,
+use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}}, rcon::{RconError, RconResult}};
+use futures::StreamExt;
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Weak},
+    time::Duration,
 };
-use std::{any::Any, collections::{HashMap, HashSet}, fmt::Display, future::Future, pin::Pin, sync::{Arc, Weak}, time::Duration};
-use tokio::{sync::Mutex, time::{Interval, sleep}};
+use tokio::{
+    sync::Mutex,
+    time::{sleep, Interval},
+};
 
 use num_rational::BigRational as Rat;
 use num_traits::One;
@@ -34,6 +43,7 @@ struct MapvoteInner {
 #[derive(Debug)]
 pub struct Mapvote {
     inner: Mutex<MapvoteInner>,
+    mapman: Arc<MapManager>,
 }
 
 impl MapvoteInner {
@@ -42,54 +52,82 @@ impl MapvoteInner {
             alts: self.alternatives.clone(),
             ballots: self.votes.values().cloned().collect(),
         }
-
-        // if let Some(winner) = profile.vanilla_stv_1() {
-        //     TODO: compute runner-up
-        //     let mut winners = HashSet::new();
-        //     winners.insert(winner);
-        //     let profile2 = profile.strike_out(&winners);
-
-        //     Some(winner)
-        // } else {
-        //     None
-        // }
     }
-
-    // pub fn format_status(&self, lead: &Option<MapMode>) -> Vec<String> {
-    //     let mut msg = Vec::new();
-    //     if let Some(wannabe_winner) = lead {
-    //         msg.push(format!("Mapvote: {} is in the lead! Vote now!", wannabe_winner.map));
-    //         msg.push("You can vote first, second, third, preferences like this:".to_string());
-    //         msg.push("!metro gulf-of-oman pearlmarket".to_string());
-    //     }
-    //     msg
-    // }
-
-    // pub fn format_personal_status(&self, ) -> Vec<String> {
-    //     let mut msg = Vec::new();
-    //     {
-    //         let lock = self.inner.lock().await;
-    //         if let Some(vote) = lock.votes.get(&player) {
-    //             msg.push(format!("You voted for {}", vote));
-    //         } else {
-    //             msg.push("You can vote first, second, etc... preferences like this:".to_string());
-    //             msg.push("!metro gulf-of-oman pearlmarket".to_string());
-    //             msg.push("You haven't voted yet! Vote for ANY map you like".to_string());
-    //         }
-    //     }
-    //     msg
-    // }
 }
 
 impl Mapvote {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new(mapman: Arc<MapManager>) -> Self {
         Self {
             inner: Mutex::new(MapvoteInner {
                 alternatives: HashSet::new(),
                 votes: HashMap::new(),
-            })
+            }),
+            mapman,
         }
+        // TODO: set up callbacks n stuff.
+    }
+
+    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        let jh1 = {
+            let mapvote = self.clone();
+            let bf4 = bf4.clone();
+            tokio::spawn(async move {
+                mapvote.spam_status(bf4).await;
+                println!("mapvote spammer sutatus done");
+            })
+        };
+    
+        let jh2 = {
+            let mapvote = self.clone();
+            let bf4 = bf4.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(313)).await;
+                mapvote.spam_voting_guide(bf4).await;
+                println!("mapvote spammer voting guide done");
+            })
+        };
+    
+        let mut events = bf4.event_stream().await?;
+        while let Some(event) = events.next().await {
+            match event {
+                Ok(Event::Chat { vis, player, msg }) => {
+                    let bf4 = bf4.clone();
+                    let mapvote = self.clone();
+                    // fire and forget about it, so we don't block other events. Yay concurrency!
+    
+                    if msg.as_str().starts_with("/haha next map") {
+                        let maplist = self.mapman.clone();
+                        tokio::spawn(async move {
+                            mapvote.handle_round_over(&bf4, &maplist).await;
+                        });
+                    } else {
+                        tokio::spawn(async move {
+                            mapvote.handle_chat_msg(bf4, vis, player, msg).await;
+                        });
+                    }
+                }
+                Ok(Event::RoundOver { winning_team: _ }) => {
+                    let bf4 = bf4.clone();
+                    let mapvote = self.clone();
+                    let maplist = self.mapman.clone();
+                    // fire and forget about it, so we don't block other events. Yay concurrency!
+                    tokio::spawn(async move {
+                        // let's wait like 10 seconds because people might still vote in the end screen.
+                        tokio::time::sleep(Duration::from_secs(12)).await;
+    
+                        mapvote.handle_round_over(&bf4, &maplist).await;
+                    });
+                }
+                // Ok(Event::Join) => {
+                // }
+                Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
+                _ => {} // ignore everything else.
+            }
+        }
+    
+        jh1.await.unwrap();
+        jh2.await.unwrap();
+        Ok(())
     }
 
     pub async fn spam_status(&self, bf4: Arc<Bf4Client>) {
@@ -100,7 +138,9 @@ impl Mapvote {
             drop(lock); // drop lock before we spend 33ms in rcon call.
 
             let mut msg = vec!["========================================".to_string()];
-            if let Some((winner, runnerup)) = dbg!(&profile).vanilla_stv_1_with_runnerup(&mut NoTracer) {
+            if let Some((winner, runnerup)) =
+                dbg!(&profile).vanilla_stv_1_with_runnerup(&mut NoTracer)
+            {
                 msg.push(format!("[[MAPVOTE]] {} is in the lead! Vote now!", winner));
 
                 if let Some(runner_up) = runnerup {
@@ -125,17 +165,18 @@ impl Mapvote {
             // let mut msg = Vec::new();
             // msg.push("You can vote first, second, third, preferences like this:".to_string());
             // msg.push("!metro gulf-of-oman pearlmarket".to_string());
-            let _ = bf4.say_lines(vec![
+            let _ = bf4
+                .say_lines(
+                    vec![
                 "We use a fancy voting rule here: Single Transferable Vote (STV) :)",
                 // "You vote will not be spoiled, vote your conscience!",
                 "If your first preference doesn't win, it gets transfered to 2nd, 3rd, etc..",
-            ], Visibility::All).await;
+            ],
+                    Visibility::All,
+                )
+                .await;
         }
     }
-
-
-
-
 
     /// returns Some(old_ballot) if player had voted before.
     pub async fn vote(&self, player: &Player, alts: &[Alt]) -> Option<Ballot<Alt>> {
@@ -151,7 +192,13 @@ impl Mapvote {
         lock.votes.insert(player.clone(), ballot)
     }
 
-    pub async fn handle_chat_msg(&self, bf4: Arc<Bf4Client>, vis: Visibility, player: Player, msg: AsciiString) {
+    pub async fn handle_chat_msg(
+        &self,
+        bf4: Arc<Bf4Client>,
+        vis: Visibility,
+        player: Player,
+        msg: AsciiString,
+    ) {
         let split = msg.as_str().split(' ').collect::<Vec<_>>();
         match split[0] {
             "/v" | "!v" => {
@@ -162,7 +209,9 @@ impl Mapvote {
                     msg.push(format!("You voted for {}", vote));
                 } else {
                     // otherwise, print instructions on how to vote.
-                    msg.push("You can vote first, second, etc... preferences like this:".to_string());
+                    msg.push(
+                        "You can vote first, second, etc... preferences like this:".to_string(),
+                    );
                     msg.push("!metro gulf-of-oman pearlmarket".to_string());
                     msg.push("You haven't voted yet! Vote for ANY map you like".to_string());
                 }
@@ -184,19 +233,36 @@ impl Mapvote {
                                 format!("Try it like this: !{} metro gulf-of-oman", &maps[0].0),
                             ], Visibility::All).await;
                         } else {
-                            let _ = bf4.say(format!("Your first preference is {}, second {}, etc.", &maps[0].0, &maps[1].0), Visibility::All).await;
+                            let _ = bf4
+                                .say(
+                                    format!(
+                                        "Your first preference is {}, second {}, etc.",
+                                        &maps[0].0, &maps[1].0
+                                    ),
+                                    Visibility::All,
+                                )
+                                .await;
                         }
                     }
                     ParseMapsResult::Nothing => {}
                     ParseMapsResult::NotAMapName { orig } => {
-                        let _ = bf4.say(format!("{}: \"{}\" is not a valid map name.", player, orig), player).await;
+                        let _ = bf4
+                            .say(
+                                format!("{}: \"{}\" is not a valid map name.", player, orig),
+                                player,
+                            )
+                            .await;
                     }
                 }
             }
         }
     }
 
-    pub async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapList>) {
+    // pub async fn map_pool_changed(new: &MapPool) -> RconResult<()> {
+
+    // }
+
+    pub async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapManager>) {
         let profile = {
             let mut lock = self.inner.lock().await;
             let ret = lock.to_profile();
@@ -206,12 +272,14 @@ impl Mapvote {
         };
 
         if let Some(Alt(map, mode)) = profile.vanilla_stv_1(&mut NoTracer) {
-            bf4.say(format!("[[MAPVOTE]] Winner: {:?}", map), Visibility::All).await.unwrap();
+            bf4.say(format!("[[MAPVOTE]] Winner: {:?}", map), Visibility::All)
+                .await
+                .unwrap();
             maplist.switch_to(bf4, map, mode, false).await.unwrap();
-            // TODO: switch map !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         } else {
-            bf4.say("Round over, no winner", Visibility::All).await.unwrap(); // TODO!!
+            bf4.say("Round over, no winner", Visibility::All)
+                .await
+                .unwrap(); // TODO!!
         }
     }
 }

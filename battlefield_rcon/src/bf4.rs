@@ -589,10 +589,12 @@ impl Bf4Client {
     /// Lists reserved slots + level
     pub async fn reserved_list(&self) -> Result<Vec<AsciiString>, ReservedSlotsError> {
         self.rcon
-            .query(&veca!["reservedSlotsList.list", "0"], 
+            .query(
+                &veca!["reservedSlotsList.list", "0"],
                 |ok| Ok(ok.to_owned()),
                 |_| None,
-            ).await
+            )
+            .await
     }
 
     pub async fn admin_add(&self, player: &Player, level: usize) -> Result<(), ReservedSlotsError> {
@@ -612,23 +614,29 @@ impl Bf4Client {
     /// Lists the game Admins (undocumented in the PDF), together with their level (1, 2, 3).
     pub async fn admin_list(&self) -> Result<Vec<(AsciiString, usize)>, GameAdminError> {
         self.rcon
-            .query(&veca!["gameAdmin.list", "0"], 
+            .query(
+                &veca!["gameAdmin.list", "0"],
                 |ok| {
                     if ok.len() == 2 {
                         let mut vec = Vec::new();
                         let mut offset = 0;
                         while offset < ok.len() {
-                            let level = ok[offset + 1].as_str().parse::<usize>().map_err(|_| RconError::protocol_msg("Expected int, received garbage."))?;
+                            let level = ok[offset + 1].as_str().parse::<usize>().map_err(|_| {
+                                RconError::protocol_msg("Expected int, received garbage.")
+                            })?;
                             vec.push((ok[offset].clone(), level));
                             offset += 2;
                         }
                         Ok(vec)
                     } else {
-                        Err(GameAdminError::Rcon(RconError::other("Bad argument amount returned by RCON, must be divisible by two.")))
+                        Err(GameAdminError::Rcon(RconError::other(
+                            "Bad argument amount returned by RCON, must be divisible by two.",
+                        )))
                     }
                 },
                 |_| None,
-            ).await
+            )
+            .await
     }
 }
 

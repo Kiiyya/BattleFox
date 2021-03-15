@@ -1,7 +1,7 @@
-use std::{collections::HashMap, time::Duration};
-use ascii::{AsciiStr, AsciiString};
-use tokio::time::Instant;
 use super::Eaid;
+use ascii::{AsciiStr, AsciiString};
+use std::{collections::HashMap, time::Duration};
+use tokio::time::Instant;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct PlayerCacheEntry {
@@ -16,7 +16,7 @@ pub(crate) struct PlayerEaidCache {
     inserts_since_last_clean: usize,
 }
 
-const YEET_TIME : Duration = Duration::from_secs(60 * 3);
+const YEET_TIME: Duration = Duration::from_secs(60 * 3);
 
 impl PlayerEaidCache {
     pub(crate) fn new() -> Self {
@@ -48,15 +48,19 @@ impl PlayerEaidCache {
 
     pub(crate) fn insert(&mut self, name: &AsciiStr, eaid: &Eaid) {
         self.trim_if_needed();
-        self.cache.insert(name.to_owned(), PlayerCacheEntry {
-            freshness: Instant::now(),
-            eaid: *eaid,
-        });
+        self.cache.insert(
+            name.to_owned(),
+            PlayerCacheEntry {
+                freshness: Instant::now(),
+                eaid: *eaid,
+            },
+        );
         self.inserts_since_last_clean += 1;
     }
 
     pub(crate) fn trim_if_needed(&mut self) {
-        if self.inserts_since_last_clean > 20 || self.last_clean.elapsed() >= YEET_TIME { // random number i pulled out of my butt.
+        if self.inserts_since_last_clean > 20 || self.last_clean.elapsed() >= YEET_TIME {
+            // random number i pulled out of my butt.
             self.trim();
         }
     }
@@ -66,8 +70,6 @@ impl PlayerEaidCache {
         self.inserts_since_last_clean = 0;
 
         // throw out any entries older than ...
-        self.cache.retain(|_, v| {
-            v.freshness.elapsed() < YEET_TIME
-        });
+        self.cache.retain(|_, v| v.freshness.elapsed() < YEET_TIME);
     }
 }
