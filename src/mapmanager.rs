@@ -165,7 +165,7 @@ impl MapManager {
         Self {
             inner: Mutex::new(Inner {
                 pool: MapPool::new(),
-                pop: Some(0),
+                pop: None,
                 joins_leaves_since_pop: 0,
                 pool_change_callbacks: Vec::new(),
             })
@@ -268,7 +268,8 @@ impl MapManager {
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
         bf4.maplist_clear().await.expect("Couldn't clear maplist");
 
-        let n = bf4.list_players(Visibility::All).await.unwrap().len();
+        // let n = bf4.list_players(Visibility::All).await.unwrap().len();
+        let n = self.get_pop_count(&bf4).await?;
         let popstate = count_to_popstate(n);
         self.set_maplist(&bf4, popstate).await.unwrap();
 
@@ -278,7 +279,7 @@ impl MapManager {
                 Ok(Event::Join { player: _ }) => self.pop_change(1).await,
                 Ok(Event::Leave { player: _ }) => self.pop_change(-1).await,
                 Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
-                _ => todo!()
+                _ => {},
             }
         }
         Ok(())

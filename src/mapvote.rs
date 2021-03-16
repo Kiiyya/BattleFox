@@ -338,7 +338,7 @@ pub fn parse_maps(str: &str) -> ParseMapsResult {
     for i in 0..words.len() {
         // TODO: Add map@mode or map/mode or map:mode syntax
         if let Some(map) = Map::try_from_short(words[i]) {
-            res.push(Alt(map.clone(), GameMode::Rush));
+            res.push(Alt(map, GameMode::Rush));
         } else if i == 0 {
             return ParseMapsResult::Nothing;
         } else {
