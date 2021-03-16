@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt::{Display, Formatter},
     str::FromStr,
 };
 
@@ -11,7 +10,7 @@ use crate::{
     rcon::{RconError, RconResult},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Map {
     Zavod,
     LancangDam,
@@ -431,18 +430,18 @@ lazy_static! {
         let mut shortnames : HashMap<&'static str, Map> = HashMap::new();
         for map in Map::all() {
             for shortname in map.short_names() {
-                shortnames.insert(shortname, map.clone());
+                shortnames.insert(shortname, *map);
             }
         }
         shortnames
     };
 }
 
-impl Display for Map {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.Pretty())
-    }
-}
+// impl Display for Map {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         f.write_str(self.Pretty())
+//     }
+// }
 
 impl RconEncoding for Map {
     fn rcon_encode(&self) -> AsciiString {

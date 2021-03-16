@@ -1,11 +1,20 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{mapmanager::{MapChoice, MapManager, MapPool}, stv::Profile};
+use crate::{
+    mapmanager::{MapInPool, MapManager, MapPool},
+    stv::Profile,
+};
 
 use super::stv::tracing::NoTracer;
 use super::stv::Ballot;
 use ascii::AsciiString;
-use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}}, rcon::{RconError, RconResult}};
+use battlefield_rcon::{
+    bf4::{
+        error::{Bf4Error, Bf4Result},
+        Bf4Client, Event, GameMode, Map, Player, Visibility,
+    },
+    rcon::{RconError, RconResult},
+};
 use futures::StreamExt;
 use std::{
     any::Any,
@@ -30,7 +39,7 @@ pub struct Alt(Map, GameMode);
 
 impl Display for Alt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        f.write_str(self.0.Pretty())
     }
 }
 
@@ -55,7 +64,30 @@ impl MapvoteInner {
     }
 }
 
+/// When a user votes, they can still fuck up :)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum VoteResult {
+    /// User voted for the first time.
+    Ok,
+
+    /// Used changed their vote, previous they had voted for...
+    OkChangedVote(Alt),
+
+    /// User submitted duplicate votes, but they were continuously together, and thus could be
+    /// contracted into one. Emit warning, but accept vote.
+    DuplicateButRemoved(Alt),
+
+    /// User submitted duplicates but they could not be untangled. Need to retry.
+    Duplicate(Alt),
+
+    /// A map which the user voted on is not in the current map pool.
+    /// The API can choose to nominate the map and then re-call `vote()`, or notify user, etc...
+    MapNotInPool(Alt),
+}
+
+
 impl Mapvote {
+    /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
     pub fn new(mapman: Arc<MapManager>) -> Self {
         Self {
             inner: Mutex::new(MapvoteInner {
@@ -67,6 +99,7 @@ impl Mapvote {
         // TODO: set up callbacks n stuff.
     }
 
+    /// Starts the main loop, listening for events, etc.
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
         let jh1 = {
             let mapvote = self.clone();
@@ -76,7 +109,7 @@ impl Mapvote {
                 println!("mapvote spammer sutatus done");
             })
         };
-    
+
         let jh2 = {
             let mapvote = self.clone();
             let bf4 = bf4.clone();
@@ -86,7 +119,7 @@ impl Mapvote {
                 println!("mapvote spammer voting guide done");
             })
         };
-    
+
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
             match event {
@@ -94,11 +127,11 @@ impl Mapvote {
                     let bf4 = bf4.clone();
                     let mapvote = self.clone();
                     // fire and forget about it, so we don't block other events. Yay concurrency!
-    
+
                     if msg.as_str().starts_with("/haha next map") {
-                        let maplist = self.mapman.clone();
+                        let mapman = self.mapman.clone();
                         tokio::spawn(async move {
-                            mapvote.handle_round_over(&bf4, &maplist).await;
+                            mapvote.handle_round_over(&bf4, &mapman).await;
                         });
                     } else {
                         tokio::spawn(async move {
@@ -109,22 +142,20 @@ impl Mapvote {
                 Ok(Event::RoundOver { winning_team: _ }) => {
                     let bf4 = bf4.clone();
                     let mapvote = self.clone();
-                    let maplist = self.mapman.clone();
+                    let mapman = self.mapman.clone();
                     // fire and forget about it, so we don't block other events. Yay concurrency!
                     tokio::spawn(async move {
                         // let's wait like 10 seconds because people might still vote in the end screen.
                         tokio::time::sleep(Duration::from_secs(12)).await;
-    
-                        mapvote.handle_round_over(&bf4, &maplist).await;
+
+                        mapvote.handle_round_over(&bf4, &mapman).await;
                     });
                 }
-                // Ok(Event::Join) => {
-                // }
                 Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
                 _ => {} // ignore everything else.
             }
         }
-    
+
         jh1.await.unwrap();
         jh2.await.unwrap();
         Ok(())
@@ -229,15 +260,15 @@ impl Mapvote {
                         // then just player feedback
                         if maps.len() == 1 {
                             let _ = bf4.say_lines(vec![
-                                format!("You voted for {}, BUT you can specify a second, third,... preference on this server!", &maps[0].0),
-                                format!("Try it like this: !{} metro gulf-of-oman", &maps[0].0),
+                                format!("You voted for {}, BUT you can specify a second, third,... preference on this server!", &maps[0].0.Pretty()),
+                                format!("Try it like this: !{} metro gulf-of-oman", &maps[0].0.short()),
                             ], Visibility::All).await;
                         } else {
                             let _ = bf4
                                 .say(
                                     format!(
                                         "Your first preference is {}, second {}, etc.",
-                                        &maps[0].0, &maps[1].0
+                                        &maps[0].0.Pretty(), &maps[1].0.Pretty()
                                     ),
                                     Visibility::All,
                                 )

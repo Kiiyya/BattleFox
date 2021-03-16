@@ -45,7 +45,6 @@ mod stv;
 // pub mod vips;
 // pub mod minicache;
 
-
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
@@ -80,14 +79,10 @@ async fn main() -> rcon::RconResult<()> {
     let mut jhs = Vec::new();
 
     let bf4clone = bf4.clone();
-    jhs.push(tokio::spawn(async move {
-        mapvote.run(bf4clone).await
-    }));
+    jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
 
     let bf4clone = bf4.clone();
-    jhs.push(tokio::spawn(async move {
-        mapman.run(bf4clone).await
-    }));
+    jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
 
     // Wait for all our spawned tasks to finish.
     // This'll happen at shutdown, or never, when you CTRL-C.
