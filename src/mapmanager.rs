@@ -1,10 +1,10 @@
 //! Manages map lists based on player population
 
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, ListPlayersError, Map, Visibility, defs::Preset, error::Bf4Error}, rcon::{RconError, RconResult}};
 use futures::StreamExt;
-use tokio::time::{sleep, Instant};
+use tokio::{sync::Mutex, time::{sleep, Instant}};
 
 /// A map in a map pool.
 /// Simple Triple of
@@ -150,7 +150,7 @@ struct Inner {
 }
 
 impl std::fmt::Debug for Inner {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -188,14 +188,14 @@ impl MapManager {
     /// Registers a function to be called when the map pool selection changes.
     /// 
     /// Used e.g. in mapvote.
-    pub fn register_pool_change_callback<F: Fn(MapPool) + Send + 'static>(&self, f: F) {
-        let mut lock = self.inner.lock().unwrap();
+    pub async fn register_pool_change_callback<F: Fn(MapPool) + Send + 'static>(&self, f: F) {
+        let mut lock = self.inner.lock().await;
         lock.pool_change_callbacks.push(Box::new(f));
     }
 
     /// Checks whether the map is in the current pool.
-    pub fn is_in_current_pool(&self, map: Map) -> bool {
-        self.inner.lock().unwrap().pool.is_in(map)
+    pub async fn is_in_current_pool(&self, map: Map) -> bool {
+        self.inner.lock().await.pool.is_in(map)
     }
 
     /// Switches to the new map and game mode, but optionally disables vehicle spawns with
@@ -227,7 +227,7 @@ impl MapManager {
     /// Gets the cached amount of players currently on the server, or fetches it by listing all
     /// players via RCON.
     pub async fn get_pop_count(&self, bf4: &Arc<Bf4Client>) -> RconResult<usize> {
-        let lock = self.inner.lock().unwrap();
+        let lock = self.inner.lock().await;
         if let Some(pop) = lock.pop {
             Ok(pop)
         } else {
@@ -237,7 +237,7 @@ impl MapManager {
                 Err(ListPlayersError::Rcon(rconerr)) => return Err(rconerr),
             };
             let new_pop = dbg!(playerlist.len());
-            let mut lock = self.inner.lock().unwrap();
+            let mut lock = self.inner.lock().await;
             lock.pop = Some(new_pop);
             lock.joins_leaves_since_pop = 0;
             Ok(new_pop)
@@ -245,7 +245,7 @@ impl MapManager {
     }
 
     async fn pop_change(&self, change: isize) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().await;
         // every 20 joins/leaves, we yeet the pop count, to prevent it desyncing.
         if inner.joins_leaves_since_pop > 20 {
             // fuck it, next time someone calls `get_pop_count`, it'll update.
