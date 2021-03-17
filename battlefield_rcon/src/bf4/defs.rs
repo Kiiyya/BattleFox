@@ -3,7 +3,7 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{ea_guid::Eaid, RconEncoding};
+use super::{RconDecoding, RconEncoding, ea_guid::Eaid};
 use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
 use std::{
@@ -56,6 +56,8 @@ impl From<&Player> for AsciiString {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Weapon {
+    Mortar,
+    Ucav,
     Other(AsciiString),
 }
 
@@ -63,7 +65,19 @@ impl Display for Weapon {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Weapon::Other(ascii) => f.write_str(ascii.as_str()),
+            Weapon::Mortar => f.write_str("Mortar"),
+            Weapon::Ucav => f.write_str("UCAV"),
         }
+    }
+}
+
+impl RconDecoding for Weapon {
+    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
+        Ok(match ascii.as_str() {
+            "M224" | "U_M224" => Weapon::Mortar,
+            "XP1/Gameplay/Gadgets/UCAV/UCAV_Launcher" | "UCAV" => Weapon::Ucav,
+            other => Weapon::Other(ascii.to_owned()),
+        })
     }
 }
 
@@ -77,19 +91,21 @@ pub enum GameMode {
     Other(AsciiString),
 }
 
+impl RconDecoding for GameMode {
+    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
+        Ok(match ascii.as_str() {
+            "RushLarge0" => GameMode::Rush,
+            _ => GameMode::Other(ascii.to_owned()),
+        })
+    }
+}
+
 impl RconEncoding for GameMode {
     fn rcon_encode(&self) -> AsciiString {
         match self {
             GameMode::Other(str) => str.clone(),
             GameMode::Rush => AsciiString::from_str("RushLarge0").unwrap(),
         }
-    }
-
-    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
-        Ok(match ascii.as_str() {
-            "RushLarge0" => GameMode::Rush,
-            _ => GameMode::Other(ascii.to_owned()),
-        })
     }
 }
 
@@ -137,21 +153,23 @@ pub enum Preset {
     Normal,
 }
 
-impl RconEncoding for Preset {
-    fn rcon_encode(&self) -> AsciiString {
-        match self {
-            Preset::Custom => AsciiString::from_str("CUSTOM").unwrap(),
-            Preset::Hardcore => AsciiString::from_str("HARDCORE").unwrap(),
-            Preset::Normal => AsciiString::from_str("NORMAL").unwrap(),
-        }
-    }
-
+impl RconDecoding for Preset {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
         match ascii.as_str().to_lowercase().as_str() {
             "hardcore" => Ok(Self::Hardcore),
             "custom" => Ok(Self::Custom),
             "normal" => Ok(Self::Normal),
             _ => Err(RconError::other("Unknown preset type")),
+        }
+    }
+}
+
+impl RconEncoding for Preset {
+    fn rcon_encode(&self) -> AsciiString {
+        match self {
+            Preset::Custom => AsciiString::from_str("CUSTOM").unwrap(),
+            Preset::Hardcore => AsciiString::from_str("HARDCORE").unwrap(),
+            Preset::Normal => AsciiString::from_str("NORMAL").unwrap(),
         }
     }
 }

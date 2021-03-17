@@ -31,9 +31,12 @@ cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, Invali
 cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull);
 cmd_err!(pub GameAdminError, Full, AlreadyInList);
 
-pub(crate) trait RconEncoding: Sized {
-    fn rcon_encode(&self) -> AsciiString;
+pub(crate) trait RconDecoding: Sized {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self>;
+}
+
+pub(crate) trait RconEncoding: RconDecoding {
+    fn rcon_encode(&self) -> AsciiString;
 }
 
 /// You should never need to worry about the `F` generic parameter.
