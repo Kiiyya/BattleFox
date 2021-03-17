@@ -168,7 +168,8 @@ impl Bf4Client {
                 Ok(Event::Kill {
                     killer,
                     victim: bf4.resolve_player(&packet.words[2]).await?,
-                    weapon: Weapon::Other(packet.words[3].clone()),
+                    weapon: Weapon::rcon_decode(&packet.words[3])?,
+                    // weapon: Weapon::Other(packet.words[3].clone()),
                     headshot: false,
                 })
             }
