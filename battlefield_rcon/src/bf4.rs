@@ -30,6 +30,7 @@ cmd_err!(pub ListPlayersError, );
 cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
 cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull);
 cmd_err!(pub GameAdminError, Full, AlreadyInList);
+cmd_err!(pub PlayerKickError, PlayerNotFound);
 
 pub(crate) trait RconDecoding: Sized {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self>;
@@ -374,6 +375,25 @@ impl Bf4Client {
                 |err| match err {
                     "InvalidPlayerName" => Some(PlayerKillError::InvalidPlayerName),
                     "SoldierNotAlive" => Some(PlayerKillError::SoldierNotAlive),
+                    _ => None,
+                },
+            )
+            .await
+    }
+
+    pub async fn kick(
+        &self,
+        player: impl IntoAsciiString + Into<String>,
+        reason: impl IntoAsciiString + Into<String>,
+    ) -> Result<(), PlayerKickError> {
+        let player = player.into_ascii_string()?;
+        let reason = reason.into_ascii_string()?;
+        self.rcon
+            .query(
+                &veca!["admin.kickPlayer", player, reason],
+                ok_eof,
+                |err| match err {
+                    "PlayerNotFound" => Some(PlayerKickError::PlayerNotFound),
                     _ => None,
                 },
             )
