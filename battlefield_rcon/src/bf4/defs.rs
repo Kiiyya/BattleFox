@@ -76,7 +76,7 @@ impl RconDecoding for Weapon {
         Ok(match ascii.as_str() {
             "M224" | "U_M224" => Weapon::Mortar,
             "XP1/Gameplay/Gadgets/UCAV/UCAV_Launcher" | "UCAV" => Weapon::Ucav,
-            other => Weapon::Other(ascii.to_owned()),
+            _ => Weapon::Other(ascii.to_owned()),
         })
     }
 }

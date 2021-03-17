@@ -5,10 +5,7 @@ use std::{
 
 use ascii::{AsciiStr, AsciiString};
 
-use crate::{
-    bf4::RconEncoding,
-    rcon::{RconError, RconResult},
-};
+use crate::{bf4::{RconDecoding, RconEncoding}, rcon::{RconError, RconResult}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Map {
@@ -443,6 +440,49 @@ lazy_static! {
 //     }
 // }
 
+impl RconDecoding for Map {
+    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
+        Ok(match ascii.as_str() {
+            "MP_Abandoned" => Map::Zavod,
+            "MP_Damage" => Map::LancangDam,
+            "MP_Flooded" => Map::FloodZone,
+            "MP_Journey" => Map::GolmudRailway,
+            "MP_Naval" => Map::ParacelStorm,
+            "MP_Prison" => Map::Locker,
+            "MP_Resort" => Map::HainanResort,
+            "MP_Siege" => Map::Shanghai,
+            "MP_TheDish" => Map::RogueTransmission,
+            "MP_Tremors" => Map::Dawnbreaker,
+
+            "XP1_001" => Map::SilkRoad,
+            "XP1_002" => Map::Altai,
+            "XP1_003" => Map::GuilinPeaks,
+            "XP1_004" => Map::DragonPass,
+
+            "XP0_Caspian" => Map::Caspian,
+            "XP0_Firestorm" => Map::Firestorm,
+            "XP0_Metro" => Map::Metro,
+            "XP0_Oman" => Map::Oman,
+
+            "XP2_001" => Map::LostIslands,
+            "XP2_002" => Map::NanshaStrike,
+            "XP2_003" => Map::WaveBreaker,
+            "XP2_004" => Map::OpMortar,
+
+            "XP3_MarketPl" => Map::PearlMarket,
+            "XP3_Prpganda" => Map::Propaganda,
+            "XP3_UrbanGdn" => Map::Lumphini,
+            "XP3_WtrFront" => Map::SunkenDragon,
+
+            "XP4_Arctic" => Map::Whiteout,
+            "XP4_SubBase" => Map::Hammerhead,
+            "XP4_Titan" => Map::Hangar21,
+            "XP4_WlkrFtry" => Map::Karelia,
+            _ => return Err(RconError::protocol_msg("Unknown map".to_string())),
+        })
+    }
+}
+
 impl RconEncoding for Map {
     fn rcon_encode(&self) -> AsciiString {
         let str = match self {
@@ -484,46 +524,5 @@ impl RconEncoding for Map {
         };
 
         AsciiString::from_str(str).unwrap()
-    }
-
-    fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
-        Ok(match ascii.as_str() {
-            "MP_Abandoned" => Map::Zavod,
-            "MP_Damage" => Map::LancangDam,
-            "MP_Flooded" => Map::FloodZone,
-            "MP_Journey" => Map::GolmudRailway,
-            "MP_Naval" => Map::ParacelStorm,
-            "MP_Prison" => Map::Locker,
-            "MP_Resort" => Map::HainanResort,
-            "MP_Siege" => Map::Shanghai,
-            "MP_TheDish" => Map::RogueTransmission,
-            "MP_Tremors" => Map::Dawnbreaker,
-
-            "XP1_001" => Map::SilkRoad,
-            "XP1_002" => Map::Altai,
-            "XP1_003" => Map::GuilinPeaks,
-            "XP1_004" => Map::DragonPass,
-
-            "XP0_Caspian" => Map::Caspian,
-            "XP0_Firestorm" => Map::Firestorm,
-            "XP0_Metro" => Map::Metro,
-            "XP0_Oman" => Map::Oman,
-
-            "XP2_001" => Map::LostIslands,
-            "XP2_002" => Map::NanshaStrike,
-            "XP2_003" => Map::WaveBreaker,
-            "XP2_004" => Map::OpMortar,
-
-            "XP3_MarketPl" => Map::PearlMarket,
-            "XP3_Prpganda" => Map::Propaganda,
-            "XP3_UrbanGdn" => Map::Lumphini,
-            "XP3_WtrFront" => Map::SunkenDragon,
-
-            "XP4_Arctic" => Map::Whiteout,
-            "XP4_SubBase" => Map::Hammerhead,
-            "XP4_Titan" => Map::Hangar21,
-            "XP4_WlkrFtry" => Map::Karelia,
-            _ => return Err(RconError::protocol_msg("Unknown map".to_string())),
-        })
     }
 }
