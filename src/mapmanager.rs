@@ -6,36 +6,33 @@ use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use battlefield_rcon::{
     bf4::{
-        defs::Preset, Bf4Client, Event, GameMode, ListPlayersError, Map,
-        MapListError, Visibility,
+        defs::Preset, Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility,
     },
     rcon::RconResult,
 };
 use futures::{future::BoxFuture, StreamExt};
-use tokio::{
-    sync::Mutex,
-    time::sleep,
-};
+use tokio::{sync::Mutex, time::sleep};
 
+use self::{
+    config::HasZeroPopState,
+    pool::{MapInPool, MapPool, NRounds, Vehicles},
+};
 use crate::guard::Guard;
 
-use self::{config::HasZeroPopState, pool::{MapInPool, MapPool, NRounds, Vehicles}};
-
 pub mod config;
-
 pub mod pool;
 
 /// One "population level", for example for seeding, or for a full server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PopState {
+pub struct PopState<E: Eq + Clone> {
     pub name: String,
-    pub pool: MapPool<Vehicles>,
+    pub pool: MapPool<E>,
     /// At `min_players` or more players, activate this pool. Unless a pool with even higher `min_players` exists.
     pub min_players: usize,
 }
 
 /// Find the correct popstate, given a certain population.
-pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
+pub fn determine_popstate<E: Eq + Clone>(states: &[PopState<E>], pop: usize) -> &PopState<E> {
     if let Some(state) = states
         .iter()
         .filter(|p| p.min_players <= pop) // if a pop state starts with more players anyway, might as well ignore it.
@@ -44,7 +41,7 @@ pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
     {
         state
     } else {
-        panic!("No fitting pop state defined! This")
+        panic!("No fitting pop state defined! This is impossible.")
     }
 }
 
@@ -55,7 +52,7 @@ pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
 pub struct MapManager {
     inner: Mutex<Inner>,
 
-    pop_states: Vec<PopState>,
+    pop_states: Vec<PopState<Vehicles>>,
     vehicle_threshold: usize,
 
     /// Don't want to be overly sensitive to join/leave changes. Amortize it a bit before deciding
@@ -67,14 +64,15 @@ pub struct MapManager {
 /// The stuff behind the mutex
 struct Inner {
     /// contains the map pool too.
-    pop_state: PopState,
+    pop_state: PopState<Vehicles>,
 
     /// Current amount of players on the server.
     pop: Option<usize>,
     /// Used to steer caching behaviour of `pop`.
     joins_leaves_since_pop: usize,
 
-    pool_change_callbacks: Vec<Arc<dyn Fn(PopState) -> BoxFuture<'static, CallbackResult> + Send + Sync>>,
+    pool_change_callbacks:
+        Vec<Arc<dyn Fn(PopState<Vehicles>) -> BoxFuture<'static, CallbackResult> + Send + Sync>>,
 }
 
 pub enum CallbackResult {
@@ -84,7 +82,7 @@ pub enum CallbackResult {
 
 impl MapManager {
     pub fn new(
-        pop_states: Guard<Vec<PopState>, HasZeroPopState>,
+        pop_states: Guard<Vec<PopState<Vehicles>>, HasZeroPopState>,
         vehicle_threshold: usize,
         leniency: usize,
     ) -> Self {
@@ -111,7 +109,7 @@ impl MapManager {
     /// Used e.g. in mapvote.
     pub async fn register_pool_change_callback<F>(&self, f: F)
     where
-        F: Fn(PopState) -> BoxFuture<'static, CallbackResult> + Send + Sync + 'static,
+        F: Fn(PopState<Vehicles>) -> BoxFuture<'static, CallbackResult> + Send + Sync + 'static,
     {
         let b = Arc::new(f);
         let mut lock = self.inner.lock().await;
@@ -128,25 +126,28 @@ impl MapManager {
     pub async fn switch_to(
         &self,
         bf4: &Arc<Bf4Client>,
-        map: Map,
-        mode: GameMode,
-        vehicles: bool,
-    ) -> RconResult<()> {
-        bf4.maplist_clear().await.unwrap();
-        bf4.maplist_add(&map, &mode, 1, 0).await.unwrap();
-        bf4.maplist_set_next_map(0).await.unwrap();
+        mip: &MapInPool<()>,
+    ) -> Result<(), MapListError> {
+        let pop = self.get_pop_count(bf4).await?;
+        let vehicles = pop >= self.vehicle_threshold;
 
-        let _ = bf4.set_preset(Preset::Custom).await;
-        bf4.set_vehicles_spawn_allowed(vehicles).await.unwrap();
+        let pop_state = {
+            let lock = self.inner.lock().await;
+            lock.pop_state.clone()
+        };
 
-        sleep(Duration::from_secs(1)).await;
-        bf4.maplist_run_next_round().await.unwrap();
-        sleep(Duration::from_secs(10)).await;
-
-        bf4.set_vehicles_spawn_allowed(true).await.unwrap();
-        let _ = bf4.set_preset(Preset::Hardcore).await;
-
-        Ok(())
+        if let Some(index) = pop_state.pool.get_rcon_index(mip.map, &mip.mode, |_| true) {
+            // sweet, index is valid. Go for it.
+            switch_map_to(bf4, index, vehicles).await?;
+            Ok(())
+        } else {
+            println!("Failed to find RCON index of {} {:?}. This is possible, but should not happen tooo often.", mip.map.Pretty(), mip.mode);
+            // just add the map temporarily and switch anyway.
+            bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
+            switch_map_to(bf4, 0, vehicles).await?;
+            bf4.maplist_remove(0).await?;
+            Ok(())
+        }
     }
 
     /// Gets the cached amount of players currently on the server, or fetches it by listing all
@@ -213,8 +214,7 @@ impl MapManager {
                 // This also means we're going "down"
                 self.change_pop_state(next_state.clone(), bf4).await?;
                 Ok(())
-            }
-            else if diff_current > leniency {
+            } else if diff_current > leniency {
                 // we have reached into the next pop state far enough (leniency), that we can decide to switch to it.
                 self.change_pop_state(next_state.clone(), bf4).await?;
                 Ok(())
@@ -226,14 +226,14 @@ impl MapManager {
     }
 
     /// Gets the current population state
-    pub async fn pop_state(&self) -> &PopState {
+    pub async fn pop_state(&self) -> &PopState<Vehicles> {
         todo!("Getting pop state depending on population.")
     }
 
     /// Change pop state (locking inner), swap out RCON maplist, and call all handlers.
     pub async fn change_pop_state(
         &self,
-        newpop: PopState,
+        newpop: PopState<Vehicles>,
         bf4: &Arc<Bf4Client>,
     ) -> Result<(), MapListError> {
         let mut lock = self.inner.lock().await;
@@ -249,7 +249,7 @@ impl MapManager {
         // notify observers
         for handler in handlers {
             match handler(newpop.clone()).await {
-                CallbackResult::KeepGoing => {},
+                CallbackResult::KeepGoing => {}
                 CallbackResult::RemoveMe => {
                     dbg!(yeet_handlers.push(handler));
                 }
@@ -271,31 +271,37 @@ impl MapManager {
         // it may not be on an empty server.
         let pop = dbg!(self.get_pop_count(&bf4).await?);
         let state = determine_popstate(&self.pop_states, pop).clone();
-        self.change_pop_state(state, &bf4).await.map_err(|mle| match mle {
-            MapListError::Rcon(rcon) => rcon,
-            MapListError::MapListFull => panic!("Map list full, huh!"),
-            MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-            MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-            MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-        })?;
+        self.change_pop_state(state, &bf4)
+            .await
+            .map_err(|mle| match mle {
+                MapListError::Rcon(rcon) => rcon,
+                MapListError::MapListFull => panic!("Map list full, huh!"),
+                MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
+                MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
+                MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
+            })?;
 
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
             match event {
-                Ok(Event::Join { player: _ }) => self.pop_change(1, &bf4).await.map_err(|mle| match mle {
-                    MapListError::Rcon(rcon) => rcon,
-                    MapListError::MapListFull => panic!("Map list full, huh!"),
-                    MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                    MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                    MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                })?,
-                Ok(Event::Leave { player: _ }) => self.pop_change(-1, &bf4).await.map_err(|mle| match mle {
-                    MapListError::Rcon(rcon) => rcon,
-                    MapListError::MapListFull => panic!("Map list full, huh!"),
-                    MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                    MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                    MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                })?,
+                Ok(Event::Join { player: _ }) => {
+                    self.pop_change(1, &bf4).await.map_err(|mle| match mle {
+                        MapListError::Rcon(rcon) => rcon,
+                        MapListError::MapListFull => panic!("Map list full, huh!"),
+                        MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
+                        MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
+                        MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
+                    })?
+                }
+                Ok(Event::Leave { player: _ }) => {
+                    self.pop_change(-1, &bf4).await.map_err(|mle| match mle {
+                        MapListError::Rcon(rcon) => rcon,
+                        MapListError::MapListFull => panic!("Map list full, huh!"),
+                        MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
+                        MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
+                        MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
+                    })?
+                }
                 _ => {}
             }
         }
@@ -328,6 +334,26 @@ pub async fn fill_rcon_maplist(
     Ok(())
 }
 
+pub async fn switch_map_to(bf4: &Arc<Bf4Client>, index: usize, vehicles: bool) -> Result<(), MapListError> {
+    bf4.maplist_set_next_map(index).await?;
+
+    if !vehicles {
+        let _ = bf4.set_preset(Preset::Custom).await;
+        let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    bf4.maplist_run_next_round().await?;
+
+    if !vehicles {
+        sleep(Duration::from_secs(10)).await;
+        let _ = bf4.set_vehicles_spawn_allowed(true).await;
+        let _ = bf4.set_preset(Preset::Hardcore).await;
+    }
+
+    Ok(())
+}
+
 /// Fetch the maplist in RCON and return it.
 pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool<NRounds>, MapListError> {
     let list = bf4.maplist_list().await?;
@@ -345,6 +371,7 @@ pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool<NRounds>, Ma
 
 #[cfg(test)]
 mod tests {
+    use battlefield_rcon::bf4::GameMode;
     use pool::MapInPool;
 
     use super::*;

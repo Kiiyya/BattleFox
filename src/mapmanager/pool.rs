@@ -1,8 +1,7 @@
+use std::fmt::Display;
 
 use battlefield_rcon::bf4::{GameMode, Map};
 use serde::{Deserialize, Serialize};
-
-
 
 /// A map in a map pool.
 /// Simple Triple of
@@ -14,6 +13,12 @@ pub struct MapInPool<E: Eq + Clone> {
     pub map: Map,
     pub mode: GameMode,
     pub extra: E,
+}
+
+impl<E: Eq + Clone> Display for MapInPool<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.map.Pretty())
+    }
 }
 
 /// Whether the MapInPool makes any claim about whether to use vehicles or not.
@@ -56,6 +61,21 @@ impl<E: Eq + Clone> MapPool<E> {
     /// Checks whether map exists in this map pool.
     pub fn contains_map(&self, map: Map) -> bool {
         self.pool.iter().any(|mip| mip.map == map)
+    }
+
+    /// Attempts to get the index of the map in the map pool.
+    pub fn get_rcon_index(
+        &self,
+        map: Map,
+        mode: &GameMode,
+        extra_matcher: impl Fn(&MapInPool<E>) -> bool,
+    ) -> Option<usize> {
+        self.pool
+            .iter()
+            .enumerate()
+            .filter(|(_, mip)| mip.map == map && &mip.mode == mode && extra_matcher(&mip))
+            .map(|(i, _)| i)
+            .next()
     }
 
     /// Returns a new pool, with only the maps which are new in `new`.

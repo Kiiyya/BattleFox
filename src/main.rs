@@ -4,20 +4,17 @@
 // #[macro_use]
 // extern crate async_trait;
 
-use ascii::{IntoAsciiString};
+use ascii::IntoAsciiString;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{env::var, sync::Arc};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 // use cmd::SimpleCommands;
 use dotenv::dotenv;
 
-use mapmanager::{config::guard_zeropop, MapManager, PopState};
+use mapmanager::{config::guard_zeropop, pool::Vehicles, MapManager, PopState};
 use mapvote::Mapvote;
 // use rounds::{Rounds, RoundsCtx};
-
 
 use battlefield_rcon::{
     bf4::Bf4Client,
@@ -62,13 +59,9 @@ enum ConfigError {
 
 async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> {
     println!("Loading {}", path);
-    let mut file = tokio::fs::File::open(path)
-        .await
-        .map_err(ConfigError::Io)?;
+    let mut file = tokio::fs::File::open(path).await.map_err(ConfigError::Io)?;
     let mut s = String::new();
-    file.read_to_string(&mut s)
-        .await
-        .map_err(ConfigError::Io)?;
+    file.read_to_string(&mut s).await.map_err(ConfigError::Io)?;
     let t: T = serde_json::from_str(&s).map_err(ConfigError::Serde)?;
     Ok(t)
 }
@@ -88,7 +81,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
 /// Convenience thing for loading stuff from Json.
 #[derive(Debug, Serialize, Deserialize)]
 struct MapManagerConfig {
-    pop_states: Vec<PopState>,
+    pop_states: Vec<PopState<Vehicles>>,
 
     vehicle_threshold: usize,
     leniency: usize,

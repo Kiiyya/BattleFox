@@ -561,6 +561,19 @@ impl Bf4Client {
             )
             .await
     }
+    pub async fn maplist_remove(&self, index: usize) -> Result<(), MapListError> {
+        // TODO err
+        self.rcon
+            .query(
+                &veca![
+                    "mapList.remove",
+                    index.to_string().into_ascii_string().unwrap()
+                ],
+                ok_eof,
+                |_| None,
+            )
+            .await
+    }
 
     /// # You probably shouldn't be using this unless you know what you're doing.
     pub fn get_underlying_rcon_client(&self) -> &RconClient {
