@@ -14,21 +14,23 @@
 //! to slip up.
 //!
 //! ```
+//! # use seamless::guard::{Judgement, Guard};
+//! # #[derive(Debug)]
 //! struct Player { name: String, };
 //!
-//! #[derive(Clone)]
+//! # #[derive(Debug)]
 //! struct Admin; // Zero-Sized-Type!
 //! impl Judgement<Player> for Admin {}
 //!
 //! fn ban(actor: Guard<Player, Admin>, target: Player) {
-//!     println!("{} banned {}!", *actor, target);
+//!     println!("{:?} banned {:?}!", *actor, target);
 //!     // ...
 //! }
 //!
 //! ```
 //! # Example: Implications, `infer`
 //! ```
-//! # use super::{Guard, Judgement};
+//! # use seamless::guard::{Judgement, Guard};
 //! # #[derive(Debug, Clone)]
 //! struct Admin;
 //! impl Judgement<String> for Admin {}
@@ -44,15 +46,19 @@
 //!     Mod
 //! }
 //!
-//! fn kick(actor: Guard<String, Mod>, target: String) {
+//! fn kick(actor: Guard<String, Mod>, target: &str) {
 //!     // we can assume that the player is an admin, otherwise this function
 //!     // wouldn't even be callable
 //!     println!("{} just kicked {}!", *actor, target);
 //! }
 //!
-//! fn main() {
-//!     let admin_player : Guard<String, Admin>;
-//!
+//! fn mymain(admin_player: Guard<String, Admin>) {
+//!     // You can't just make a guard yourself, need to use proper methods for that.
+//!     // let admin_player : Guard<String, Admin> = Guard {
+//!     //    inner: String::new(), // error: private field.
+//!     //    judgement: Admin, // error: private field.
+//!     // };
+//
 //!     // kick(admin_player); // uh oh, expected Mod, but we have Admin!
 //!
 //!     // Easy, just solve it with our inferrence rule `admin_is_mod`.
@@ -60,13 +66,13 @@
 //!     // we as API consumers do not have access to the constructor of
 //!     // `Admin` or `Mod`.
 //!     let moderator_player = admin_player.infer(admin_is_mod);
-//!     kick(moderator_player);
+//!     kick(moderator_player, "Kiiya");
 //! }
 //!```
 
+use either::Either;
 use std::ops::{Deref, DerefMut};
 
-use either::Either;
 
 pub trait Cases {
     type Cases;
@@ -75,16 +81,11 @@ pub trait Cases {
 }
 
 /// Instances of this type are proofs which express that `A` *and* `B` hold.
-/// 
+///
 /// - You introduce `A and B` with `And::and(a, b)`.
 /// - You obtain just `A` from `A and B` via `my_and.left()`.
-/// 
-/// # Example
-/// ```
-/// Guard<Player, And<Admin, Mod>>
-/// ```
 pub struct And<A, B>(A, B);
-impl <A, B> And<A, B> {
+impl<A, B> And<A, B> {
     /// Constructs a a proof that both `A` and `B` hold.
     pub fn and(p1: A, p2: B) -> And<A, B> {
         And(p1, p2)
@@ -108,10 +109,6 @@ impl<A: Clone, B: Clone> Clone for And<A, B> {
 impl<A: Copy, B: Copy> Copy for And<A, B> {}
 
 /// Instances of this type are proofs which express that `A` *or* `B` hold.
-/// # Example
-/// ```
-/// Guard<Player, Or<Admin, SomeOtherJudgementIdk>>
-/// ```
 pub struct Or<A, B>(Either<A, B>);
 
 impl<A, B> Or<A, B> {
@@ -142,7 +139,7 @@ impl<A, B> Or<A, B> {
     }
 }
 
-impl <A, B> Cases for Or<A, B> {
+impl<A, B> Cases for Or<A, B> {
     type Cases = Either<A, B>;
 
     fn cases(self) -> Self::Cases {
@@ -160,16 +157,6 @@ impl<A: Clone, B: Clone> Clone for Or<A, B> {
 }
 impl<A: Copy, B: Copy> Copy for Or<A, B> {}
 
-// pub fn cases<A, B, Target>(
-//     left: impl FnOnce(A) -> Target,
-//     right: impl FnOnce(B) -> Target,
-// ) -> impl FnOnce(Or<A, B>) -> Target {
-//     |or: Or<A, B>| match or.0 {
-//         Either::Left(p1) => left(p1),
-//         Either::Right(p2) => right(p2),
-//     }
-// }
-
 /// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
 pub trait Judgement<T> {}
 
@@ -178,9 +165,9 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for Or<A, B> {}
 
 /// A wrapper around a `T`, with a proof attached that it fulfills some arbitrary condition.
 /// For example, that a player is an admin, or that a number is even, etc.
-/// 
+///
 /// Often, the attached proofs/judgements will be zero-sized (e.g. `And`, `Admin`, ...).
-/// 
+///
 /// Each `Or` adds one bit of extra information though, other judgements may
 /// add more too.
 pub struct Guard<T, J: Judgement<T>> {
@@ -188,7 +175,7 @@ pub struct Guard<T, J: Judgement<T>> {
     judgement: J,
 }
 
-impl<T: Clone, J: Judgement<T>> Clone for Guard<T, J> {
+impl<T: Clone, J: Judgement<T> + Clone> Clone for Guard<T, J> {
     fn clone(&self) -> Self {
         Guard {
             inner: self.inner.clone(),
@@ -247,19 +234,6 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
             }),
         }
     }
-
-    // pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
-    //     match self.judgement.cases() {
-    //         Either::Left(l) => Either::Left(Guard {
-    //             inner: self.inner,
-    //             judgement: l,
-    //         }),
-    //         Either::Right(r) => Either::Right(Guard {
-    //             inner: self.inner,
-    //             judgement: r,
-    //         }),
-    //     }
-    // }
 }
 
 impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {
@@ -290,36 +264,6 @@ impl<T, J: Judgement<T>> DerefMut for Guard<T, J> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
-}
-
-// pub mod dynamic {
-//     //! When you want to create new Judgement types at runtime.
-    
-//     pub struct SomeJudgement<T> {
-
-//     }
-// }
-
-// pub mod leniency {
-//     //! To permit cached values, e.g. someone's admin may have expired, but
-//     //! we still want to accept it within the last 10 seconds or so.
-    
-    
-
-// }
-
-pub mod enum_subset {
-    use super::Judgement;
-
-    pub trait EnumSubset<E> {
-
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct Subset<E> {
-
-    }
-    impl <E: Clone> Judgement<E> for Subset<E> {}
 }
 
 /////////////////////////////////////////////////////
