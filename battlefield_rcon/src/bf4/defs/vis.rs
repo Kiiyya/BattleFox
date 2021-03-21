@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{rcon::RconError, rcon::RconResult};
 

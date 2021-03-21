@@ -1,22 +1,21 @@
-#![allow(unused_imports)]
+// #![allow(unused_imports)]
 #![allow(clippy::new_without_default)]
 
 #[macro_use]
 extern crate async_trait;
 
-#[macro_use]
-extern crate frunk;
-
 use ascii::{AsciiChar, AsciiString, IntoAsciiString};
-use std::{
-    any::TypeId, collections::HashMap, env::var, marker::PhantomData, ops::Deref, sync::Arc,
-    time::Duration,
+use guard::Guard;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{env::var, sync::Arc};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc,
 };
-use tokio::sync::mpsc;
 // use cmd::SimpleCommands;
 use dotenv::dotenv;
 use futures::{future::BoxFuture, Stream};
-use mapmanager::{MapManager, PopState};
+use mapmanager::{config::guard_zeropop, MapManager, PopState};
 use mapvote::{parse_maps, Mapvote, ParseMapsResult};
 // use rounds::{Rounds, RoundsCtx};
 use tokio_stream::StreamExt;
@@ -32,9 +31,9 @@ use battlefield_rcon::{
 // use mapvote::{parse_maps, Mapvote, ParseMapsResult};
 // use lifeguard::Lifeguard;
 
+pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
-// pub mod guard;
 // pub mod lifeguard;
 pub mod cmd;
 mod stv;
@@ -59,13 +58,64 @@ fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     })
 }
 
+#[derive(Debug)]
+enum ConfigError {
+    Serde(serde_json::Error),
+    Io(std::io::Error),
+}
+
+async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> {
+    println!("Loading {}", path);
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|io| ConfigError::Io(io))?;
+    let mut s = String::new();
+    file.read_to_string(&mut s)
+        .await
+        .map_err(|io| ConfigError::Io(io))?;
+    let t: T = serde_json::from_str(&s).map_err(|json| ConfigError::Serde(json))?;
+    Ok(t)
+}
+
+async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigError> {
+    let mut file = tokio::fs::File::create(path)
+        .await
+        .map_err(|io| ConfigError::Io(io))?;
+    let s = serde_json::to_string_pretty(obj).map_err(|json| ConfigError::Serde(json))?;
+    file.write_all(s.as_bytes())
+        .await
+        .map_err(|io| ConfigError::Io(io))?;
+
+    Ok(())
+}
+
+/// Convenience thing for loading stuff from Json.
+#[derive(Debug, Serialize, Deserialize)]
+struct MapManagerConfig {
+    pop_states: Vec<PopState>,
+
+    vehicle_threshold: usize,
+    leniency: usize,
+}
+
 #[allow(clippy::or_fun_call)]
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
-
     let coninfo = get_rcon_coninfo()?;
 
+    // set up parts
+    let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
+    let pop_states_valid =
+        guard_zeropop(mapman_config.pop_states).expect("Failed to validate map manager config");
+    let mapman = Arc::new(MapManager::new(
+        pop_states_valid,
+        mapman_config.vehicle_threshold,
+        mapman_config.leniency,
+    ));
+    let mapvote = Arc::new(Mapvote::new(mapman.clone()));
+
+    // connect
     println!(
         "Connecting to {}:{} with password ***...",
         coninfo.ip, coninfo.port
@@ -73,9 +123,7 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::connect(&coninfo).await.unwrap();
     println!("Connected!");
 
-    let mapman = Arc::new(MapManager::new());
-    let mapvote = Arc::new(Mapvote::new(mapman.clone()));
-
+    // start parts.
     let mut jhs = Vec::new();
 
     let bf4clone = bf4.clone();

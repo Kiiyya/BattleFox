@@ -1,7 +1,7 @@
 use std::{convert::TryInto, fmt::Display, str::FromStr};
 
 use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct EaidParseError;

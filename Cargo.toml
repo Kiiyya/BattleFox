@@ -16,9 +16,9 @@ members = ["battlefield_rcon"]
 [dependencies]
 # Cargo is smart enough to find a crate inside a bigger git repo.
 # battlefield_rcon = { git = "https://github.com/Kiiyya/BattleFox", branch = "main" }
-ascii = "1"
+ascii = { version = "1.0.0", features = ["serde"] }
 battlefield_rcon = { path = "battlefield_rcon" }
-tokio = "1.2"
+tokio = { version = "1.2", features = ["fs"] }
 tokio-stream = "0.1"
 
 dotenv = "0.15"
@@ -35,4 +35,9 @@ futures = "0.3.12"
 either = "1.6"
 multimap = "0.8"
 
-frunk = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.6"
+validator = { version = "0.12", features = ["derive"] }
+
+itertools = "0.10" # for sorting...

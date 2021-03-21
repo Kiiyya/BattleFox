@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use ascii::{AsciiStr, AsciiString};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     bf4::{RconDecoding, RconEncoding},

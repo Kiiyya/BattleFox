@@ -1,7 +1,7 @@
 #![allow(unused_variables, unused_imports)]
 
 use crate::{
-    mapmanager::{MapInPool, MapManager, MapPool},
+    mapmanager::MapManager,
     stv::Profile,
 };
 
@@ -85,7 +85,6 @@ enum VoteResult {
     MapNotInPool(Alt),
 }
 
-
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
     pub fn new(mapman: Arc<MapManager>) -> Self {
@@ -96,8 +95,9 @@ impl Mapvote {
             }),
             mapman,
         }
-        // TODO: set up callbacks n stuff.
     }
+
+    pub async fn on_popstate_changed(&self) {}
 
     /// Starts the main loop, listening for events, etc.
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
@@ -268,7 +268,8 @@ impl Mapvote {
                                 .say(
                                     format!(
                                         "Your first preference is {}, second {}, etc.",
-                                        &maps[0].0.Pretty(), &maps[1].0.Pretty()
+                                        &maps[0].0.Pretty(),
+                                        &maps[1].0.Pretty()
                                     ),
                                     Visibility::All,
                                 )

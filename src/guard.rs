@@ -73,7 +73,6 @@
 use either::Either;
 use std::ops::{Deref, DerefMut};
 
-
 pub trait Cases {
     type Cases;
 
@@ -173,6 +172,13 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for Or<A, B> {}
 pub struct Guard<T, J: Judgement<T>> {
     inner: T,
     judgement: J,
+}
+
+impl<T, J: Judgement<T>> Guard<T, J> {
+    /// Consumes the `Guard` and returns the unpacked inner value.
+    pub fn get(self) -> T {
+        self.inner
+    }
 }
 
 impl<T: Clone, J: Judgement<T> + Clone> Clone for Guard<T, J> {

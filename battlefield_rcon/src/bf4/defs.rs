@@ -6,11 +6,11 @@
 use super::{ea_guid::Eaid, RconDecoding, RconEncoding};
 use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
-use serde::{Serialize, Deserialize};
 
 pub mod map;
 pub use map::Map;
