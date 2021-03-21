@@ -3,13 +3,14 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{RconDecoding, RconEncoding, ea_guid::Eaid};
+use super::{ea_guid::Eaid, RconDecoding, RconEncoding};
 use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+use serde::{Serialize, Deserialize};
 
 pub mod map;
 pub use map::Map;
@@ -21,7 +22,7 @@ pub use vis::{Squad, Team, Visibility};
 /////////////////////////////////////////////////////////////////////
 
 // Maybe make it some flyweight or proxy, to enable `.kill()`, getting EA GUID, etc?
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Player {
     pub name: AsciiString,
     pub eaid: Eaid,
@@ -54,7 +55,7 @@ impl From<&Player> for AsciiString {
 /////////////////////// Weapon //////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Weapon {
     Mortar,
     Ucav,
@@ -85,7 +86,7 @@ impl RconDecoding for Weapon {
 /////////////////////// GameMode ////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameMode {
     Rush,
     Other(AsciiString),
@@ -113,7 +114,7 @@ impl RconEncoding for GameMode {
 /////////////////////// Event ///////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Event {
     Chat {
         vis: Visibility,

@@ -4,7 +4,7 @@ use ascii::AsciiString;
 
 use crate::rcon::{RconError, RconResult};
 
-use super::{GameMode, Map, RconDecoding, util::parse_int};
+use super::{util::parse_int, GameMode, Map, RconDecoding};
 
 #[derive(Debug, Clone)]
 pub struct MapListEntry {

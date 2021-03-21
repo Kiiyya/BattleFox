@@ -1,12 +1,13 @@
 use std::{convert::TryInto, fmt::Display, str::FromStr};
 
 use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone)]
 pub struct EaidParseError;
 
 /// EA GUID. Encoded as 32-long hex, without the EA_ prefix.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Eaid([AsciiChar; 32]);
 
 // pub const EAID_SERVER : Eaid = Eaid([AsciiChar::_0; 32]);

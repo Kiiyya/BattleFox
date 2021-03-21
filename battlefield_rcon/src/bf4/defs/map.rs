@@ -1,13 +1,14 @@
-use std::{
-    collections::HashMap,
-    str::FromStr,
-};
+use std::{collections::HashMap, str::FromStr};
 
 use ascii::{AsciiStr, AsciiString};
+use serde::{Serialize, Deserialize};
 
-use crate::{bf4::{RconDecoding, RconEncoding}, rcon::{RconError, RconResult}};
+use crate::{
+    bf4::{RconDecoding, RconEncoding},
+    rcon::{RconError, RconResult},
+};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Map {
     Zavod,
     LancangDam,

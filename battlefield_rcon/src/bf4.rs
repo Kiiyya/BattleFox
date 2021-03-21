@@ -482,7 +482,7 @@ impl Bf4Client {
         Ok(())
     }
 
-    pub async fn maplist_clear(&self) -> Result<(), MapListError> {
+    pub async fn maplist_clear(&self) -> Result<(), RconError> {
         self.rcon
             .query(&veca!["mapList.clear"], ok_eof, |_| None)
             .await
