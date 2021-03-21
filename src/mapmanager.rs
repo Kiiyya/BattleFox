@@ -2,22 +2,22 @@
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, io::SeekFrom, sync::Arc, time::Duration};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use battlefield_rcon::{
     bf4::{
-        defs::Preset, error::Bf4Error, Bf4Client, Event, GameMode, ListPlayersError, Map,
+        defs::Preset, Bf4Client, Event, GameMode, ListPlayersError, Map,
         MapListError, Visibility,
     },
-    rcon::{RconError, RconResult},
+    rcon::RconResult,
 };
-use futures::{future::BoxFuture, Future, StreamExt};
+use futures::{future::BoxFuture, StreamExt};
 use tokio::{
     sync::Mutex,
-    time::{sleep, Instant},
+    time::sleep,
 };
 
-use crate::guard::{Guard, Judgement};
+use crate::guard::Guard;
 
 use self::{config::HasZeroPopState, pool::{MapInPool, MapPool, NRounds, Vehicles}};
 
@@ -199,7 +199,7 @@ impl MapManager {
         } else {
             let pop = isize::try_from(pop).unwrap();
             let diff_current = pop - isize::try_from(lock.pop_state.min_players).unwrap(); // +: pop higher than min players, -: pop fell below min_players.
-            let diff_next = pop - isize::try_from(next_state.min_players).unwrap();
+            let _diff_next = pop - isize::try_from(next_state.min_players).unwrap();
             drop(lock);
 
             let leniency = isize::try_from(self.leniency).unwrap();
@@ -254,7 +254,13 @@ impl MapManager {
         // it may not be on an empty server.
         let pop = dbg!(self.get_pop_count(&bf4).await?);
         let state = determine_popstate(&self.pop_states, pop).clone();
-        self.change_pop_state(state, &bf4).await;
+        self.change_pop_state(state, &bf4).await.map_err(|mle| match mle {
+            MapListError::Rcon(rcon) => rcon,
+            MapListError::MapListFull => panic!("Map list full, huh!"),
+            MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
+            MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
+            MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
+        })?;
 
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {

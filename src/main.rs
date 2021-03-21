@@ -1,31 +1,27 @@
 // #![allow(unused_imports)]
 #![allow(clippy::new_without_default)]
 
-#[macro_use]
-extern crate async_trait;
+// #[macro_use]
+// extern crate async_trait;
 
-use ascii::{AsciiChar, AsciiString, IntoAsciiString};
-use guard::Guard;
+use ascii::{IntoAsciiString};
+
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{env::var, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::mpsc,
 };
 // use cmd::SimpleCommands;
 use dotenv::dotenv;
-use futures::{future::BoxFuture, Stream};
+
 use mapmanager::{config::guard_zeropop, MapManager, PopState};
-use mapvote::{parse_maps, Mapvote, ParseMapsResult};
+use mapvote::Mapvote;
 // use rounds::{Rounds, RoundsCtx};
-use tokio_stream::StreamExt;
+
 
 use battlefield_rcon::{
-    bf4::{
-        error::{Bf4Error, Bf4Result},
-        Bf4Client, Event, Player, Visibility,
-    },
-    rcon::{self, RconClient, RconConnectionInfo, RconError},
+    bf4::Bf4Client,
+    rcon::{self, RconConnectionInfo},
 };
 // use maplist::Maplist;
 // use mapvote::{parse_maps, Mapvote, ParseMapsResult};
@@ -68,23 +64,23 @@ async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> 
     println!("Loading {}", path);
     let mut file = tokio::fs::File::open(path)
         .await
-        .map_err(|io| ConfigError::Io(io))?;
+        .map_err(ConfigError::Io)?;
     let mut s = String::new();
     file.read_to_string(&mut s)
         .await
-        .map_err(|io| ConfigError::Io(io))?;
-    let t: T = serde_json::from_str(&s).map_err(|json| ConfigError::Serde(json))?;
+        .map_err(ConfigError::Io)?;
+    let t: T = serde_json::from_str(&s).map_err(ConfigError::Serde)?;
     Ok(t)
 }
 
 async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigError> {
     let mut file = tokio::fs::File::create(path)
         .await
-        .map_err(|io| ConfigError::Io(io))?;
-    let s = serde_json::to_string_pretty(obj).map_err(|json| ConfigError::Serde(json))?;
+        .map_err(ConfigError::Io)?;
+    let s = serde_json::to_string_pretty(obj).map_err(ConfigError::Serde)?;
     file.write_all(s.as_bytes())
         .await
-        .map_err(|io| ConfigError::Io(io))?;
+        .map_err(ConfigError::Io)?;
 
     Ok(())
 }

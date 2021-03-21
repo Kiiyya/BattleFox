@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData, ops::Deref, sync::Mutex};
+use std::sync::Mutex;
 
 use ascii::AsciiString;
 use battlefield_rcon::bf4::{Player, Visibility};
@@ -30,5 +30,5 @@ impl Commands {
         }
     }
 
-    pub async fn handle_chat_msg(&self, vis: &Visibility, player: &Player, msg: &AsciiString) {}
+    pub async fn handle_chat_msg(&self, _vis: &Visibility, _player: &Player, _msg: &AsciiString) {}
 }
