@@ -1,0 +1,43 @@
+{
+    "pop_states": [
+        {
+            "name": "SeedingPopulation",
+            "pool": {
+                "pool": [
+                    {"map": "Locker", "mode": "Rush", "extra": false},
+                    {"map": "Metro", "mode": "Rush", "extra": false},
+                    {"map": "Shanghai", "mode": "Rush", "extra": false}
+                ]
+            },
+            "min_players": 0
+        },
+        {
+            "name": "LowPopulation",
+            "pool": {
+                "pool": [
+                    {"map": "Locker", "mode": "Rush", "extra": false},
+                    {"map": "Metro", "mode": "Rush", "extra": false},
+                    {"map": "Shanghai", "mode": "Rush", "extra": false},
+                    {"map": "Dawnbreaker", "mode": "Rush", "extra": false}
+                ]
+            },
+            "min_players": 16
+        },
+        {
+            "name": "NormalPopulation",
+            "pool": {
+                "pool": [
+                    {"map": "Locker", "mode": "Rush", "extra": true},
+                    {"map": "Metro", "mode": "Rush", "extra": true},
+                    {"map": "Shanghai", "mode": "Rush", "extra": true},
+                    {"map": "Dawnbreaker", "mode": "Rush", "extra": true},
+                    {"map": "Altai", "mode": "Rush", "extra": true},
+                    {"map": "DragonPass", "mode": "Rush", "extra": true}
+                ]
+            },
+            "min_players": 32
+        }
+    ],
+    "vehicle_threshold": 16,
+    "leniency": 4
+}
