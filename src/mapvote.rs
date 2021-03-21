@@ -1,9 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{
-    mapmanager::MapManager,
-    stv::Profile,
-};
+use crate::{mapmanager::{CallbackResult, MapManager, PopState}, stv::Profile};
 
 use super::stv::tracing::NoTracer;
 use super::stv::Ballot;
@@ -47,6 +44,7 @@ impl Display for Alt {
 struct MapvoteInner {
     alternatives: HashSet<Alt>,
     votes: HashMap<Player, Ballot<Alt>>,
+    
 }
 
 #[derive(Debug)]
@@ -87,17 +85,36 @@ enum VoteResult {
 
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
-    pub fn new(mapman: Arc<MapManager>) -> Self {
-        Self {
+    pub async fn new(mapman: Arc<MapManager>) -> Arc<Self> {
+        let myself = Arc::new(Self {
             inner: Mutex::new(MapvoteInner {
                 alternatives: HashSet::new(),
                 votes: HashMap::new(),
             }),
-            mapman,
-        }
+            mapman: mapman.clone(),
+        });
+
+        // holy shit this is ugly.
+        let myself_weak = Arc::downgrade(&myself);
+        mapman.register_pool_change_callback(move |popstate| {
+            let weak = myself_weak.clone();
+            Box::pin(async move {
+                if let Some(strong) = weak.upgrade() {
+                    strong.on_popstate_changed(popstate).await;
+                    CallbackResult::KeepGoing
+                } else {
+                    CallbackResult::RemoveMe
+                }
+            })
+        }).await;
+
+        myself
     }
 
-    pub async fn on_popstate_changed(&self) {}
+    pub async fn on_popstate_changed(&self, popstate: PopState) {
+        println!("Popstate changed! New:");
+        todo!()
+    }
 
     /// Starts the main loop, listening for events, etc.
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {

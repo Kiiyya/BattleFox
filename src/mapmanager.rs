@@ -74,7 +74,12 @@ struct Inner {
     /// Used to steer caching behaviour of `pop`.
     joins_leaves_since_pop: usize,
 
-    pool_change_callbacks: Vec<Arc<dyn Fn(PopState) -> BoxFuture<'static, ()> + Send + Sync>>,
+    pool_change_callbacks: Vec<Arc<dyn Fn(PopState) -> BoxFuture<'static, CallbackResult> + Send + Sync>>,
+}
+
+pub enum CallbackResult {
+    KeepGoing,
+    RemoveMe,
 }
 
 impl MapManager {
@@ -106,7 +111,7 @@ impl MapManager {
     /// Used e.g. in mapvote.
     pub async fn register_pool_change_callback<F>(&self, f: F)
     where
-        F: Fn(PopState) -> BoxFuture<'static, ()> + Send + Sync + 'static,
+        F: Fn(PopState) -> BoxFuture<'static, CallbackResult> + Send + Sync + 'static,
     {
         let b = Arc::new(f);
         let mut lock = self.inner.lock().await;
@@ -240,10 +245,22 @@ impl MapManager {
         // In turn, RCON isn't aware of vehicles yes/no...
         fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 1)).await?;
 
+        let mut yeet_handlers = Vec::new();
         // notify observers
         for handler in handlers {
-            handler(newpop.clone()).await
+            match handler(newpop.clone()).await {
+                CallbackResult::KeepGoing => {},
+                CallbackResult::RemoveMe => {
+                    dbg!(yeet_handlers.push(handler));
+                }
+            }
         }
+
+        // TODO: actually remove them
+        // let mut lock = self.inner.lock().await;
+        // for handler in yeet_handlers {
+        //     lock.pool_change_callbacks.remove(index)
+        // }
 
         Ok(())
     }

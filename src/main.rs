@@ -109,7 +109,7 @@ async fn main() -> rcon::RconResult<()> {
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));
-    let mapvote = Arc::new(Mapvote::new(mapman.clone()));
+    let mapvote = Mapvote::new(mapman.clone()).await;
 
     // connect
     println!(
