@@ -268,7 +268,9 @@ where
             profile = profile.t_to_all(e, &(&score - q), tracer);
             profile = profile.strike_out_single(e, tracer);
         }
-        tracer.electing(&result.e, &profile);
+        if !result.e.is_empty() {
+            tracer.electing(&result.e, &profile);
+        }
 
         for r in &result.r {
             // transfer everything
@@ -331,7 +333,7 @@ where
                     .collect::<HashSet<_>>();
                 let worst = worst_set.iter().find(|_| true).unwrap(); // if we have a minimum, worst_set can not be empty. Thus the unwrap is safe.
                 if worst_set.len() > 1 {
-                    tracer.tie_breaking(&worst_set, worst);
+                    tracer.reject_tie_break(&worst_set, worst, &min);
                 }
                 let r = hashset![worst.clone()];
                 let d = self.alts.difference(&r).cloned().collect(); // d = A \ {worst}
@@ -402,7 +404,7 @@ where
         let result = dbg!(dbg!(self).vanilla_stv(1, &q, tracer));
 
         let winner = result.e.iter().find(|_| true).cloned();
-        if result.e.len() > 1 {
+        if result.e.len() > 1 { // if used with droop quota, this branch is impossible.
             let winner = winner.clone().unwrap(); // len > 1, means find definitely finds something, so unwrap is safe here.
             tracer.stv_1winner_tiebreak(&result.e, &winner);
         }
@@ -466,7 +468,6 @@ pub mod test {
                 ballot!["Eagle"],
                 ballot!["Eagle"],
                 ballot!["Eagle"],
-                ballot!["Eagle"],
                 ballot!["Wolf", "Fox", "Eagle"],
                 ballot!["Fox", "Wolf", "Eagle"],
                 ballot!["Wolf", "Fox", "Eagle"],
@@ -474,7 +475,15 @@ pub mod test {
             ],
         };
 
-        let winner = profile.vanilla_stv_1(&mut NoTracer).unwrap();
+        let mut tracer = LoggingTracer::new();
+
+        let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
+
+        for action in tracer.traces {
+            println!("{:?}", &action);
+        }
+
         assert_eq!("Wolf", winner);
+        // assert!(false);
     }
 }
