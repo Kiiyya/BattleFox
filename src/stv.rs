@@ -3,13 +3,7 @@ use core::panic;
 use num_bigint::BigInt;
 pub use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use std::{
-    cmp::Ordering,
-    collections::HashSet,
-    fmt::{Debug, Display},
-    hash::Hash,
-    write,
-};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, fmt::{Debug, Display}, hash::Hash, write};
 
 use self::tracing::StvTracer;
 
@@ -134,16 +128,33 @@ where
     }
 }
 
-// impl <A> Display for Profile<A>
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl <A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.alts.is_empty() {
+            write!(f, "{{ No alternatives! }}")?;
+        } else {
+            // let maxlen = self.alts.iter()
+            //     .map(|alt| format!("{}", alt).len())
+            //     .max().unwrap(); // unwrap is safe because we checked for is_empty()
+            write!(f, "{{")?;
 
-//     }
-// }
+            let scores = self.scores();
+            let mut tuples : Vec<(&A, &Rat)> = scores.iter().collect();
+            tuples.sort_by(|a, b| b.1.cmp(a.1));
+            for score in tuples {
+                // print alt name with padding
+                // write!(f, "{:width$}", score.0, width = maxlen)?;
+                write!(f, "{} -> {}, ", score.0, score.1)?;
+            }
+            write!(f, "}}")?;
+        }
+        Ok(())
+    }
+}
 
 impl<A> Profile<A>
 where
-    A: PartialEq + Clone + Eq + Hash + Debug,
+    A: Clone + Eq + Hash + Debug,
 {
     /// total amount of first preferences votes for a given candidate.
     pub fn score(&self, alt: &A) -> Rat {
@@ -258,6 +269,14 @@ where
         profile
     }
 
+    /// Calculates the score of each alternative. E.g.:
+    /// - "Wolf" -> 3.5
+    /// - "Penguin" -> 1
+    /// - etc...
+    pub fn scores(&self) -> HashMap<A, Rat> {
+        self.alts.iter().map(|alt| (alt.to_owned(), self.score(&alt))).collect()
+    }
+
     /// Expects quota in absolute form.
     #[allow(non_snake_case)]
     pub fn vanilla_T<T: StvTracer<A>>(&self, q: &Rat, result: &Result<A>, tracer: &mut T) -> Self {
@@ -298,17 +317,8 @@ where
             .filter(|&alt| &self.score(alt) >= q)
             .cloned()
             .collect();
-        if !elected.is_empty() {
-            // elect them all
-            let d = self.alts.difference(&elected).cloned().collect(); // d = A \ e
-            Result {
-                e: elected,
-                r: HashSet::new(), // no rejected, empty.
-                d,
-            }
-        } else {
+        if elected.is_empty() {
             // otherwise, eliminate the worst
-            // TODO: Maybe implement parallel universe tie breaking? (min_by just selects the first minimum found)
 
             // Find the score minimum.
             let mut min: Option<Rat> = None;
@@ -348,6 +358,14 @@ where
                     r: HashSet::new(),    // empty
                     d: self.alts.clone(), // we clone it for correctness, but this will always be empty, otherwise we wouldn't be here.
                 }
+            }
+        } else {
+            // elect them all
+            let d = self.alts.difference(&elected).cloned().collect(); // d = A \ e
+            Result {
+                e: elected,
+                r: HashSet::new(), // no rejected, empty.
+                d,
             }
         }
     }
@@ -401,7 +419,7 @@ where
     pub fn vanilla_stv_1<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<A> {
         let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
         let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
-        let result = dbg!(dbg!(self).vanilla_stv(1, &q, tracer));
+        let result = self.vanilla_stv(1, &q, tracer);
 
         let winner = result.e.iter().find(|_| true).cloned();
         if result.e.len() > 1 { // if used with droop quota, this branch is impossible.
@@ -452,14 +470,6 @@ pub mod test {
         }}
     }
 
-    // #[test]
-    // fn stv1() {
-    //     let profile = Profile {
-    //         alts: (),
-    //         ballots: (),
-    //     };
-    // }
-
     #[test]
     fn stv() {
         let profile = Profile {
@@ -475,12 +485,17 @@ pub mod test {
             ],
         };
 
-        let mut tracer = LoggingTracer::new();
+        let mut tracer = ElectElimTiebreakTracer::new();
 
         let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
 
+        println!("Starting with {}", profile);
         for action in tracer.traces {
-            println!("{:?}", &action);
+            if let Some(p) = action.get_profile_after() {
+                println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+            } else {
+                println!("{}", &action);
+            }
         }
 
         assert_eq!("Wolf", winner);
