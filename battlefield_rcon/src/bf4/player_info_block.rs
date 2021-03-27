@@ -1,7 +1,7 @@
 use crate::bf4::util::parse_int;
 use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::{
     ea_guid::{Eaid, EaidParseError},

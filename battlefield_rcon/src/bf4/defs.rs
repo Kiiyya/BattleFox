@@ -3,7 +3,7 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{RconDecoding, RconEncoding, ea_guid::Eaid, player_info_block::PlayerInfo};
+use super::{ea_guid::Eaid, player_info_block::PlayerInfo, RconDecoding, RconEncoding};
 use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
 use serde::{Deserialize, Serialize};

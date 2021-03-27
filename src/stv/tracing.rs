@@ -25,7 +25,6 @@ impl<A> StvTracer<A> for NoTracer {}
 
 #[derive(Debug)]
 pub enum StvAction<A> {
-
     ElemT {
         a: A,
         b: A,
@@ -60,33 +59,83 @@ pub enum StvAction<A> {
     Stv1WinnerTiebreak {
         tied: HashSet<A>,
         chosen: A,
-    }
+    },
 }
 
-impl <A> StvAction<A> {
+impl<A> StvAction<A> {
     pub fn get_profile_after(&self) -> Option<&Profile<A>> {
         match self {
-            StvAction::ToAll { from: _, howmuch: _, profile_afterwards } => Some(&profile_afterwards),
-            StvAction::StrikeOut { alt: _, profile_afterwards } => Some(&profile_afterwards),
-            StvAction::RejectTiebreak { tied: _, chosen: _, score: _ } => None,
-            StvAction::Elected { elected: _, profile_afterwards } => Some(&profile_afterwards),
-            StvAction::Eliminated { alt: _, profile_afterwards } => Some(&profile_afterwards),
-            StvAction::ElemT { a: _, b: _, s: _, profile_afterwards } => Some(&profile_afterwards),
+            StvAction::ToAll {
+                from: _,
+                howmuch: _,
+                profile_afterwards,
+            } => Some(&profile_afterwards),
+            StvAction::StrikeOut {
+                alt: _,
+                profile_afterwards,
+            } => Some(&profile_afterwards),
+            StvAction::RejectTiebreak {
+                tied: _,
+                chosen: _,
+                score: _,
+            } => None,
+            StvAction::Elected {
+                elected: _,
+                profile_afterwards,
+            } => Some(&profile_afterwards),
+            StvAction::Eliminated {
+                alt: _,
+                profile_afterwards,
+            } => Some(&profile_afterwards),
+            StvAction::ElemT {
+                a: _,
+                b: _,
+                s: _,
+                profile_afterwards,
+            } => Some(&profile_afterwards),
             StvAction::Stv1WinnerTiebreak { tied: _, chosen: _ } => None,
         }
     }
 }
 
-impl <A: Display + Debug> Display for StvAction<A> {
+impl<A: Display + Debug> Display for StvAction<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StvAction::ToAll { from, howmuch, profile_afterwards: _ } => write!(f, "ToAll({}, {}) ==>", from, howmuch),
-            StvAction::StrikeOut { alt, profile_afterwards: _ } => write!(f, "StrikeOut({})", alt),
-            StvAction::RejectTiebreak { tied, chosen, score } => write!(f, "RejectTieBreak({:?}, chosen: {}, score: {})", tied, chosen, score),
-            StvAction::Elected { elected, profile_afterwards: _ } => write!(f, "Elected({:?})", elected),
-            StvAction::Eliminated { alt, profile_afterwards: _ } => write!(f, "Eliminated({})", alt),
-            StvAction::ElemT { a, b, s, profile_afterwards: _ } => write!(f, "ElemT({}, {}, {})", a, b, s),
-            StvAction::Stv1WinnerTiebreak { tied, chosen } => write!(f, "Stv1WinnerTieBreak({:?}, {}", tied, chosen),
+            StvAction::ToAll {
+                from,
+                howmuch,
+                profile_afterwards: _,
+            } => write!(f, "ToAll({}, {}) ==>", from, howmuch),
+            StvAction::StrikeOut {
+                alt,
+                profile_afterwards: _,
+            } => write!(f, "StrikeOut({})", alt),
+            StvAction::RejectTiebreak {
+                tied,
+                chosen,
+                score,
+            } => write!(
+                f,
+                "RejectTieBreak({:?}, chosen: {}, score: {})",
+                tied, chosen, score
+            ),
+            StvAction::Elected {
+                elected,
+                profile_afterwards: _,
+            } => write!(f, "Elected({:?})", elected),
+            StvAction::Eliminated {
+                alt,
+                profile_afterwards: _,
+            } => write!(f, "Eliminated({})", alt),
+            StvAction::ElemT {
+                a,
+                b,
+                s,
+                profile_afterwards: _,
+            } => write!(f, "ElemT({}, {}, {})", a, b, s),
+            StvAction::Stv1WinnerTiebreak { tied, chosen } => {
+                write!(f, "Stv1WinnerTieBreak({:?}, {}", tied, chosen)
+            }
         }
     }
 }
@@ -100,11 +149,9 @@ pub struct ElectElimTiebreakTracer<A> {
     pub traces: Vec<StvAction<A>>,
 }
 
-impl <A> ElectElimTiebreakTracer<A> {
+impl<A> ElectElimTiebreakTracer<A> {
     pub fn new() -> Self {
-        Self {
-            traces: Vec::new(),
-        }
+        Self { traces: Vec::new() }
     }
 }
 
@@ -138,11 +185,9 @@ pub struct DetailedTracer<A> {
     pub traces: Vec<StvAction<A>>,
 }
 
-impl <A> DetailedTracer<A> {
+impl<A> DetailedTracer<A> {
     pub fn new() -> Self {
-        Self {
-            traces: Vec::new(),
-        }
+        Self { traces: Vec::new() }
     }
 }
 

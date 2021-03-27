@@ -1,41 +1,22 @@
-// #![allow(unused_imports)]
 #![allow(clippy::new_without_default)]
 
-// #[macro_use]
-// extern crate async_trait;
-
 use ascii::IntoAsciiString;
-
+use dotenv::dotenv;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-// use cmd::SimpleCommands;
-use dotenv::dotenv;
-
-use mapmanager::{config::guard_zeropop, pool::Vehicles, MapManager, PopState};
-use mapvote::Mapvote;
-// use rounds::{Rounds, RoundsCtx};
 
 use battlefield_rcon::{
     bf4::Bf4Client,
     rcon::{self, RconConnectionInfo},
 };
-// use maplist::Maplist;
-// use mapvote::{parse_maps, Mapvote, ParseMapsResult};
-// use lifeguard::Lifeguard;
+use mapmanager::{config::guard_zeropop, pool::Vehicles, MapManager, PopState};
+use mapvote::Mapvote;
 
 pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
-// pub mod lifeguard;
-pub mod cmd;
 mod stv;
-// mod experiments;
-// pub mod frequentive;
-// pub mod rounds;
-// pub mod admins;
-// pub mod vips;
-// pub mod minicache;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());

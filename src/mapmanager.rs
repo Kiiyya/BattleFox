@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 
 use battlefield_rcon::{
-    bf4::{
-        defs::Preset, Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility,
-    },
+    bf4::{defs::Preset, Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility},
     rcon::RconResult,
 };
 use futures::{future::BoxFuture, StreamExt};
@@ -71,8 +69,14 @@ struct Inner {
     /// Used to steer caching behaviour of `pop`.
     joins_leaves_since_pop: usize,
 
-    pool_change_callbacks:
-        Vec<Arc<dyn Fn(PopState<Vehicles>) -> BoxFuture<'static, CallbackResult> + Send + Sync>>,
+    #[allow(clippy::type_complexity)]
+    pool_change_callbacks: Vec<
+        Arc<
+            dyn Fn(Arc<Bf4Client>, PopState<Vehicles>) -> BoxFuture<'static, CallbackResult>
+                + Send
+                + Sync,
+        >,
+    >,
 }
 
 pub enum CallbackResult {
@@ -109,7 +113,10 @@ impl MapManager {
     /// Used e.g. in mapvote.
     pub async fn register_pool_change_callback<F>(&self, f: F)
     where
-        F: Fn(PopState<Vehicles>) -> BoxFuture<'static, CallbackResult> + Send + Sync + 'static,
+        F: Fn(Arc<Bf4Client>, PopState<Vehicles>) -> BoxFuture<'static, CallbackResult>
+            + Send
+            + Sync
+            + 'static,
     {
         let b = Arc::new(f);
         let mut lock = self.inner.lock().await;
@@ -226,8 +233,11 @@ impl MapManager {
     }
 
     /// Gets the current population state
-    pub async fn pop_state(&self) -> &PopState<Vehicles> {
-        todo!("Getting pop state depending on population.")
+    /// The amortized one. This is **not** necessarily equal to getting current population, and then
+    /// `determine_popstate`!
+    pub async fn pop_state(&self) -> PopState<Vehicles> {
+        let lock = self.inner.lock().await;
+        lock.pop_state.clone()
     }
 
     /// Change pop state (locking inner), swap out RCON maplist, and call all handlers.
@@ -236,19 +246,19 @@ impl MapManager {
         newpop: PopState<Vehicles>,
         bf4: &Arc<Bf4Client>,
     ) -> Result<(), MapListError> {
+        // fill maps, set one round on each map (we ignore rounds, but RCON needs something).
+        // In turn, RCON isn't aware of vehicles yes/no...
+        fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 2)).await?;
+
         let mut lock = self.inner.lock().await;
         lock.pop_state = dbg!(newpop.clone());
         let handlers = lock.pool_change_callbacks.clone();
         drop(lock); // since handlers may need to make very long rcon calls, drop lock early.
 
-        // fill maps, set one round on each map (we ignore rounds, but RCON needs something).
-        // In turn, RCON isn't aware of vehicles yes/no...
-        fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 1)).await?;
-
         let mut yeet_handlers = Vec::new();
         // notify observers
         for handler in handlers {
-            match handler(newpop.clone()).await {
+            match handler(bf4.clone(), newpop.clone()).await {
                 CallbackResult::KeepGoing => {}
                 CallbackResult::RemoveMe => {
                     dbg!(yeet_handlers.push(handler));
@@ -293,15 +303,16 @@ impl MapManager {
                         MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
                     })?
                 }
-                Ok(Event::Leave { player: _ }) => {
-                    self.pop_change(-1, &bf4).await.map_err(|mle| match mle {
-                        MapListError::Rcon(rcon) => rcon,
-                        MapListError::MapListFull => panic!("Map list full, huh!"),
-                        MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                        MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                        MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                    })?
-                }
+                Ok(Event::Leave {
+                    player: _,
+                    final_scores: _,
+                }) => self.pop_change(-1, &bf4).await.map_err(|mle| match mle {
+                    MapListError::Rcon(rcon) => rcon,
+                    MapListError::MapListFull => panic!("Map list full, huh!"),
+                    MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
+                    MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
+                    MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
+                })?,
                 _ => {}
             }
         }
@@ -334,7 +345,11 @@ pub async fn fill_rcon_maplist(
     Ok(())
 }
 
-pub async fn switch_map_to(bf4: &Arc<Bf4Client>, index: usize, vehicles: bool) -> Result<(), MapListError> {
+pub async fn switch_map_to(
+    bf4: &Arc<Bf4Client>,
+    index: usize,
+    vehicles: bool,
+) -> Result<(), MapListError> {
     bf4.maplist_set_next_map(index).await?;
 
     if !vehicles {
@@ -367,49 +382,4 @@ pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool<NRounds>, Ma
     }
 
     Ok(pool)
-}
-
-#[cfg(test)]
-mod tests {
-    use battlefield_rcon::bf4::GameMode;
-    use pool::MapInPool;
-
-    use super::*;
-
-    #[test]
-    fn mappool_additions() {
-        let p1 = MapPool::<()> {
-            pool: vec![MapInPool {
-                map: Map::Metro,
-                mode: GameMode::Rush,
-                extra: (),
-            }],
-        };
-
-        let p2 = MapPool::<()> {
-            pool: vec![
-                MapInPool {
-                    map: Map::Metro,
-                    mode: GameMode::Rush,
-                    extra: (),
-                },
-                MapInPool {
-                    map: Map::Locker,
-                    mode: GameMode::Rush,
-                    extra: (),
-                },
-            ],
-        };
-
-        let p_addition = MapPool::<()> {
-            pool: vec![MapInPool {
-                map: Map::Locker,
-                mode: GameMode::Rush,
-                extra: (),
-            }],
-        };
-
-        assert_eq!(p_addition, MapPool::additions(&p1, &p2));
-        assert_eq!(MapPool { pool: Vec::new() }, MapPool::removals(&p1, &p2)); // no removals
-    }
 }

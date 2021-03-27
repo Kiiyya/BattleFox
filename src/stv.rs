@@ -3,7 +3,13 @@ use core::panic;
 use num_bigint::BigInt;
 pub use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use std::{cmp::Ordering, collections::{HashMap, HashSet}, fmt::{Debug, Display}, hash::Hash, write};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fmt::{Debug, Display},
+    hash::Hash,
+    write,
+};
 
 use self::tracing::StvTracer;
 
@@ -128,7 +134,7 @@ where
     }
 }
 
-impl <A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
+impl<A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.alts.is_empty() {
             write!(f, "{{ No alternatives! }}")?;
@@ -139,7 +145,7 @@ impl <A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
             write!(f, "{{")?;
 
             let scores = self.scores();
-            let mut tuples : Vec<(&A, &Rat)> = scores.iter().collect();
+            let mut tuples: Vec<(&A, &Rat)> = scores.iter().collect();
             tuples.sort_by(|a, b| b.1.cmp(a.1));
             for score in tuples {
                 // print alt name with padding
@@ -274,7 +280,10 @@ where
     /// - "Penguin" -> 1
     /// - etc...
     pub fn scores(&self) -> HashMap<A, Rat> {
-        self.alts.iter().map(|alt| (alt.to_owned(), self.score(&alt))).collect()
+        self.alts
+            .iter()
+            .map(|alt| (alt.to_owned(), self.score(&alt)))
+            .collect()
     }
 
     /// Expects quota in absolute form.
@@ -422,7 +431,8 @@ where
         let result = self.vanilla_stv(1, &q, tracer);
 
         let winner = result.e.iter().find(|_| true).cloned();
-        if result.e.len() > 1 { // if used with droop quota, this branch is impossible.
+        if result.e.len() > 1 {
+            // if used with droop quota, this branch is impossible.
             let winner = winner.clone().unwrap(); // len > 1, means find definitely finds something, so unwrap is safe here.
             tracer.stv_1winner_tiebreak(&result.e, &winner);
         }

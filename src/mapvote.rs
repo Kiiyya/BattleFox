@@ -38,16 +38,6 @@ use tokio::{
 use num_rational::BigRational as Rat;
 use num_traits::One;
 
-// /// An alternative. As in, one thing you can vote on.
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub struct Alt(Map, GameMode);
-
-// impl Display for Alt {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str(self.0.Pretty())
-//     }
-// }
-
 #[derive(Debug)]
 struct MapvoteInner {
     alternatives: HashSet<MapInPool<()>>,
@@ -88,15 +78,11 @@ enum VoteResult<E: Eq + Clone> {
     },
 
     /// User submitted duplicates but they could not be untangled. Need to retry.
-    ErrDuplicate {
-        duplicates: HashSet<Map>,
-    },
+    ErrDuplicate { duplicates: HashSet<Map> },
 
     /// A map which the user voted on is not in the current map pool.
     /// The API can choose to nominate the map and then re-call `vote()`, or notify user, etc...
-    ErrMapNotInPool {
-        missing: HashSet<Map>,
-    }
+    ErrMapNotInPool { missing: HashSet<Map> },
 }
 
 impl Mapvote {
@@ -106,7 +92,7 @@ impl Mapvote {
             inner: Mutex::new(MapvoteInner {
                 alternatives: HashSet::new(),
                 votes: HashMap::new(),
-                pop_state: mapman.pop_state().await.clone(),
+                pop_state: mapman.pop_state().await,
             }),
             mapman: mapman.clone(),
         });
@@ -114,11 +100,15 @@ impl Mapvote {
         // holy shit this is ugly.
         let myself_weak = Arc::downgrade(&myself);
         mapman
-            .register_pool_change_callback(move |popstate| {
+            .register_pool_change_callback(move |bf4, popstate| {
                 let weak = myself_weak.clone();
                 Box::pin(async move {
+                    // try to upgrade to strong Arc<MapVote>. If that fails, it means the mapvote
+                    // instance was dropped. In that case, RemoveMe.
                     if let Some(strong) = weak.upgrade() {
-                        strong.on_popstate_changed(popstate).await;
+                        tokio::spawn(async move {
+                            strong.on_popstate_changed(bf4, popstate).await;
+                        });
                         CallbackResult::KeepGoing
                     } else {
                         CallbackResult::RemoveMe
@@ -130,10 +120,18 @@ impl Mapvote {
         myself
     }
 
-    async fn on_popstate_changed(&self, popstate: PopState<Vehicles>) {
+    async fn on_popstate_changed(&self, bf4: Arc<Bf4Client>, popstate: PopState<Vehicles>) {
         println!("Popstate changed! New: {}", popstate.name);
+        let mut lock = self.inner.lock().await;
+
+        // TODO: check alternatives, we may need to remove some & notify people who voted for them.
+        // TODO: Notify everyone of pop state change
+
+        let removals = MapPool::removals(&lock.pop_state.pool, &popstate.pool);
+
+        lock.pop_state = popstate;
+        drop(lock);
         todo!("Handle popstate changes");
-        // let lock = self.inner.lock().await;
     }
 
     /// Starts the main loop, listening for events, etc.
@@ -163,7 +161,6 @@ impl Mapvote {
                 Ok(Event::Chat { vis, player, msg }) => {
                     let bf4 = bf4.clone();
                     let mapvote = self.clone();
-                    // fire and forget about it, so we don't block other events. Yay concurrency!
 
                     if msg.as_str().starts_with("/haha next map") {
                         let mapman = self.mapman.clone();
@@ -255,20 +252,17 @@ impl Mapvote {
     ///   - Optionally, old ballot of the previous time the player voted.
     /// - Err:
     ///   - Player did a derp.
-    async fn vote(
-        &self,
-        player: &Player,
-        alts: &[(Map, GameMode)],
-    ) -> VoteResult<()> {
-        let ballot : Ballot<MapInPool<()>> = Ballot {
+    async fn vote(&self, player: &Player, alts: &[(Map, GameMode)]) -> VoteResult<()> {
+        let ballot: Ballot<MapInPool<()>> = Ballot {
             weight: Rat::one(),
-            preferences: alts.iter().map(|(map, mode)| {
-                MapInPool {
+            preferences: alts
+                .iter()
+                .map(|(map, mode)| MapInPool {
                     map: *map,
                     mode: mode.clone(),
                     extra: (),
-                }
-            }).collect(),
+                })
+                .collect(),
         };
 
         let mut lock = self.inner.lock().await;
@@ -281,10 +275,7 @@ impl Mapvote {
 
         let old = lock.votes.insert(player.clone(), ballot.clone());
 
-        VoteResult::Ok {
-            new: ballot,
-            old,
-        }
+        VoteResult::Ok { new: ballot, old }
     }
 
     async fn handle_chat_msg(
@@ -345,9 +336,17 @@ impl Mapvote {
                                     let _ = bf4.say("(You changed your vote)", player).await;
                                 }
                             }
-                            VoteResult::OkDuplicateButRemoved { new, old, duplicates } => todo!("handle duplicates"),
-                            VoteResult::ErrDuplicate { duplicates } => todo!("handle bad duplicates"),
-                            VoteResult::ErrMapNotInPool { missing } => todo!("handle map not in pool"),
+                            VoteResult::OkDuplicateButRemoved {
+                                new,
+                                old,
+                                duplicates,
+                            } => todo!("handle duplicates"),
+                            VoteResult::ErrDuplicate { duplicates } => {
+                                todo!("handle bad duplicates")
+                            }
+                            VoteResult::ErrMapNotInPool { missing } => {
+                                todo!("handle map not in pool")
+                            }
                         }
                     }
                     ParseMapsResult::Nothing => {}
