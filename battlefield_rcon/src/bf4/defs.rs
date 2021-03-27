@@ -3,7 +3,7 @@
 //! - Squad, Team, Visibility, etc.
 //! - Events for Bf4 (such as Kill, Chat, etc).
 
-use super::{ea_guid::Eaid, RconDecoding, RconEncoding};
+use super::{RconDecoding, RconEncoding, ea_guid::Eaid, player_info_block::PlayerInfo};
 use crate::rcon::{RconError, RconResult};
 use ascii::{AsciiStr, AsciiString};
 use serde::{Deserialize, Serialize};
@@ -142,7 +142,8 @@ pub enum Event {
         player: Player,
     },
     Leave {
-        player: AsciiString,
+        player: Player,
+        final_scores: PlayerInfo,
     },
     PunkBusterMessage(String),
 }

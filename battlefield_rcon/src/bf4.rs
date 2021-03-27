@@ -8,7 +8,7 @@ use crate::rcon::{
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
-use player_info_block::PlayerInfo;
+use player_info_block::{PlayerInfo, parse_pib};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
@@ -226,15 +226,24 @@ impl Bf4Client {
                 })
             }
             "player.onLeave" => {
-                if packet.words.len() != 3 {
-                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
-                        packet.words.clone(),
-                        format!("{} packet must have {} words", &packet.words[0], 2),
-                    )));
+                // TODO check param count
+                let player_name = &packet.words[1];
+                let pib = parse_pib(&packet.words[2..])?;
+                if pib.len() == 1 {
+                    if &pib[0].player_name == player_name {
+                        Ok(Event::Leave {
+                            player: Player {
+                                name: player_name.to_owned(),
+                                eaid: pib[0].eaid,
+                            },
+                            final_scores: pib[0].to_owned(),
+                        })
+                    } else {
+                        Err(Bf4Error::Rcon(RconError::malformed_packet(packet.words.clone(), format!("Somehow {}'s onLeave event contained a PlayerInfo for {}? Wtf?", player_name, pib[0].player_name))))
+                    }
+                } else {
+                    Err(Bf4Error::Rcon(RconError::malformed_packet(packet.words.clone(), format!("Expected exactly one PlayerInfo entry for onLeave packet, but found {} entries instead", pib.len()))))
                 }
-                Ok(Event::Leave {
-                    player: packet.words[1].to_owned(),
-                })
             }
             "server.onRoundOver" => {
                 if packet.words.len() != 2 {
@@ -353,7 +362,7 @@ impl Bf4Client {
         self.rcon
             .query(
                 &words,
-                |ok| player_info_block::parse_pib(&ok).map_err(|rconerr| rconerr.into()),
+                |ok| parse_pib(&ok).map_err(|rconerr| rconerr.into()),
                 |_| None,
             )
             .await

@@ -1,6 +1,7 @@
 use crate::bf4::util::parse_int;
 use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
+use serde::{Serialize, Deserialize};
 
 use super::{
     ea_guid::{Eaid, EaidParseError},
@@ -18,7 +19,7 @@ use super::{
 // }
 
 /// One row in the PlayerInfoBlock.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PlayerInfo {
     pub player_name: AsciiString,
     pub eaid: Eaid,
