@@ -53,6 +53,12 @@ pub struct MapPool<E: Eq + Clone> {
     pub pool: Vec<MapInPool<E>>,
 }
 
+impl<E: Eq + Clone> Default for MapPool<E> {
+    fn default() -> Self {
+        Self { pool: Vec::new() }
+    }
+}
+
 impl<E: Eq + Clone> MapPool<E> {
     pub fn new() -> Self {
         Self { pool: Vec::new() }
@@ -61,6 +67,13 @@ impl<E: Eq + Clone> MapPool<E> {
     /// Checks whether map exists in this map pool.
     pub fn contains_map(&self, map: Map) -> bool {
         self.pool.iter().any(|mip| mip.map == map)
+    }
+
+    /// Checks whether the `(map, mode)` combination exists in the pool, ignoring `extra`.
+    pub fn contains_mapmode(&self, map: Map, mode: &GameMode) -> bool {
+        self.pool
+            .iter()
+            .any(|mip| mip.map == map && &mip.mode == mode)
     }
 
     /// Attempts to get the index of the map in the map pool.
@@ -80,13 +93,13 @@ impl<E: Eq + Clone> MapPool<E> {
 
     /// Returns a new pool, with only the maps which are new in `new`.
     ///
-    /// Only considers the `map` field, ignore gamemode, extra, etc...
+    /// Only considers the `map` and `mode` fields, ignoreing extra.
     pub fn additions(old: &Self, new: &Self) -> Self {
         Self {
             pool: new
                 .pool
                 .iter()
-                .filter(|new_mip| !old.contains_map(new_mip.map))
+                .filter(|new_mip| !old.contains_mapmode(new_mip.map, &new_mip.mode))
                 .cloned()
                 .collect(),
         }
@@ -94,16 +107,41 @@ impl<E: Eq + Clone> MapPool<E> {
 
     /// Returns a new pool, with only the removed maps in `new`.
     ///
-    /// Only considers the `map` field, ignore gamemode, extra, etc...
+    /// Only considers the `map` and `mode` fields, ignoreing extra.
     pub fn removals(old: &Self, new: &Self) -> Self {
         Self {
             pool: old
                 .pool
                 .iter()
-                .filter(|old_mip| !new.contains_map(old_mip.map))
+                .filter(|old_mip| !new.contains_mapmode(old_mip.map, &old_mip.mode))
                 .cloned()
                 .collect(),
         }
+    }
+
+    /// Returns the maps which retain the same (Map, Mode), but whose `extra` changed.
+    ///
+    /// # Returns
+    /// List of tuples of
+    /// - [`MapInPool<E>`] with the *new* extra.
+    /// - The old extra.
+    pub fn changes<'old, 'new>(
+        old: &'old Self,
+        new: &'new Self,
+    ) -> Vec<(&'new MapInPool<E>, &'old E)> {
+        let mut vec: Vec<(&'new MapInPool<E>, &'old E)> = Vec::new();
+
+        for new_mip in &new.pool {
+            if let Some(old_mip) = old.pool.iter().find(|old_mip| {
+                old_mip.map == new_mip.map
+                    && old_mip.mode == new_mip.mode
+                    && old_mip.extra != new_mip.extra
+            }) {
+                vec.push((new_mip, &old_mip.extra))
+            }
+        }
+
+        vec
     }
 
     /// For example `pool.map_to_nrounds(|_| 1)` to just get one round per map.
@@ -119,5 +157,136 @@ impl<E: Eq + Clone> MapPool<E> {
                 })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use battlefield_rcon::bf4::GameMode;
+
+    use super::*;
+
+    #[test]
+    fn additions() {
+        let p1 = MapPool::<()> {
+            pool: vec![MapInPool {
+                map: Map::Metro,
+                mode: GameMode::Rush,
+                extra: (),
+            }],
+        };
+
+        let p2 = MapPool::<()> {
+            pool: vec![
+                MapInPool {
+                    map: Map::Metro,
+                    mode: GameMode::Rush,
+                    extra: (),
+                },
+                MapInPool {
+                    map: Map::Locker,
+                    mode: GameMode::Rush,
+                    extra: (),
+                },
+            ],
+        };
+
+        let p_addition = MapPool::<()> {
+            pool: vec![MapInPool {
+                map: Map::Locker,
+                mode: GameMode::Rush,
+                extra: (),
+            }],
+        };
+
+        assert_eq!(p_addition, MapPool::additions(&p1, &p2));
+        assert_eq!(MapPool::default(), MapPool::removals(&p1, &p2)); // no removals
+    }
+
+    #[test]
+    fn removals() {
+        let p1 = MapPool::<()> {
+            pool: vec![
+                MapInPool {
+                    map: Map::Metro,
+                    mode: GameMode::Rush,
+                    extra: (),
+                },
+                MapInPool {
+                    map: Map::Locker,
+                    mode: GameMode::Rush,
+                    extra: (),
+                },
+            ],
+        };
+
+        let p2 = MapPool::<()> {
+            pool: vec![MapInPool {
+                map: Map::Metro,
+                mode: GameMode::Rush,
+                extra: (),
+            }],
+        };
+
+        let p_removal = MapPool::<()> {
+            pool: vec![MapInPool {
+                map: Map::Locker,
+                mode: GameMode::Rush,
+                extra: (),
+            }],
+        };
+
+        assert_eq!(p_removal, MapPool::removals(&p1, &p2));
+        assert_eq!(MapPool::default(), MapPool::additions(&p1, &p2)); // no additions
+    }
+
+    #[test]
+    fn changes() {
+        let p1 = MapPool {
+            pool: vec![
+                MapInPool {
+                    map: Map::Shanghai,
+                    mode: GameMode::Rush,
+                    extra: Vehicles(true),
+                },
+                MapInPool {
+                    map: Map::Locker,
+                    mode: GameMode::Rush,
+                    extra: Vehicles(true),
+                },
+            ],
+        };
+
+        let p2 = MapPool {
+            pool: vec![
+                MapInPool {
+                    map: Map::Shanghai,
+                    mode: GameMode::Rush,
+                    extra: Vehicles(false), // vehicles got disabled here
+                },
+                MapInPool {
+                    map: Map::Locker,
+                    mode: GameMode::Rush,
+                    extra: Vehicles(true),
+                },
+            ],
+        };
+
+        let changes: Vec<(_, _)> = MapPool::changes(&p1, &p2)
+            .iter()
+            .map(|x| (x.0.to_owned(), x.1.to_owned()))
+            .collect();
+        assert_eq!(1, changes.len());
+        assert_eq!(
+            vec![(
+                MapInPool {
+                    map: Map::Shanghai,
+                    mode: GameMode::Rush,
+                    extra: Vehicles(false),
+                },
+                Vehicles(true)
+            )],
+            changes
+        );
     }
 }
