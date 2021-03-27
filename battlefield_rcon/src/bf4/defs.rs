@@ -141,6 +141,9 @@ pub enum Event {
     Join {
         player: Player,
     },
+    Authenticated {
+        player: Player,
+    },
     Leave {
         player: Player,
         final_scores: PlayerInfo,

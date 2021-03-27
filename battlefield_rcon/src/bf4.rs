@@ -114,9 +114,8 @@ impl Bf4Client {
             // technically it's possible someone else updated the cache meanwhile, but that's fine.
             for pi in &mut pib {
                 cache.insert(&pi.player_name, &pi.eaid);
-
-                // println!("Resolved");
             }
+            drop(cache);
 
             match pib.iter().find(|pi| &pi.player_name == name) {
                 Some(pi) => {
@@ -132,6 +131,12 @@ impl Bf4Client {
                 }),
             }
         }
+    }
+
+    // Set a player's GUID. For example on join this is used.
+    pub fn player_has_guid(&self, name: &AsciiString, eaid: &Eaid) {
+        let mut lock = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
+        lock.insert(name, eaid);
     }
 
     async fn parse_packet(bf4client: &Weak<Bf4Client>, packet: Packet) -> Bf4Result<Event> {
@@ -216,11 +221,28 @@ impl Bf4Client {
                 if packet.words.len() != 3 {
                     return Err(Bf4Error::Rcon(RconError::malformed_packet(
                         packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 3),
+                    )));
+                }
+                let eaid = Eaid::from_rcon_format(&packet.words[2]).map_err(|_| RconError::malformed_packet(packet.words.clone(), format!("Failed to parse the following as an EAID: {}", packet.words[2])))?;
+                let bf4 = upgrade(bf4client)?;
+                bf4.player_has_guid(&packet.words[1], &eaid); // while we have the GUID, might as well notify the cache about it.
+                Ok(Event::Join {
+                    player: Player {
+                        name: packet.words[1].clone(),
+                        eaid,
+                    }
+                })
+            }
+            "player.onAuthenticated" => {
+                if packet.words.len() != 2 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
                         format!("{} packet must have {} words", &packet.words[0], 2),
                     )));
                 }
                 let bf4 = upgrade(bf4client)?;
-                Ok(Event::Join {
+                Ok(Event::Authenticated {
                     player: bf4.resolve_player(&packet.words[1]).await?,
                     // TODO maybe use the GUID from here directly instead of resolving, but oh well...
                 })
