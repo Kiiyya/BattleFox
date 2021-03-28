@@ -2,6 +2,7 @@
 
 use ascii::IntoAsciiString;
 use dotenv::dotenv;
+use guard::Guard;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -10,12 +11,14 @@ use battlefield_rcon::{
     bf4::Bf4Client,
     rcon::{self, RconConnectionInfo},
 };
-use mapmanager::{config::guard_zeropop, pool::Vehicles, MapManager, PopState};
+use mapmanager::{pool::Vehicles, MapManager, PopState};
 use mapvote::Mapvote;
 
 pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
+pub mod vips;
+pub mod minicache;
 mod stv;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
@@ -76,10 +79,8 @@ async fn main() -> rcon::RconResult<()> {
 
     // set up parts
     let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
-    let pop_states_valid =
-        guard_zeropop(mapman_config.pop_states).expect("Failed to validate map manager config");
     let mapman = Arc::new(MapManager::new(
-        pop_states_valid,
+        Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));

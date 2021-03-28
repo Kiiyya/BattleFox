@@ -1,77 +1,82 @@
-//! Enforcing contracts at (mostly) compile-time.
-//!
-//! Having an *instance* of a type amounts to having a *proof* of that type.
-//!
-//! A key part of what makes this work is setting anything that can make your system
-//! unsound to private. Only expose some constructors or implications/lemmas which
-//! are "sound" in some way which you define.
-//!
-//! # Example
-//! The idea is that `ban` can only be invoked by someone who has an instance of
-//! `Guard<Player, Admin>`, which can only be construcuted with
-//! private constructors, so you have some degree of compile-
-//! time verified assurances. At least you'll be less likely
-//! to slip up.
-//!
-//! ```
-//! # use seamless::guard::{Judgement, Guard};
-//! # #[derive(Debug)]
-//! struct Player { name: String, };
-//!
-//! # #[derive(Debug)]
-//! struct Admin; // Zero-Sized-Type!
-//! impl Judgement<Player> for Admin {}
-//!
-//! fn ban(actor: Guard<Player, Admin>, target: Player) {
-//!     println!("{:?} banned {:?}!", *actor, target);
-//!     // ...
-//! }
-//!
-//! ```
-//! # Example: Implications, `infer`
-//! ```
-//! # use seamless::guard::{Judgement, Guard};
-//! # #[derive(Debug, Clone)]
-//! struct Admin;
-//! impl Judgement<String> for Admin {}
-//!
-//! # #[derive(Debug, Clone)]
-//! struct Mod;
-//! impl Judgement<String> for Mod {}
-//!
-//! // functions are implications.
-//! // This is axiomatic. You can write bullshit here and make it unsound.
-//! // Admin(T) ==> Moderator(T).
-//! fn admin_is_mod(_admin: Admin) -> Mod {
-//!     Mod
-//! }
-//!
-//! fn kick(actor: Guard<String, Mod>, target: &str) {
-//!     // we can assume that the player is an admin, otherwise this function
-//!     // wouldn't even be callable
-//!     println!("{} just kicked {}!", *actor, target);
-//! }
-//!
-//! fn mymain(admin_player: Guard<String, Admin>) {
-//!     // You can't just make a guard yourself, need to use proper methods for that.
-//!     // let admin_player : Guard<String, Admin> = Guard {
-//!     //    inner: String::new(), // error: private field.
-//!     //    judgement: Admin, // error: private field.
-//!     // };
-//
-//!     // kick(admin_player); // uh oh, expected Mod, but we have Admin!
-//!
-//!     // Easy, just solve it with our inferrence rule `admin_is_mod`.
-//!     // Note that while `admin_is_mod` does potentially unsound stuff,
-//!     // we as API consumers do not have access to the constructor of
-//!     // `Admin` or `Mod`.
-//!     let moderator_player = admin_player.infer(admin_is_mod);
-//!     kick(moderator_player, "Kiiya");
-//! }
-//!```
+/*!
+Enforcing contracts at (mostly) compile-time.
+
+Having an *instance* of a type amounts to having a *proof* of that type.
+
+A key part of what makes this work is setting anything that can make your system
+unsound to private. Only expose some constructors or implications/lemmas which
+are "sound" in some way which you define.
+
+# Example
+The idea is that `ban` can only be invoked by someone who has an instance of
+`Guard<Player, Admin>`, which can only be construcuted with
+private constructors, so you have some degree of compile-
+time verified assurances. At least you'll be less likely
+to slip up.
+
+```
+# use seamless::guard::{Judgement, Guard};
+# #[derive(Debug)]
+struct Player { name: String, };
+
+# #[derive(Debug)]
+struct Admin; // Zero-Sized-Type!
+impl Judgement<Player> for Admin {}
+
+fn ban(actor: Guard<Player, Admin>, target: Player) {
+    println!("{:?} banned {:?}!", *actor, target);
+    // ...
+}
+
+```
+# Example: Implications, `infer`
+```
+# use seamless::guard::{Judgement, Guard};
+# #[derive(Debug, Clone)]
+struct Admin;
+impl Judgement<String> for Admin {}
+
+# #[derive(Debug, Clone)]
+struct Mod;
+impl Judgement<String> for Mod {}
+
+// functions are implications.
+// This is axiomatic. You can write bullshit here and make it unsound.
+// Admin(T) ==> Moderator(T).
+fn admin_is_mod(_admin: Admin) -> Mod {
+    Mod
+}
+
+fn kick(actor: Guard<String, Mod>, target: &str) {
+    // we can assume that the player is an admin, otherwise this function
+    // wouldn't even be callable
+    println!("{} just kicked {}!", *actor, target);
+}
+
+fn mymain(admin_player: Guard<String, Admin>) {
+    // You can't just make a guard yourself, need to use proper methods for that.
+    // let admin_player : Guard<String, Admin> = Guard {
+    //    inner: String::new(), // error: private field.
+    //    judgement: Admin, // error: private field.
+    // };
+
+    // kick(admin_player); // uh oh, expected Mod, but we have Admin!
+
+    // Easy, just solve it with our inferrence rule `admin_is_mod`.
+    // Note that while `admin_is_mod` does potentially unsound stuff,
+    // we as API consumers do not have access to the constructor of
+    // `Admin` or `Mod`.
+    let moderator_player = admin_player.infer(admin_is_mod);
+    kick(moderator_player, "Kiiya");
+}
+```
+*/
 
 use either::Either;
 use std::ops::{Deref, DerefMut};
+use Either::{Left, Right};
+
+pub mod recent;
 
 pub trait Cases {
     type Cases;
@@ -83,6 +88,7 @@ pub trait Cases {
 ///
 /// - You introduce `A and B` with `And::and(a, b)`.
 /// - You obtain just `A` from `A and B` via `my_and.left()`.
+#[derive(Debug)]
 pub struct And<A, B>(A, B);
 impl<A, B> And<A, B> {
     /// Constructs a a proof that both `A` and `B` hold.
@@ -108,6 +114,7 @@ impl<A: Clone, B: Clone> Clone for And<A, B> {
 impl<A: Copy, B: Copy> Copy for And<A, B> {}
 
 /// Instances of this type are proofs which express that `A` *or* `B` hold.
+#[derive(Debug)]
 pub struct Or<A, B>(Either<A, B>);
 
 impl<A, B> Or<A, B> {
@@ -156,11 +163,60 @@ impl<A: Clone, B: Clone> Clone for Or<A, B> {
 }
 impl<A: Copy, B: Copy> Copy for Or<A, B> {}
 
-/// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
-pub trait Judgement<T> {}
+// pub fn cases<A, B, Target>(
+//     left: impl FnOnce(A) -> Target,
+//     right: impl FnOnce(B) -> Target,
+// ) -> impl FnOnce(Or<A, B>) -> Target {
+//     |or: Or<A, B>| match or.0 {
+//         Either::Left(p1) => left(p1),
+//         Either::Right(p2) => right(p2),
+//     }
+// }
 
-impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for And<A, B> {}
-impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for Or<A, B> {}
+/// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
+pub trait Judgement<T> { }
+
+pub trait SimpleJudgement<T> : Judgement<T> {
+    fn judge(about: &T) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+impl<T, A, B> Judgement<T> for And<A, B> {}
+impl<T, A, B> SimpleJudgement<T> for And<A, B>
+where
+    A: SimpleJudgement<T>,
+    B: SimpleJudgement<T>,
+{
+    fn judge(about: &T) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if let Some(a) = A::judge(about) {
+            B::judge(about).map(|b| Self(a, b))
+        } else {
+            None
+        }
+    }
+}
+
+impl<T, A, B> Judgement<T> for Or<A, B> { }
+impl<T, A, B> SimpleJudgement<T> for Or<A, B>
+where
+    A: SimpleJudgement<T>,
+    B: SimpleJudgement<T>,
+{
+    fn judge(about: &T) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if let Some(a) = A::judge(about) {
+            Some(Or(Left(a)))
+        } else {
+            B::judge(about).map(|b| Or(Right(b)))
+        }
+    }
+}
 
 /// A wrapper around a `T`, with a proof attached that it fulfills some arbitrary condition.
 /// For example, that a player is an admin, or that a number is even, etc.
@@ -169,6 +225,7 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Judgement<T> for Or<A, B> {}
 ///
 /// Each `Or` adds one bit of extra information though, other judgements may
 /// add more too.
+#[derive(Debug)]
 pub struct Guard<T, J: Judgement<T>> {
     inner: T,
     judgement: J,
@@ -192,7 +249,15 @@ impl<T: Clone, J: Judgement<T> + Clone> Clone for Guard<T, J> {
 impl<T: Copy, J: Judgement<T> + Copy> Copy for Guard<T, J> {}
 
 impl<T, J: Judgement<T>> Guard<T, J> {
-    pub fn new(inner: T, judgement: J) -> Self {
+    pub fn new(inner: T) -> Option<Self>
+        where J: SimpleJudgement<T>
+    {
+        J::judge(&inner).map(|judgement| Self { inner, judgement })
+    }
+
+    /// # Safety
+    /// You need to make sure yourself that the judgement fits.
+    pub unsafe fn new_raw(inner: T, judgement: J) -> Self {
         Self { inner, judgement }
     }
 
@@ -240,6 +305,19 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
             }),
         }
     }
+
+    // pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
+    //     match self.judgement.cases() {
+    //         Either::Left(l) => Either::Left(Guard {
+    //             inner: self.inner,
+    //             judgement: l,
+    //         }),
+    //         Either::Right(r) => Either::Right(Guard {
+    //             inner: self.inner,
+    //             judgement: r,
+    //         }),
+    //     }
+    // }
 }
 
 impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {
@@ -271,6 +349,20 @@ impl<T, J: Judgement<T>> DerefMut for Guard<T, J> {
         &mut self.inner
     }
 }
+
+// pub mod dynamic {
+//     //! When you want to create new Judgement types at runtime.
+
+//     pub struct SomeJudgement<T> {
+
+//     }
+// }
+
+// pub mod leniency {
+//     //! To permit cached values, e.g. someone's admin may have expired, but
+//     //! we still want to accept it within the last 10 seconds or so.
+
+// }
 
 /////////////////////////////////////////////////////
 
@@ -304,7 +396,7 @@ mod test {
     #[test]
     fn main() {
         let player = String::new();
-        let admin_player = Guard::new(player, Admin::<()>(PhantomData));
+        let admin_player = unsafe { Guard::new_raw(player, Admin::<()>(PhantomData)) };
 
         // // kick(admin_player); // uh oh, expected Mod, but we have Admin!
         // let or: Or<_, _> =
