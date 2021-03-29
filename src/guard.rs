@@ -72,151 +72,36 @@ fn mymain(admin_player: Guard<String, Admin>) {
 ```
 */
 
-use either::Either;
 use std::ops::{Deref, DerefMut};
-use Either::{Left, Right};
 
+pub mod and;
+pub mod or;
 pub mod recent;
 
 pub trait Cases {
     type Cases;
-
     fn cases(self) -> Self::Cases;
 }
 
-/// Instances of this type are proofs which express that `A` *and* `B` hold.
-///
-/// - You introduce `A and B` with `And::and(a, b)`.
-/// - You obtain just `A` from `A and B` via `my_and.left()`.
-#[derive(Debug)]
-pub struct And<A, B>(A, B);
-impl<A, B> And<A, B> {
-    /// Constructs a a proof that both `A` and `B` hold.
-    pub fn and(p1: A, p2: B) -> And<A, B> {
-        And(p1, p2)
-    }
-}
-impl<A, B> And<A, B> {
-    /// When you have `A` and `B`, then you also have `A`.
-    pub fn left(self) -> A {
-        self.0
-    }
-    /// When you have `A` and `B`, then you also have `B`.
-    pub fn right(self) -> B {
-        self.1
-    }
-}
-impl<A: Clone, B: Clone> Clone for And<A, B> {
-    fn clone(&self) -> Self {
-        And(self.0.clone(), self.1.clone())
-    }
-}
-impl<A: Copy, B: Copy> Copy for And<A, B> {}
-
-/// Instances of this type are proofs which express that `A` *or* `B` hold.
-#[derive(Debug)]
-pub struct Or<A, B>(Either<A, B>);
-
-impl<A, B> Or<A, B> {
-    pub fn fork<Target>(
-        self,
-        left: impl FnOnce(A) -> Target,
-        right: impl FnOnce(B) -> Target,
-    ) -> Target {
-        match self.0 {
-            Either::Left(p1) => left(p1),
-            Either::Right(p2) => right(p2),
-        }
-    }
-
-    // pub fn cases(self) -> Either<A, B> {
-    //     self.0
-    // }
-
-    /// Constructs a proof of `Or<A, B>` from one branch.
-    /// If you know that `A` is true, then you know that `A or B` is true.
-    pub fn left(p1: A) -> Or<A, B> {
-        Or(Either::Left(p1))
-    }
-    /// Constructs a proof of `Or<A, B>` from one branch.
-    /// If you know that `B` is true, then you know that `A or B` is true.
-    pub fn right(p2: B) -> Or<A, B> {
-        Or(Either::Right(p2))
-    }
+pub trait AutoInfer<FromJ> {
+    fn infer(from: FromJ) -> Self;
 }
 
-impl<A, B> Cases for Or<A, B> {
-    type Cases = Either<A, B>;
-
-    fn cases(self) -> Self::Cases {
-        self.0
-    }
+pub trait Complement<J> {
+    type Complement;
 }
-
-impl<A: Clone, B: Clone> Clone for Or<A, B> {
-    fn clone(&self) -> Self {
-        Or(match &self.0 {
-            Either::Left(l) => Either::Left(l.clone()),
-            Either::Right(r) => Either::Right(r.clone()),
-        })
-    }
-}
-impl<A: Copy, B: Copy> Copy for Or<A, B> {}
-
-// pub fn cases<A, B, Target>(
-//     left: impl FnOnce(A) -> Target,
-//     right: impl FnOnce(B) -> Target,
-// ) -> impl FnOnce(Or<A, B>) -> Target {
-//     |or: Or<A, B>| match or.0 {
-//         Either::Left(p1) => left(p1),
-//         Either::Right(p2) => right(p2),
-//     }
-// }
 
 /// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
-pub trait Judgement<T> { }
+pub trait Judgement<T> {}
 
-pub trait SimpleJudgement<T> : Judgement<T> {
+pub trait SimpleJudgement<T>: Judgement<T> {
     fn judge(about: &T) -> Option<Self>
     where
         Self: Sized;
 }
 
-impl<T, A, B> Judgement<T> for And<A, B> {}
-impl<T, A, B> SimpleJudgement<T> for And<A, B>
-where
-    A: SimpleJudgement<T>,
-    B: SimpleJudgement<T>,
-{
-    fn judge(about: &T) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        if let Some(a) = A::judge(about) {
-            B::judge(about).map(|b| Self(a, b))
-        } else {
-            None
-        }
-    }
-}
-
-impl<T, A, B> Judgement<T> for Or<A, B> { }
-impl<T, A, B> SimpleJudgement<T> for Or<A, B>
-where
-    A: SimpleJudgement<T>,
-    B: SimpleJudgement<T>,
-{
-    fn judge(about: &T) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        if let Some(a) = A::judge(about) {
-            Some(Or(Left(a)))
-        } else {
-            B::judge(about).map(|b| Or(Right(b)))
-        }
-    }
-}
+pub struct True;
+pub struct False;
 
 /// A wrapper around a `T`, with a proof attached that it fulfills some arbitrary condition.
 /// For example, that a player is an admin, or that a number is even, etc.
@@ -250,7 +135,8 @@ impl<T: Copy, J: Judgement<T> + Copy> Copy for Guard<T, J> {}
 
 impl<T, J: Judgement<T>> Guard<T, J> {
     pub fn new(inner: T) -> Option<Self>
-        where J: SimpleJudgement<T>
+    where
+        J: SimpleJudgement<T>,
     {
         J::judge(&inner).map(|judgement| Self { inner, judgement })
     }
@@ -270,69 +156,14 @@ impl<T, J: Judgement<T>> Guard<T, J> {
             judgement: rule(self.judgement),
         }
     }
-}
 
-impl<T, L: Judgement<T>, R: Judgement<T>> Guard<T, Or<L, R>> {
-    pub fn left(l: Guard<T, L>) -> Guard<T, Or<L, R>> {
+    pub fn auto<TargetJ: Judgement<T>>(self) -> Guard<T, TargetJ>
+    where
+        TargetJ: AutoInfer<J>,
+    {
         Guard {
-            inner: l.inner,
-            judgement: Or::left(l.judgement),
-        }
-    }
-
-    pub fn right(r: Guard<T, R>) -> Guard<T, Or<L, R>> {
-        Guard {
-            inner: r.inner,
-            judgement: Or::right(r.judgement),
-        }
-    }
-}
-
-impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
-    pub fn fork<TargetJ: Judgement<T>>(
-        self,
-        left: impl FnOnce(Guard<T, A>) -> Guard<T, TargetJ>,
-        right: impl FnOnce(Guard<T, B>) -> Guard<T, TargetJ>,
-    ) -> Guard<T, TargetJ> {
-        match self.judgement.0 {
-            Either::Left(j) => left(Guard {
-                inner: self.inner,
-                judgement: j,
-            }),
-            Either::Right(j) => right(Guard {
-                inner: self.inner,
-                judgement: j,
-            }),
-        }
-    }
-
-    // pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
-    //     match self.judgement.cases() {
-    //         Either::Left(l) => Either::Left(Guard {
-    //             inner: self.inner,
-    //             judgement: l,
-    //         }),
-    //         Either::Right(r) => Either::Right(Guard {
-    //             inner: self.inner,
-    //             judgement: r,
-    //         }),
-    //     }
-    // }
-}
-
-impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {
-    type Cases = Either<Guard<T, A>, Guard<T, B>>;
-
-    fn cases(self) -> Self::Cases {
-        match self.judgement.cases() {
-            Either::Left(l) => Either::Left(Guard {
-                inner: self.inner,
-                judgement: l,
-            }),
-            Either::Right(r) => Either::Right(Guard {
-                inner: self.inner,
-                judgement: r,
-            }),
+            inner: self.inner,
+            judgement: TargetJ::infer(self.judgement),
         }
     }
 }
@@ -349,20 +180,6 @@ impl<T, J: Judgement<T>> DerefMut for Guard<T, J> {
         &mut self.inner
     }
 }
-
-// pub mod dynamic {
-//     //! When you want to create new Judgement types at runtime.
-
-//     pub struct SomeJudgement<T> {
-
-//     }
-// }
-
-// pub mod leniency {
-//     //! To permit cached values, e.g. someone's admin may have expired, but
-//     //! we still want to accept it within the last 10 seconds or so.
-
-// }
 
 /////////////////////////////////////////////////////
 
