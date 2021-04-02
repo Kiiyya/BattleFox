@@ -148,6 +148,16 @@ pub enum Event {
         player: Player,
         final_scores: PlayerInfo,
     },
+    TeamChange {
+        player: Player,
+        team: Team,
+        squad: Squad,
+    },
+    SquadChange {
+        player: Player,
+        team: Team,
+        squad: Squad,
+    },
     PunkBusterMessage(String),
 }
 

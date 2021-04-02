@@ -220,6 +220,34 @@ impl Bf4Client {
                     )))
                 }
             }
+            "player.onSquadChange" => {
+                if packet.words.len() != 4 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 4),
+                    )));
+                }
+                let bf4 = upgrade(bf4client)?;
+                Ok(Event::SquadChange {
+                    player: bf4.resolve_player(&packet.words[1]).await?,
+                    team: Team::rcon_decode(&packet.words[2])?,
+                    squad: Squad::rcon_decode(&packet.words[3])?,
+                })
+            }
+            "player.onTeamChange" => {
+                if packet.words.len() != 4 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 4),
+                    )));
+                }
+                let bf4 = upgrade(bf4client)?;
+                Ok(Event::TeamChange {
+                    player: bf4.resolve_player(&packet.words[1]).await?,
+                    team: Team::rcon_decode(&packet.words[2])?,
+                    squad: Squad::rcon_decode(&packet.words[3])?,
+                })
+            }
             "player.onJoin" => {
                 if packet.words.len() != 3 {
                     return Err(Bf4Error::Rcon(RconError::malformed_packet(
