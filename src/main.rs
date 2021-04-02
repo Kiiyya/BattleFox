@@ -18,7 +18,7 @@ pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
-pub mod minicache;
+// pub mod minicache;
 mod stv;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {

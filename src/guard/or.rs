@@ -30,6 +30,33 @@ impl<A, B> Or<A, B> {
     }
 }
 
+pub fn or_assoc<A, B, C>(j: Or<A, Or<B, C>>) -> Or<Or<A, B>, C> {
+    match j.cases() {
+        Left(a) => Or::left(Or::left(a)),
+        Right(right) => match right.cases() {
+            Left(b) => Or::left(Or::right(b)),
+            Right(c) => Or::right(c),
+        },
+    }
+}
+
+pub fn or_assoc2<A, B, C>(j: Or<Or<A, B>, C>) -> Or<A, Or<B, C>> {
+    match j.cases() {
+        Left(left) => match left.cases() {
+            Left(a) => Or::left(a),
+            Right(b) => Or::right(Or::left(b)),
+        },
+        Right(c) => Or::right(Or::right(c)),
+    }
+}
+
+pub fn or_comm<A, B>(j: Or<A, B>) -> Or<B, A> {
+    match j.cases() {
+        Left(a) => Or::right(a),
+        Right(b) => Or::left(b),
+    }
+}
+
 impl<A, B> Cases for Or<A, B> {
     type Cases = Either<A, B>;
 
@@ -82,7 +109,6 @@ impl<T, L: Judgement<T>, R: Judgement<T>> Guard<T, Or<L, R>> {
     }
 }
 
-
 impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
     pub fn fork<TargetJ: Judgement<T>>(
         self,
@@ -131,4 +157,3 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {
         }
     }
 }
-

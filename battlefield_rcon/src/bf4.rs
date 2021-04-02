@@ -77,7 +77,7 @@ impl Bf4Client {
         Ok(myself)
     }
 
-    pub async fn resolve_player(self: &Arc<Bf4Client>, name: &AsciiString) -> Bf4Result<Player> {
+    pub async fn resolve_player(&self, name: &AsciiString) -> Bf4Result<Player> {
         let entry = {
             let mut cache = self
                 .player_cache
@@ -135,7 +135,10 @@ impl Bf4Client {
 
     // Set a player's GUID. For example on join this is used.
     pub fn player_has_guid(&self, name: &AsciiString, eaid: &Eaid) {
-        let mut lock = self.player_cache.lock().expect("Failed to acquire mutex lock on player cache");
+        let mut lock = self
+            .player_cache
+            .lock()
+            .expect("Failed to acquire mutex lock on player cache");
         lock.insert(name, eaid);
     }
 
@@ -224,14 +227,22 @@ impl Bf4Client {
                         format!("{} packet must have {} words", &packet.words[0], 3),
                     )));
                 }
-                let eaid = Eaid::from_rcon_format(&packet.words[2]).map_err(|_| RconError::malformed_packet(packet.words.clone(), format!("Failed to parse the following as an EAID: {}", packet.words[2])))?;
+                let eaid = Eaid::from_rcon_format(&packet.words[2]).map_err(|_| {
+                    RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!(
+                            "Failed to parse the following as an EAID: {}",
+                            packet.words[2]
+                        ),
+                    )
+                })?;
                 let bf4 = upgrade(bf4client)?;
                 bf4.player_has_guid(&packet.words[1], &eaid); // while we have the GUID, might as well notify the cache about it.
                 Ok(Event::Join {
                     player: Player {
                         name: packet.words[1].clone(),
                         eaid,
-                    }
+                    },
                 })
             }
             "player.onAuthenticated" => {
@@ -661,7 +672,9 @@ impl Bf4Client {
     }
 
     /// Lists reserved slots + level
-    pub async fn reserved_list(&self) -> Result<Vec<AsciiString>, ReservedSlotsError> {
+    pub async fn reserved_list(&self) -> Result<Vec<AsciiString>, RconError> {
+        // TODO: technically only a limited amount of reserved slots are returned, and we need to
+        // repeat the query with a different offset other than "0".
         self.rcon
             .query(
                 &veca!["reservedSlotsList.list", "0"],

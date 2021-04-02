@@ -363,10 +363,6 @@ impl Mapvote {
         }
     }
 
-    // pub async fn map_pool_changed(new: &MapPool) -> RconResult<()> {
-
-    // }
-
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapManager>) {
         let profile = {
             let mut lock = self.inner.lock().await;

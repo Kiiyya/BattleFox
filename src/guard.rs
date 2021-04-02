@@ -83,16 +83,35 @@ pub trait Cases {
     fn cases(self) -> Self::Cases;
 }
 
-pub trait AutoInfer<FromJ> {
+pub trait InferFrom<T, FromJ: Judgement<T>>: Judgement<T> {
     fn infer(from: FromJ) -> Self;
 }
 
-pub trait Complement<J> {
+pub trait InferInto<T, IntoJ: Judgement<T>>: Judgement<T> {
+    fn infer_into(self) -> IntoJ;
+}
+
+// From implies Into
+impl<T, FromJ, IntoJ> InferInto<T, IntoJ> for FromJ
+where
+    FromJ: Judgement<T>,
+    IntoJ: Judgement<T> + InferFrom<T, FromJ>,
+{
+    fn infer_into(self) -> IntoJ {
+        IntoJ::infer(self)
+    }
+}
+
+pub trait Complement {
     type Complement;
 }
 
 /// Marker trait. Asserts that a value of type `T` fulfills some arbitrary condition.
 pub trait Judgement<T> {}
+impl<T, J: Judgement<T>> Judgement<T> for &J {}
+impl<T, J: Judgement<T>> Judgement<T> for std::sync::Arc<J> {}
+impl<T, J: Judgement<T>> Judgement<T> for std::rc::Rc<J> {}
+// impl <T, JD, J: Judgement<T> + Deref<Target = JD>> Judgement<T> for JD { }
 
 pub trait SimpleJudgement<T>: Judgement<T> {
     fn judge(about: &T) -> Option<Self>
@@ -157,9 +176,9 @@ impl<T, J: Judgement<T>> Guard<T, J> {
         }
     }
 
-    pub fn auto<TargetJ: Judgement<T>>(self) -> Guard<T, TargetJ>
+    pub fn auto<TargetJ>(self) -> Guard<T, TargetJ>
     where
-        TargetJ: AutoInfer<J>,
+        TargetJ: InferFrom<T, J>,
     {
         Guard {
             inner: self.inner,
@@ -183,42 +202,99 @@ impl<T, J: Judgement<T>> DerefMut for Guard<T, J> {
 
 /////////////////////////////////////////////////////
 
+pub trait Not<T>: Judgement<T> {
+    type Negation: Judgement<T>;
+}
+
 #[cfg(test)]
 mod test {
-    use std::marker::PhantomData;
+    use std::time::Duration;
 
-    use super::{Guard, Judgement};
+    use super::{
+        recent::{MaxAge, Recent},
+        *,
+    };
 
     #[derive(Debug, Clone)]
-    struct Admin<Server: Clone>(PhantomData<Server>);
-    impl<Server: Clone> Judgement<String> for Admin<Server> {}
+    struct Admin;
+    impl Judgement<String> for Admin {}
 
     #[derive(Debug, Clone)]
-    struct Mod<Server: Clone>(PhantomData<Server>);
-    impl<Server: Clone> Judgement<String> for Mod<Server> {}
+    struct Mod;
+    impl Judgement<String> for Mod {}
+
+    impl InferFrom<String, Admin> for Mod {
+        fn infer(_from: Admin) -> Self {
+            Mod
+        }
+    }
+
+    impl MaxAge for Admin {
+        const MAX_AGE: std::time::Duration = Duration::from_secs(10);
+    }
+    impl MaxAge for Mod {
+        const MAX_AGE: std::time::Duration = Duration::from_secs(10);
+    }
 
     // functions are implications.
     // This is axiomatic. You can write bullshit here and make it unsound.
     // Admin(T, server) ==> Moderator(T, server).
-    fn admin_is_mod<Server: Clone>(_admin: Admin<Server>) -> Mod<Server> {
-        Mod(PhantomData)
+    fn admin_is_mod(_admin: Admin) -> Mod {
+        Mod
     }
 
-    fn kick<Server: Clone>(actor: Guard<String, Mod<Server>>) {
+    fn kick(actor: Guard<String, Mod>) {
         // we can assume that the player is an admin, otherwise this function
         // wouldn't even be callable
         println!("{} is some kind of admin!", *actor);
     }
 
-    #[test]
-    fn main() {
-        let player = String::new();
-        let admin_player = unsafe { Guard::new_raw(player, Admin::<()>(PhantomData)) };
-
-        // // kick(admin_player); // uh oh, expected Mod, but we have Admin!
-        // let or: Or<_, _> =
-
-        let moderator_player = admin_player.infer(admin_is_mod);
-        kick(moderator_player);
+    fn kick2<M: InferInto<String, Mod>>(actor: Guard<String, M>) {
+        println!("{} is some kind of admin!", *actor);
     }
+
+    fn kick3<M: InferInto<String, Recent<Mod>>>(actor: Guard<String, M>) {
+        println!("{} is some kind of admin!", *actor);
+    }
+
+    // async fn kick4(actor: Guard<String, Recent<Mod>>) {
+    //     actor.fork_recent(|g: Guard<String, Mod>| async {
+
+    //     }).await;
+    // }
+
+    #[test]
+    fn infer_manual() {
+        let admin_player = unsafe { Guard::new_raw(String::new(), Admin) };
+
+        kick(admin_player.infer(admin_is_mod));
+    }
+
+    #[test]
+    fn infer_auto_caller() {
+        let admin_player = unsafe { Guard::new_raw(String::new(), Admin) };
+
+        kick(admin_player.auto());
+    }
+
+    #[test]
+    fn infer_auto_callee() {
+        let admin_player = unsafe { Guard::new_raw(String::new(), Admin) };
+
+        kick2(admin_player);
+    }
+
+    #[test]
+    fn infer_recent_auto() {
+        let admin_player_recent = unsafe { Guard::new_raw(String::new(), Recent::now(Admin)) };
+
+        kick3(admin_player_recent);
+    }
+
+    // #[test]
+    // fn infer_recent() {
+    //     let admin_player_recent = unsafe { Guard::new_raw(String::new(), Recent::now(Admin)) };
+
+    //     kick4(admin_player_recent.auto());
+    // }
 }

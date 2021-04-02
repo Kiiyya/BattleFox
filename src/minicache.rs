@@ -5,9 +5,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+use async_trait::async_trait;
 use futures::{future::BoxFuture, Future};
 
-struct Line<V> {
+use crate::guard::{Guard, Judgement, recent::Recent};
+
+#[async_trait]
+pub trait Resolver<K, V> {
+    /// Error type.
+    type E;
+
+    fn resolve(&self, key: &K) -> Result<V, Self::E>;
+}
+
+#[async_trait]
+pub trait Mached2<T, J: Judgement<T>> {
+    async fn get<R: Resolver<T>>(&self, resolver: &R) -> Guard<T, Recent<J>>;
+}
+
+// #[async_trait]
+// pub trait Mached<T> {
+//     async fn get<R: Resolver<T>>(&self, resolver: &R) -> &T;
+//     async fn get_mut<R: Resolver<T>>(&mut self, resolver: &R) -> &mut T;
+//     fn try_get(&self) -> Option<&T>;
+//     fn try_get_mut(&mut self) -> Option<&mut T>;
+// }
+
+pub struct Mached<V> {
     value: V,
     freshness: Instant,
 }
