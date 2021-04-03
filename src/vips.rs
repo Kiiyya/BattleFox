@@ -44,7 +44,7 @@ struct Inner {
 impl Inner {
     /// Removes any expired judgements.
     pub fn trim_old(&mut self) {
-        self.vips.retain(|_, j| dbg!(j.is_recent()));
+        self.vips.retain(|_, j| j.is_recent());
     }
 }
 

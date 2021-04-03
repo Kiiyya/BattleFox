@@ -369,13 +369,13 @@ pub async fn switch_map_to(
 
     let _ = bf4.set_preset(Preset::Custom).await;
     let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
-    let _  = bf4.set_tickets(tickets).await;
+    let _  = dbg!(bf4.set_tickets(tickets).await);
     sleep(Duration::from_secs(1)).await;
 
     bf4.maplist_run_next_round().await?;
 
-    sleep(Duration::from_secs(8)).await;
-    let _  = bf4.set_tickets(std::cmp::min(100, tickets)).await;
+    sleep(Duration::from_secs(10)).await;
+    let _  = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
 

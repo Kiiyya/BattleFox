@@ -669,7 +669,7 @@ impl Bf4Client {
     pub async fn set_tickets(&self, tickets: usize) -> RconResult<()> {
         self.rcon
             .query(
-                &veca!["vars.gameModeCounter", format!("{}", tickets), "false"],
+                &veca!["vars.gameModeCounter", format!("{}", tickets)],
                 ok_eof,
                 |_| None,
             )
