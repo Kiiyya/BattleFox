@@ -1,6 +1,7 @@
 //! Manages map lists based on player population
 
 use itertools::Itertools;
+use lerp::Lerp;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, convert::TryFrom, sync::Arc, time::Duration};
 
@@ -151,7 +152,14 @@ impl MapManager {
             lock.pop_state.clone()
         };
 
-        let tickets : usize = (75.0 + (400 - 75) as f64 * (pop as f64 / 64.0)).round() as usize;
+        let tickets = match pop {
+            x if x <= 8 => 75_f64,
+            x if x <= 16 => 75_f64.lerp_bounded(120_f64, (x as f64 - 8_f64) / 8_f64),
+            x if x <= 32 => 120_f64.lerp_bounded(250_f64, (x as f64 - 16_f64) / 16_f64),
+            x if x <= 64 => 250_f64.lerp_bounded(400_f64, (x as f64 - 32_f64) / 16_f64),
+            _ => 400_f64,
+        } as usize;
+        // let tickets : usize = (75.0 + (400 - 75) as f64 * (pop as f64 / 64.0)).round() as usize;
 
         if let Some(index) = pop_state.pool.get_rcon_index(mip.map, &mip.mode, |_| true) {
             // sweet, index is valid. Go for it.

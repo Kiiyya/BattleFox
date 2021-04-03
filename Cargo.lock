@@ -75,6 +75,7 @@ dependencies = [
  "either",
  "futures",
  "itertools",
+ "lerp",
  "multimap",
  "num-bigint",
  "num-rational",
@@ -304,6 +305,15 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+
+[[package]]
+name = "lerp"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b19ac50d419bff1a024a8eb8034bfbee6c1cf8fa3472502f6bd3def327b09e4c"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "libc"

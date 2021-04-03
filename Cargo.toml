@@ -41,3 +41,4 @@ validator = { version = "0.12", features = ["derive"] }
 
 itertools = "0.10" # for sorting...
 rand = "0.8" # For randomly choosing maps from a pool.
+lerp = "0.4"
