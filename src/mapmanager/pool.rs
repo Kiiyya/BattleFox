@@ -29,7 +29,7 @@ pub trait VehiclesSpecified {
 /// Carries information whether the MIP has vehicles specified or not. And carries whether there
 /// should be vehicles or not.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Vehicles(bool);
+pub struct Vehicles(pub bool);
 impl VehiclesSpecified for MapInPool<Vehicles> {
     fn has_vehicles(&self) -> bool {
         self.extra.0

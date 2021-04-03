@@ -18,6 +18,7 @@
                     {"map": "Locker", "mode": "Rush", "extra": false},
                     {"map": "Metro", "mode": "Rush", "extra": false},
                     {"map": "Shanghai", "mode": "Rush", "extra": false},
+                    {"map": "Altai", "mode": "Rush", "extra": false},
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": false}
                 ]
             },

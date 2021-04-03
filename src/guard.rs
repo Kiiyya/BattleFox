@@ -129,7 +129,7 @@ pub struct False;
 ///
 /// Each `Or` adds one bit of extra information though, other judgements may
 /// add more too.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Guard<T, J: Judgement<T>> {
     inner: T,
     judgement: J,

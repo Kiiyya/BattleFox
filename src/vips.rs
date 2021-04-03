@@ -8,15 +8,11 @@ use battlefield_rcon::{
 
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::guard::{
-    or::Or,
-    recent::{MaxAge, Recent},
-    Guard, Judgement,
-};
+use crate::guard::{Guard, Judgement, or::Or, recent::{Age, MaxAge, Recent}};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct YesVip;
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NotVip;
 pub type MaybeVip = Or<YesVip, NotVip>;
 
@@ -108,6 +104,27 @@ impl Vips {
                 }
             })
             .await?)
+    }
+
+    pub async fn get_player(&self, player: &Player, bf4: &Bf4Client) -> RconResult<Guard<Player, Recent<MaybeVip>>> {
+        let vip = self.get(&player.name, bf4).await?;
+        assert_eq!(player.name, *vip);
+        unsafe {
+            Ok(Guard::new_raw(player.clone(), *vip.get_judgement()))
+        }
+    }
+
+    pub async fn get_player_use<Ret>(&self, player: &Player, bf4: &Bf4Client, user: impl FnOnce(Guard<Player, MaybeVip>) -> Ret) -> RconResult<Ret> {
+        loop {
+            let vip = self.get_player(player, bf4).await?;
+            match vip.cases() {
+                Age::Recent(g) => break Ok(user(g)),
+                Age::Old => {
+                    println!("[vips.rs get_player_use] retrying... ({})", player.name);
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                },
+            }
+        }
     }
 
     async fn refersh<T>(

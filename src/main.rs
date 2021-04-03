@@ -14,7 +14,7 @@ use battlefield_rcon::{
     rcon::{self, RconConnectionInfo},
 };
 use mapmanager::{pool::Vehicles, MapManager, PopState};
-use mapvote::{Mapvote, config::MapVoteConfig};
+use mapvote::Mapvote;
 
 pub mod guard;
 pub mod mapmanager;
@@ -92,7 +92,8 @@ async fn main() -> rcon::RconResult<()> {
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));
-    let mapvote = Mapvote::new(mapman.clone(), vips.clone(), players.clone(), MapVoteConfig { n_options: 4 }).await;
+    let mapvote_config = load_config("configs/mapvote.json").await.unwrap();
+    let mapvote = Mapvote::new(mapman.clone(), vips.clone(), players.clone(), mapvote_config).await;
 
     // connect
     println!(

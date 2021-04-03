@@ -53,6 +53,8 @@ struct Inner {
     votes: HashMap<Player, Ballot<MapInPool<()>>>,
 
     pop_state: PopState<Vehicles>,
+
+    nominations: HashMap<Guard<Player, YesVip>, HashSet<Map>>
 }
 
 #[derive(Debug)]
@@ -71,9 +73,26 @@ impl Inner {
             ballots: self.votes.values().cloned().collect(),
         }
     }
-}
 
-impl Inner {
+    /// Gets the amount of nominations that the VIP has done this round.
+    fn vip_n_noms(&self, vip: &Guard<Player, YesVip>) -> usize {
+        if let Some(v) = self.nominations.get(vip) {
+            v.len()
+        } else {
+            0
+        }
+    }
+
+    fn vip_nom(&mut self, vip: &Guard<Player, YesVip>, map: Map) {
+        if let Some(v) = self.nominations.get_mut(vip) {
+            v.insert(map);
+        } else {
+            let mut hs = HashSet::new();
+            hs.insert(map);
+            self.nominations.insert(vip.to_owned(), hs);
+        }
+    }
+
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
     fn fmt_options(&self, lines: &mut Vec<String>) {
         let x = self
@@ -127,6 +146,7 @@ impl Inner {
     fn set_up_new_vote(&mut self, n: usize) {
         self.alternatives = self.pop_state.pool.choose_random(n).extra_remove();
         self.votes.clear();
+        self.nominations.clear();
         println!(
             "I've set up a new vote with pool {:?}, so options are {:?}.",
             self.pop_state, self.alternatives
@@ -164,6 +184,12 @@ enum VoteResult<E: Eq + Clone> {
     /// - Mapvote is currently in initialization phase
     /// - In the future: maybe have it disable at round start.
     Inactive,
+}
+
+enum NomMapParseResult {
+    Ok(Map),
+    Empty,
+    Other,
 }
 
 impl Mapvote {
@@ -334,6 +360,18 @@ impl Mapvote {
                 }
             });
 
+            // notify any VIP who nominated a map that is has been removed,
+            // and that they can nominate something again.
+            for (vip, noms) in &mut inner.nominations {
+                let yoinked = noms.intersection(&alternatives_removals).cloned().collect::<HashSet<Map>>();
+                if !yoinked.is_empty() {
+                    futures_removals.push(bf4.say_lines(vec![
+                        "Your nomination(s) have been retracted, you can now nominate something else :)".to_string()
+                    ], vip.clone().get()));
+                    noms.retain(|m| !alternatives_removals.contains(m));
+                }
+            }
+
             inner.pop_state = popstate;
             drop(lock);
 
@@ -348,6 +386,7 @@ impl Mapvote {
                 alternatives: MapPool::new(),
                 votes: HashMap::new(),
                 pop_state: popstate,
+                nominations: HashMap::new(),
             };
             init.set_up_new_vote(self.config.n_options);
             println!("Popstate initialized! New: {}", init.pop_state.name);
@@ -520,12 +559,11 @@ impl Mapvote {
         player: Player,
         maps: &[(Map, GameMode)],
     ) -> RconResult<()> {
-        let vip = self.vips.get(&player.name, bf4).await?;
+        let vip = self.vips.get_player(&player, bf4).await?;
 
         match vip.cases() {
             Recent(g) => {
-                let ugh = unsafe { Guard::new_raw(player.clone(), *g.get_judgement()) };
-                match self.vote(&ugh, maps).await {
+                match self.vote(&g, maps).await {
                     VoteResult::Ok {
                         new,
                         old,
@@ -566,7 +604,7 @@ impl Mapvote {
                             format!("{}: Maps {} are not available with the current population level. Try again.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
                         ], player).await;
                     }
-                    VoteResult::NotInOptions { missing } => match ugh.cases() {
+                    VoteResult::NotInOptions { missing } => match g.cases() {
                         Left(yesvip) => {
                             let _ = bf4
                                 .say_lines(
@@ -611,6 +649,97 @@ impl Mapvote {
         Ok(())
     }
 
+    async fn handle_nomination(&self, bf4: Arc<Bf4Client>, player: Guard<Player, MaybeVip>, map: NomMapParseResult) {
+        match player.cases() {
+            Left(player) => {
+                // make sure the map was parsed correctly
+                match map {
+                    NomMapParseResult::Ok(map) => {
+                        let mut futures = Vec::new();
+                        let mut lock = self.inner.lock().await;
+                        // make sure we have a mapvote actually going at all.
+                        if let Some(inner) = &mut *lock {
+                            // make sure people don't nominate excessively much.
+                            if inner.alternatives.pool.len() < self.config.max_options {
+                                // make sure map isn't already in the options
+                                if !inner.alternatives.pool.iter().any(|mip| mip.map == map) {
+                                    // make sure the map is in the pool
+                                    if inner.alternatives.contains_map(map) {
+                                        // make sure this VIP hasn't exceeded their nomination limit this round.
+                                        if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
+                                            // phew, that's a lot of ifs...
+                                            inner.vip_nom(&player, map);
+                                            futures.push(bf4.say_lines(vec![
+                                                format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
+                                                format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                            ], Visibility::All));
+                                        } else {
+                                            futures.push(bf4.say_lines(vec![
+                                                format!("Apologies, {}, you can't nominate more maps.", &*player),
+                                                format!("The maximum nominations per round per VIP are {}.", self.config.max_noms_per_vip),
+                                            ], player.get().into()));
+                                        }
+                                    } else {
+                                        futures.push(bf4.say_lines(vec![
+                                            format!("Sorry, {} is not avilable in this population level :(", &*player),
+                                            "Maybe once more players join, it'll become available :)".to_string(),
+                                        ], player.get().into()));
+                                    }
+                                } else {
+                                    futures.push(bf4.say_lines(vec![
+                                        format!("{} is already in the options..", map.Pretty()),
+                                        "Try nominating some other map".to_string(),
+                                    ], player.get().into()));
+                                }
+                            } else {
+                                futures.push(bf4.say_lines(vec![
+                                    format!("Apologies, but {} options at once is the maximum!", inner.alternatives.pool.len()),
+                                    "Try again next round!".to_string(),
+                                ], player.get().into()));
+                            }
+                        } else {
+                            futures.push(bf4.say_lines(vec![
+                                "There is no mapvote going currently. Try again in a couple minutes :).".to_string()
+                            ], player.get().into()));
+                        }
+                        drop(lock); // very important to free this lock before we do rcon calls.
+                        join_all(futures).await;
+                    }
+                    NomMapParseResult::Empty => {
+                        // print which maps can be nominated.
+                        let mut futures = Vec::new();
+                        let lock = self.inner.lock().await;
+                        if let Some(inner) = &*lock {
+                            let nominatable = MapPool::additions(&inner.alternatives, &inner.pop_state.pool.extra_remove());
+                            let nominatable = nominatable.pool.iter().map(|mip| mip.map.Pretty()).collect::<Vec<_>>();
+                            futures.push(bf4.say_lines(vec![
+                                format!("You can nominate the following: {}", nominatable.iter().join(", ")), // TODO: if there's too many maps, this might overflow.
+                            ], &*player));
+                        } else {
+                            futures.push(bf4.say_lines(vec![
+                                "There is no mapvote going currently. Try again in a couple minutes :).".to_string()
+                            ], &*player));
+                        }
+                        drop(lock);
+                        join_all(futures).await;
+                    }
+                    NomMapParseResult::Other => {
+                        let _ = bf4.say_lines(vec![
+                            "You are VIP! But I couldn't understand which map you want to nominate :(",
+                            "Example usage: !nominate metro",
+                        ], player.get());
+                    }
+                }
+            }
+            Right(player) => {
+                let _ = bf4.say_lines(vec![
+                    format!("Sorry {}, but you are not a VIP (yet), and thus can't nominate maps :(", &*player),
+                    "Get your VIP slot for $5/month at bfcube.com! <3".to_string(),
+                ], &*player).await;
+            }
+        }
+    }
+
     async fn handle_chat_msg(
         self: Arc<Self>,
         bf4: Arc<Bf4Client>,
@@ -630,29 +759,34 @@ impl Mapvote {
                     let _ = bf4.say("Mapvote is currently inactive, try again later :)".to_string(), player.clone()).await;
                 }
 
-                // if let Some(vote) = inner.votes.get(&player) {
-                //     // if player has already voted, just print that and nothing else.
-                //     lines.push(format!("You voted for {}", vote));
-                // } else {
-                //     // otherwise, print instructions on how to vote.
-                //     lines.push(
-                //         "You can vote first, second, etc... preferences like this:".to_string(),
-                //     );
-                //     lines.push("!metro gulf-of-oman pearlmarket".to_string());
-                //     lines.push("You haven't voted yet! Vote for ANY map you like".to_string());
-                // }
-
-                // drop(inner);
+                drop(lock);
                 let _ = bf4.say_lines(lines, player).await;
                 Ok(())
             }
-            "/haha next map" => {
+            "!nominate" | "/nominate" => {
+                let map = match split.get(1) {
+                    Some(&word) => match Map::try_from_short(word) {
+                        Some(map) => NomMapParseResult::Ok(map),
+                        None => NomMapParseResult::Other,
+                    },
+                    None => NomMapParseResult::Empty,
+                };
                 tokio::spawn({
-                    let myself = Arc::clone(&self);
+                    let player = player.clone();
+                    let bf4 = bf4.clone();
+                    let myself = self.clone();
                     async move {
-                        myself.handle_round_over(&bf4).await;
+                        let vip = myself.vips.get_player_use(&player, &bf4,
+                            |g| async {
+                                myself.handle_nomination(bf4.clone(), g, map).await;
+                            }
+                        ).await;
+                        if let Ok(vip) = vip {
+                            vip.await
+                        }
                     }
                 });
+
                 Ok(())
             }
             _ => {
