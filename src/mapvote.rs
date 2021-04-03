@@ -106,13 +106,13 @@ impl MapvoteInner {
         }
     }
 
-    fn fmt_personal_vip_status(
-        &self,
-        lines: &mut Vec<String>,
-        perspective: &Guard<Player, YesVip>,
-    ) {
-        // TODO: put the Leader and Runner-up in here.
-    }
+    // fn fmt_personal_vip_status(
+    //     &self,
+    //     lines: &mut Vec<String>,
+    //     perspective: &Guard<Player, YesVip>,
+    // ) {
+    //     // TODO: put the Leader and Runner-up in here.
+    // }
 
     fn set_up_new_vote(&mut self) {
         self.alternatives = self.pop_state.pool.choose_random(4).extra_remove();
@@ -343,7 +343,7 @@ impl Mapvote {
                         });
                     } else {
                         tokio::spawn(async move {
-                            mapvote.handle_chat_msg(bf4, vis, player, msg).await;
+                            let _ = mapvote.handle_chat_msg(bf4, vis, player, msg).await;
                         });
                     }
                 }

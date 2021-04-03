@@ -53,6 +53,7 @@ async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> 
     Ok(t)
 }
 
+#[allow(dead_code)]
 async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigError> {
     let mut file = tokio::fs::File::create(path)
         .await

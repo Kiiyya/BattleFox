@@ -166,6 +166,9 @@ impl<T, J: Judgement<T>> Guard<T, J> {
         Self { inner, judgement }
     }
 
+    /// # Safety
+    /// This function allows you to get a judgement which should otherwise be inaccessible,
+    /// for use in e.g. [`new_raw`].
     pub unsafe fn get_judgement(&self) -> &J {
         &self.judgement
     }

@@ -147,6 +147,7 @@ impl Vips {
 
 #[cfg(test)]
 mod test {
+    #![allow(dead_code, unused_variables)]
     use super::*;
     use crate::guard::Guard;
     use ascii::AsciiString;
@@ -161,7 +162,5 @@ mod test {
         //     Age::Recent(g) => match g.cases() {},
         //     Age::Old => {}
         // }
-
-        let bf4: Bf4Client = todo!();
     }
 }

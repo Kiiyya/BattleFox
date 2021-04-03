@@ -63,7 +63,7 @@ impl Inner {
 
     fn trim_old(&mut self) {
         self.players
-            .retain(|k, v| v.last_seen.elapsed() < Duration::from_secs(60 * 10));
+            .retain(|_, v| v.last_seen.elapsed() < Duration::from_secs(60 * 10));
     }
 }
 
@@ -144,7 +144,7 @@ impl Players {
                 }
                 Ok(Event::Leave {
                     player,
-                    final_scores,
+                    final_scores: _,
                 }) => {
                     let mut inner = self.inner.lock().await;
                     inner.players_joining.remove(&player);
@@ -189,9 +189,11 @@ impl Players {
                 Ok(Event::Spawn { player, team }) => {
                     let mut inner = self.inner.lock().await;
                     if let Some(p) = inner.players.get_mut(&player) {
+                        p.team = team;
                         p.last_seen = now;
                     }
                     if let Some(p) = inner.players_joining.get_mut(&player) {
+                        p.team = Some(team);
                         p.last_seen = now;
                     }
                 }
