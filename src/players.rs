@@ -87,7 +87,7 @@ impl Players {
         inner.players.clone()
     }
 
-    pub async fn poller(&self, bf4: &Bf4Client) -> RconResult<()> {
+    pub async fn poller(&self, bf4: Arc<Bf4Client>) -> RconResult<()> {
         loop {
             let list = bf4.list_players(Visibility::All).await.unwrap(); // TODO: unwrap
             let now = Instant::now();
@@ -112,11 +112,19 @@ impl Players {
                 // drop lock here, before timer.
             }
 
-            tokio::time::sleep(Duration::from_secs(60 * 3 + 18));
+            tokio::time::sleep(Duration::from_secs(60 * 3 + 18)).await;
         }
     }
 
-    pub async fn run(&self, bf4: Arc<Bf4Client>) -> RconResult<()> {
+    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        tokio::spawn({
+            let bf4 = Arc::clone(&bf4);
+            let myself = Arc::clone(&self);
+            async move {
+                myself.poller(bf4).await
+            }
+        });
+
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
             let now = Instant::now();
