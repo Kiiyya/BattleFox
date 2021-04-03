@@ -33,6 +33,8 @@ struct PlayerJoining {
 struct Inner {
     players: HashMap<Player, PlayerInServer>,
     players_joining: HashMap<Player, PlayerJoining>,
+
+    last_checked: Option<Instant>,
 }
 
 impl Inner {
@@ -78,42 +80,53 @@ impl Players {
             inner: Mutex::new(Inner {
                 players: HashMap::new(),
                 players_joining: HashMap::new(),
+                last_checked: None,
             }),
         }
     }
 
-    pub async fn players(&self) -> HashMap<Player, PlayerInServer> {
+    pub async fn players(&self, bf4: &Bf4Client) -> HashMap<Player, PlayerInServer> {
         let inner = self.inner.lock().await;
-        inner.players.clone()
+        if let Some(last_checked) = inner.last_checked {
+            if last_checked.elapsed() < Duration::from_secs(60 * 3 + 18) {
+                return inner.players.clone();
+            }
+        }
+
+        drop(inner);
+        self.refresh(bf4, |inner| inner.players.clone()).await
     }
 
     pub async fn poller(&self, bf4: Arc<Bf4Client>) -> RconResult<()> {
         loop {
-            let list = bf4.list_players(Visibility::All).await.unwrap(); // TODO: unwrap
-            let now = Instant::now();
-            {
-                let mut inner = self.inner.lock().await;
-                inner.players.clear(); // yeet it all.
-                for pi in list {
-                    let player = Player {
-                        name: pi.player_name,
-                        eaid: pi.eaid,
-                    };
-                    inner.players.insert(
-                        player.clone(),
-                        PlayerInServer {
-                            player,
-                            team: pi.team,
-                            squad: pi.squad,
-                            last_seen: now,
-                        },
-                    );
-                }
-                // drop lock here, before timer.
-            }
-
+            self.refresh(&bf4, |_| ()).await;
             tokio::time::sleep(Duration::from_secs(60 * 3 + 18)).await;
         }
+    }
+
+    async fn refresh<Ret>(&self, bf4: &Bf4Client, getter: impl FnOnce(&mut Inner) -> Ret) -> Ret {
+        let list = bf4.list_players(Visibility::All).await.unwrap();
+        let now = Instant::now();
+
+        let mut inner = self.inner.lock().await;
+        inner.players.clear(); // yeet it all.
+        for pi in list {
+            let player = Player {
+                name: pi.player_name,
+                eaid: pi.eaid,
+            };
+            inner.players.insert(
+                player.clone(),
+                PlayerInServer {
+                    player,
+                    team: pi.team,
+                    squad: pi.squad,
+                    last_seen: now,
+                },
+            );
+        }
+        inner.last_checked = Some(now);
+        getter(&mut inner)
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {

@@ -21,7 +21,7 @@
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": false}
                 ]
             },
-            "min_players": 16
+            "min_players": 1
         },
         {
             "name": "NormalPopulation",
@@ -31,13 +31,12 @@
                     {"map": "Metro", "mode": "Rush", "extra": true},
                     {"map": "Shanghai", "mode": "Rush", "extra": true},
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": true},
-                    {"map": "Altai", "mode": "Rush", "extra": true},
-                    {"map": "DragonPass", "mode": "Rush", "extra": true}
+                    {"map": "Altai", "mode": "Rush", "extra": false}
                 ]
             },
-            "min_players": 32
+            "min_players": 7
         }
     ],
     "vehicle_threshold": 16,
-    "leniency": 4
+    "leniency": 0
 }

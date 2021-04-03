@@ -177,7 +177,7 @@ impl MapManager {
                 Ok(list) => list,
                 Err(ListPlayersError::Rcon(rconerr)) => return Err(rconerr),
             };
-            let new_pop = dbg!(playerlist.len());
+            let new_pop = playerlist.len();
             let mut lock = self.inner.lock().await;
             lock.pop = Some(new_pop);
             lock.joins_leaves_since_pop = 0;
@@ -196,12 +196,13 @@ impl MapManager {
         } else {
             lock.joins_leaves_since_pop += 1;
             if let Some(pop) = &mut lock.pop {
-                *pop += change as usize; // this is fine due to 2s-complement
-                                         // but it can still happen that rcon somehow ate join/leave packets, so juuuuust
-                                         // in caaaase that happened, we need to prevent negative pop counts.
+                // this is fine due to 2s-complement
+                // but it can still happen that rcon somehow ate join/leave packets, so juuuuust
+                // in caaaase that happened, we need to prevent negative pop counts.
+                *pop = pop.wrapping_add(change as usize);
+
                 if *pop > 9999 {
-                    lock.pop = None;
-                    // fuck it, next time someone calls `get_pop_count`, it'll update.
+                    lock.pop = Some(0);
                 }
             }
         }
@@ -259,7 +260,7 @@ impl MapManager {
         fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 2)).await?;
 
         let mut lock = self.inner.lock().await;
-        lock.pop_state = dbg!(newpop.clone());
+        lock.pop_state = newpop.clone();
         let handlers = lock.pool_change_callbacks.clone();
         drop(lock); // since handlers may need to make very long rcon calls, drop lock early.
 
@@ -287,7 +288,7 @@ impl MapManager {
         // on start, get current player amounts (pop), then switch to that popstate initially.
         // In the constructor, popstate gets set to the base (0) case, but when we launch BattleFox,
         // it may not be on an empty server.
-        let pop = dbg!(self.get_pop_count(&bf4).await?);
+        let pop = self.get_pop_count(&bf4).await?;
         let state = determine_popstate(&self.pop_states, pop).clone();
         self.change_pop_state(state, &bf4)
             .await

@@ -14,7 +14,7 @@ use battlefield_rcon::{
     rcon::{self, RconConnectionInfo},
 };
 use mapmanager::{pool::Vehicles, MapManager, PopState};
-use mapvote::Mapvote;
+use mapvote::{Mapvote, config::MapVoteConfig};
 
 pub mod guard;
 pub mod mapmanager;
@@ -92,7 +92,7 @@ async fn main() -> rcon::RconResult<()> {
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));
-    let mapvote = Mapvote::new(mapman.clone(), vips.clone(), players.clone()).await;
+    let mapvote = Mapvote::new(mapman.clone(), vips.clone(), players.clone(), MapVoteConfig { n_options: 4 }).await;
 
     // connect
     println!(
@@ -104,6 +104,9 @@ async fn main() -> rcon::RconResult<()> {
 
     // start parts.
     let mut jhs = Vec::new();
+
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));

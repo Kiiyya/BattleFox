@@ -14,6 +14,8 @@ use crate::{
     vips::{MaybeVip, Vips, YesVip},
 };
 
+use self::config::MapVoteConfig;
+
 use super::stv::tracing::NoTracer;
 use super::stv::Ballot;
 use ascii::{AsciiString, IntoAsciiString};
@@ -46,8 +48,12 @@ use tokio::{
 use num_rational::BigRational as Rat;
 use num_traits::One;
 
+pub mod config;
+
+
+
 #[derive(Debug)]
-struct MapvoteInner {
+struct Inner {
     alternatives: MapPool<()>,
     /// Invariant: All ballots have at least one option on them.
     votes: HashMap<Player, Ballot<MapInPool<()>>>,
@@ -57,13 +63,14 @@ struct MapvoteInner {
 
 #[derive(Debug)]
 pub struct Mapvote {
-    inner: Mutex<MapvoteInner>,
+    inner: Mutex<Inner>,
     mapman: Arc<MapManager>,
     vips: Arc<Vips>,
     players: Arc<Players>,
+    config: MapVoteConfig,
 }
 
-impl MapvoteInner {
+impl Inner {
     pub fn to_profile(&self) -> Profile<MapInPool<()>> {
         Profile {
             alts: self.alternatives.to_set(),
@@ -72,7 +79,7 @@ impl MapvoteInner {
     }
 }
 
-impl MapvoteInner {
+impl Inner {
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
     fn fmt_options(&self, lines: &mut Vec<String>) {
         let x = self
@@ -123,8 +130,8 @@ impl MapvoteInner {
     //     // TODO: put the Leader and Runner-up in here.
     // }
 
-    fn set_up_new_vote(&mut self) {
-        self.alternatives = self.pop_state.pool.choose_random(4).extra_remove();
+    fn set_up_new_vote(&mut self, n: usize) {
+        self.alternatives = self.pop_state.pool.choose_random(n).extra_remove();
         self.votes.clear();
         println!(
             "I've set up a new vote with pool {:?}, so options are {:?}.",
@@ -162,9 +169,9 @@ enum VoteResult<E: Eq + Clone> {
 
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
-    pub async fn new(mapman: Arc<MapManager>, vips: Arc<Vips>, players: Arc<Players>) -> Arc<Self> {
+    pub async fn new(mapman: Arc<MapManager>, vips: Arc<Vips>, players: Arc<Players>, config: MapVoteConfig) -> Arc<Self> {
         let myself = Arc::new(Self {
-            inner: Mutex::new(MapvoteInner {
+            inner: Mutex::new(Inner {
                 alternatives: MapPool::new(),
                 votes: HashMap::new(),
                 pop_state: mapman.pop_state().await,
@@ -172,6 +179,7 @@ impl Mapvote {
             mapman: mapman.clone(),
             vips,
             players,
+            config,
         });
 
         // holy shit this is ugly.
@@ -201,18 +209,10 @@ impl Mapvote {
         println!("Popstate changed! New: {}", popstate.name);
         let mut lock = self.inner.lock().await;
 
-        // TODO: check alternatives, we may need to remove some & notify people who voted for them.
-        // TODO: Notify everyone of pop state change
-
-        let removals = dbg!(MapPool::removals(&lock.pop_state.pool, &popstate.pool));
-        let additions = dbg!(MapPool::additions(&lock.pop_state.pool, &popstate.pool));
-
         let mut futures = Vec::new();
         let direction = PopState::change_direction(&lock.pop_state, &popstate);
         match direction {
             Ordering::Less => {
-                // lock.alternatives
-                //     .retain(|alt| popstate.pool.contains_mapmode(alt.map, &alt.mode));
                 println!(
                     "Mapman: PopState downgrade from {} to {}",
                     lock.pop_state.name, popstate.name
@@ -223,10 +223,6 @@ impl Mapvote {
                 return; // or maybe panic instead...?
             }
             Ordering::Greater => {
-                // futures.push(bf4.say_lines(
-                //     vec!["The map pool expanded! VIPs can nominate more maps now :)".to_string()],
-                //     Visibility::All,
-                // ));
                 // TODO: Notify every single VIP individually that they can nominate more now.
                 println!(
                     "Mapman: PopState upgrade from {} to {}",
@@ -235,22 +231,40 @@ impl Mapvote {
             }
         }
 
+        let removals = dbg!(MapPool::removals(&lock.pop_state.pool, &popstate.pool));
+        let additions = dbg!(MapPool::additions(&lock.pop_state.pool, &popstate.pool));
+
         // first, remove the current voting options fittingly and choose replacements.
         let removed_alternatives = lock
-            .alternatives
+            .alternatives // removals is old pop -> current pop, but what about our current options?
             .intersect(&removals.extra_remove())
-            .pool
-            .iter()
-            .map(|mip| mip.map)
-            .collect();
-        let replacements = popstate
+            .to_mapset();
+            // .pool
+            // .iter()
+            // .map(|mip| mip.map)
+            // .collect();
+        let mut replacements = popstate
             .pool
             .without_many(&removed_alternatives)
             .choose_random(removed_alternatives.len());
+        // actually remove and replace the alternatives.
         lock.alternatives
             .pool
-            .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode)); // <-- actually remove them here.
-                                                                               // and then inform players
+            .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode));
+        lock.alternatives.pool
+            .extend(replacements.extra_remove().pool.into_iter());
+        if lock.alternatives.pool.len() < self.config.n_options {
+            let mut fillup = popstate.pool
+                .without_many(&lock.alternatives.to_mapset())
+                .choose_random(self.config.n_options - lock.alternatives.pool.len());
+            replacements.pool.append(&mut dbg!(fillup).pool);
+        }
+
+        dbg!(&removed_alternatives);
+        dbg!(&replacements);
+        lock.alternatives.pool.append(&mut replacements.clone().extra_remove().pool);
+
+        // and then inform players
         if removed_alternatives.len() == 1 {
             // special case so that the messages are nicer.
             if replacements.pool.len() == 1 {
@@ -265,12 +279,23 @@ impl Mapvote {
                     ],
                     Visibility::All,
                 ));
-            } else {
+            } else if replacements.pool.is_empty() {
                 futures.push(bf4.say_lines(vec![
                     "Server population shrunk, and with it the map pool.".to_string(),
                     format!("{} has been removed from voting options, and no map is available to replace it",
                         removed_alternatives.iter().next().unwrap().Pretty()), // unwrap: safe because we tested len to be 1.
                 ], Visibility::All));
+            } else {
+                assert!(replacements.pool.len() >= 2);
+                futures.push(bf4.say_lines(
+                    vec![
+                        "Server population shrunk, and with it the map pool.".to_string(),
+                        format!("{} has been replaced with {}.",
+                        removed_alternatives.iter().map(|map| map.Pretty()).join(", "),
+                        replacements.pool.iter().map(|mip| mip.map.Pretty()).join(", ")),
+                    ],
+                    Visibility::All,
+                ))
             }
         } else if removed_alternatives.len() >= 2 {
             futures.push(bf4.say_lines(
@@ -329,7 +354,8 @@ impl Mapvote {
         // first, set up
         {
             let mut inner = self.inner.lock().await;
-            inner.set_up_new_vote();
+            inner.set_up_new_vote(self.config.n_options);
+            drop(inner);
         }
 
         let jh_spammer = {
@@ -383,7 +409,8 @@ impl Mapvote {
     async fn spam_status(&self, bf4: Arc<Bf4Client>) {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            let players = self.players.players().await;
+
+            let players = self.players.players(&bf4).await;
             let mut futures = Vec::new();
 
             let inner = self.inner.lock().await;
@@ -392,13 +419,15 @@ impl Mapvote {
             for player in players.keys() {
                 inner.fmt_options(&mut lines);
                 inner.fmt_personal_status(&mut lines, player);
-                futures.push(bf4.say_lines(lines.to_owned(), player.to_owned()));
+                futures.push(bf4.say_lines(lines.clone(), player.clone()));
                 lines.clear();
             }
 
-            drop(inner); // drop lock before we spend potentially 64 * 5 * 17ms = 5.4s in rcon calls...
+            // drop lock before we spend potentially 64 * 5 * 17ms = 5.4s in rcon calls...
+            drop(inner);
 
             join_all(futures).await; // up to 5.4s, ouchies.
+
         }
     }
 
@@ -628,7 +657,7 @@ impl Mapvote {
         let profile = {
             let mut inner = self.inner.lock().await;
             let ret = inner.to_profile();
-            inner.set_up_new_vote();
+            inner.set_up_new_vote(self.config.n_options);
             ret
         };
 

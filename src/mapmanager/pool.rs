@@ -139,6 +139,10 @@ impl<E: Eq + Clone> MapPool<E> {
         self.pool.iter().cloned().collect()
     }
 
+    pub fn to_mapset(&self) -> HashSet<Map> {
+        self.pool.iter().map(|mip| mip.map).collect()
+    }
+
     /// Returns the maps which retain the same (Map, Mode), but whose `extra` changed.
     ///
     /// # Returns
