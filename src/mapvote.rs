@@ -1,22 +1,16 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{
-    guard::{
+use crate::{guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
-    },
-    mapmanager::{
+    }, mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    },
-    players::Players,
-    stv::{CheckBallotResult, Profile},
-    vips::{MaybeVip, Vips, YesVip},
-};
+    }, players::Players, stv::{CheckBallotResult, Profile, tracing::ElectElimTiebreakTracer}, vips::{MaybeVip, Vips, YesVip}};
 
 use self::config::MapVoteConfig;
 
-use super::stv::tracing::NoTracer;
+use super::stv::tracing::{NoTracer, StvAction};
 use super::stv::Ballot;
 use ascii::{AsciiString, IntoAsciiString};
 use battlefield_rcon::{
@@ -384,7 +378,7 @@ impl Mapvote {
                     if msg.as_str().starts_with("/haha next map") {
                         let mapman = self.mapman.clone();
                         tokio::spawn(async move {
-                            mapvote.handle_round_over(&bf4, &mapman).await;
+                            mapvote.handle_round_over(&bf4).await;
                         });
                     } else {
                         tokio::spawn(async move {
@@ -401,7 +395,7 @@ impl Mapvote {
                         // let's wait like 10 seconds because people might still vote in the end screen.
                         tokio::time::sleep(Duration::from_secs(12)).await;
 
-                        mapvote.handle_round_over(&bf4, &mapman).await;
+                        mapvote.handle_round_over(&bf4).await;
                     });
                 }
                 Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
@@ -618,7 +612,7 @@ impl Mapvote {
     }
 
     async fn handle_chat_msg(
-        &self,
+        self: Arc<Self>,
         bf4: Arc<Bf4Client>,
         vis: Visibility,
         player: Player,
@@ -650,7 +644,16 @@ impl Mapvote {
 
                 // drop(inner);
                 let _ = bf4.say_lines(lines, player).await;
-                return Ok(());
+                Ok(())
+            }
+            "/haha next map" => {
+                tokio::spawn({
+                    let myself = Arc::clone(&self);
+                    async move {
+                        myself.handle_round_over(&bf4).await;
+                    }
+                });
+                Ok(())
             }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
@@ -671,7 +674,7 @@ impl Mapvote {
         }
     }
 
-    async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapManager>) {
+    async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
         let profile = {
             let mut lock = self.inner.lock().await;
             if let Some(inner) = &mut *lock {
@@ -685,14 +688,29 @@ impl Mapvote {
 
         // only do something if we have an Inner.
         if let Some(profile) = profile {
-            if let Some(mip) = profile.vanilla_stv_1(&mut NoTracer) {
-                bf4.say(
-                    format!("[[MAPVOTE]] Winner: {:?}", mip.map),
-                    Visibility::All,
-                )
+            // let mut tracer = ElectElimTiebreakTracer::new();
+            if let Some((winner, runner_up)) = profile.vanilla_stv_1_with_runnerup(&mut NoTracer) {
+                // let x = tracer.trace.iter().map(|t| match t {
+                //     StvAction::Elected { elected, profile_afterwards } => {
+
+                //     }
+                //     StvAction::Eliminated { alt, profile_afterwards } => {}
+                //     StvAction::RejectTiebreak { tied, chosen, score } => {}
+                //     StvAction::Stv1WinnerTiebreak { tied, chosen } => {}
+                //     _ => {}
+                // });
+                let runner_up_text = if let Some(runner_up) = runner_up {
+                    format!("(runner-up: {})", runner_up.map.Pretty())
+                } else {
+                    "".to_string()
+                };
+                bf4.say_lines(vec![
+                    format!("Mapvote: {} people voted", profile.ballots.len()),
+                    format!("Winner: {:?} {}", winner.map, runner_up_text),
+                ], Visibility::All)
                 .await
                 .unwrap();
-                maplist.switch_to(bf4, &mip).await.unwrap();
+                self.mapman.switch_to(bf4, &winner).await.unwrap();
                 // maplist.switch_to(bf4, mipmap, mode, false).await.unwrap();
             } else {
                 bf4.say("Round over, no winner", Visibility::All)

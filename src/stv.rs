@@ -551,7 +551,7 @@ pub mod test {
         let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
 
         println!("Starting with {}", profile);
-        for action in tracer.traces {
+        for action in tracer.trace {
             if let Some(p) = action.get_profile_after() {
                 println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
             } else {

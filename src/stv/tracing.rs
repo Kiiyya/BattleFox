@@ -146,32 +146,32 @@ impl<A: Display + Debug> Display for StvAction<A> {
 /// - Reject Tiebreak
 #[derive(Debug)]
 pub struct ElectElimTiebreakTracer<A> {
-    pub traces: Vec<StvAction<A>>,
+    pub trace: Vec<StvAction<A>>,
 }
 
 impl<A> ElectElimTiebreakTracer<A> {
     pub fn new() -> Self {
-        Self { traces: Vec::new() }
+        Self { trace: Vec::new() }
     }
 }
 
 impl<A: Clone> StvTracer<A> for ElectElimTiebreakTracer<A> {
     fn electing(&mut self, alts: &HashSet<A>, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::Elected {
+        self.trace.push(StvAction::Elected {
             elected: alts.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
     }
 
     fn eliminating(&mut self, alt: &A, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::Eliminated {
+        self.trace.push(StvAction::Eliminated {
             alt: alt.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
     }
 
     fn reject_tie_break(&mut self, between: &HashSet<A>, chosen: &A, score: &Rat) {
-        self.traces.push(StvAction::RejectTiebreak {
+        self.trace.push(StvAction::RejectTiebreak {
             tied: between.to_owned(),
             chosen: chosen.to_owned(),
             score: score.to_owned(),

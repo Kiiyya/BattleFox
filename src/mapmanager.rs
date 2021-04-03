@@ -151,15 +151,17 @@ impl MapManager {
             lock.pop_state.clone()
         };
 
+        let tickets : usize = (75.0 + (400 - 75) as f64 * (pop as f64 / 64.0)).round() as usize;
+
         if let Some(index) = pop_state.pool.get_rcon_index(mip.map, &mip.mode, |_| true) {
             // sweet, index is valid. Go for it.
-            switch_map_to(bf4, index, vehicles).await?;
+            switch_map_to(bf4, index, vehicles, tickets).await?;
             Ok(())
         } else {
             println!("Failed to find RCON index of {} {:?}. This is possible, but should not happen tooo often.", mip.map.Pretty(), mip.mode);
             // just add the map temporarily and switch anyway.
             bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
-            switch_map_to(bf4, 0, vehicles).await?;
+            switch_map_to(bf4, 0, vehicles, tickets).await?;
             bf4.maplist_remove(0).await?;
             Ok(())
         }
@@ -360,22 +362,22 @@ pub async fn switch_map_to(
     bf4: &Arc<Bf4Client>,
     index: usize,
     vehicles: bool,
+    tickets: usize,
 ) -> Result<(), MapListError> {
     bf4.maplist_set_next_map(index).await?;
+    println!("[mapman switch_map_to()] index: {}, vehicles: {}, tickets: {}", index, vehicles, tickets);
 
-    if !vehicles {
-        let _ = bf4.set_preset(Preset::Custom).await;
-        let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
-        sleep(Duration::from_secs(1)).await;
-    }
+    let _ = bf4.set_preset(Preset::Custom).await;
+    let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
+    let _  = bf4.set_tickets(tickets).await;
+    sleep(Duration::from_secs(1)).await;
 
     bf4.maplist_run_next_round().await?;
 
-    if !vehicles {
-        sleep(Duration::from_secs(10)).await;
-        let _ = bf4.set_vehicles_spawn_allowed(true).await;
-        let _ = bf4.set_preset(Preset::Hardcore).await;
-    }
+    sleep(Duration::from_secs(8)).await;
+    let _  = bf4.set_tickets(std::cmp::min(100, tickets)).await;
+    let _ = bf4.set_vehicles_spawn_allowed(true).await;
+    let _ = bf4.set_preset(Preset::Hardcore).await;
 
     Ok(())
 }

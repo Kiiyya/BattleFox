@@ -666,6 +666,16 @@ impl Bf4Client {
             .await
     }
 
+    pub async fn set_tickets(&self, tickets: usize) -> RconResult<()> {
+        self.rcon
+            .query(
+                &veca!["vars.gameModeCounter", format!("{}", tickets), "false"],
+                ok_eof,
+                |_| None,
+            )
+            .await
+    }
+
     pub async fn set_vehicles_spawn_allowed(&self, allowed: bool) -> RconResult<()> {
         self.rcon
             .query(
