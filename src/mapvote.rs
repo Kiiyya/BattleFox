@@ -1,9 +1,18 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{guard::{Cases, Guard, recent::Age::{Old, Recent}}, mapmanager::{
+use crate::{
+    guard::{
+        recent::Age::{Old, Recent},
+        Cases, Guard,
+    },
+    mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    }, players::Players, stv::{CheckBallotResult, Profile}, vips::{MaybeVip, Vips, YesVip}};
+    },
+    players::Players,
+    stv::{CheckBallotResult, Profile},
+    vips::{MaybeVip, Vips, YesVip},
+};
 
 use super::stv::tracing::NoTracer;
 use super::stv::Ballot;
@@ -117,7 +126,10 @@ impl MapvoteInner {
     fn set_up_new_vote(&mut self) {
         self.alternatives = self.pop_state.pool.choose_random(4).extra_remove();
         self.votes.clear();
-        println!("I've set up a new vote with pool {:?}, so options are {:?}.", self.pop_state, self.alternatives);
+        println!(
+            "I've set up a new vote with pool {:?}, so options are {:?}.",
+            self.pop_state, self.alternatives
+        );
     }
 }
 
@@ -453,7 +465,9 @@ impl Mapvote {
         });
         let (ballot, soft_dups) = match Ballot::from_iter(Rat::one(), alts) {
             CheckBallotResult::Ok { ballot, soft_dups } => (ballot, soft_dups),
-            CheckBallotResult::UnresolvableDuplicate { problem } => return VoteResult::UnresolvableDuplicate { problem },
+            CheckBallotResult::UnresolvableDuplicate { problem } => {
+                return VoteResult::UnresolvableDuplicate { problem }
+            }
             CheckBallotResult::Empty => return VoteResult::Empty,
         };
 
@@ -466,56 +480,92 @@ impl Mapvote {
         }
     }
 
-    async fn handle_maps(&self, bf4: &Arc<Bf4Client>, player: Player, maps: &[(Map, GameMode)]) -> RconResult<()> {
+    async fn handle_maps(
+        &self,
+        bf4: &Arc<Bf4Client>,
+        player: Player,
+        maps: &[(Map, GameMode)],
+    ) -> RconResult<()> {
         let vip = self.vips.get(&player.name, bf4).await?;
 
         match vip.cases() {
             Recent(g) => {
                 let ugh = unsafe { Guard::new_raw(player.clone(), *g.get_judgement()) };
                 match self.vote(&ugh, maps).await {
-                    VoteResult::Ok { new, old, soft_dups } => {
+                    VoteResult::Ok {
+                        new,
+                        old,
+                        soft_dups,
+                    } => {
                         if let Some(old) = old {
-                            let _ = bf4.say_lines(vec![
-                                format!("{} changed their ballot to {}", player, new)
-                            ], Visibility::All).await;
+                            let _ = bf4
+                                .say_lines(
+                                    vec![format!("{} changed their ballot to {}", player, new)],
+                                    Visibility::All,
+                                )
+                                .await;
                         } else {
-                            let _ = bf4.say_lines(vec![
-                                format!("{} voted: {}", player, new)
-                            ], Visibility::All).await;
+                            let _ = bf4
+                                .say_lines(
+                                    vec![format!("{} voted: {}", player, new)],
+                                    Visibility::All,
+                                )
+                                .await;
                         }
                     }
                     VoteResult::UnresolvableDuplicate { problem } => {
-                        let _ = bf4.say_lines(vec![
-                            format!("{}: Could not figure out your preference order", player),
-                            format!("The issue is with {}", problem.map.Pretty())
-                        ], player).await;
+                        let _ = bf4
+                            .say_lines(
+                                vec![
+                                    format!(
+                                        "{}: Could not figure out your preference order",
+                                        player
+                                    ),
+                                    format!("The issue is with {}", problem.map.Pretty()),
+                                ],
+                                player,
+                            )
+                            .await;
                     }
                     VoteResult::NotInPopstate { missing } => {
                         let _ = bf4.say_lines(vec![
                             format!("{}: Maps {} are not available with the current population level. Try again.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
                         ], player).await;
                     }
-                    VoteResult::NotInOptions { missing } => {
-                        match ugh.cases() {
-                            Left(yesvip) => {
-                                let _ = bf4.say_lines(vec![
-                                    format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
-                                    format!("...but you are VIP <3!! Try this: !nominate {}", missing.iter().next().unwrap().short())
-                                ], player).await;
-                            }
-                            Right(notvip) => {
-                                let _ = bf4.say_lines(vec![
+                    VoteResult::NotInOptions { missing } => match ugh.cases() {
+                        Left(yesvip) => {
+                            let _ = bf4
+                                .say_lines(
+                                    vec![
+                                        format!(
+                                            "{}: Maps {} are not up for vote right now.",
+                                            player,
+                                            missing.iter().map(|mip| mip.Pretty()).join(", ")
+                                        ),
+                                        format!(
+                                            "...but you are VIP <3!! Try this: !nominate {}",
+                                            missing.iter().next().unwrap().short()
+                                        ),
+                                    ],
+                                    player,
+                                )
+                                .await;
+                        }
+                        Right(notvip) => {
+                            let _ = bf4.say_lines(vec![
                                     format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
                                     "VIPs can !nominate maps, get your VIP slot for $5/month at bfcube.com!".to_string(),
                                 ], player).await;
-                            }
                         }
-                    }
+                    },
                     VoteResult::Empty => {}
                 }
             }
             Old => {
-                println!("[mapvote.rs handle_maps()] Couldn't resolve vip for {}?", player);
+                println!(
+                    "[mapvote.rs handle_maps()] Couldn't resolve vip for {}?",
+                    player
+                );
                 // tokio::time::sleep(Duration::from_secs(1)).await;
                 // return self.handle_maps(bf4, player, maps).await; // just retry.
             }
@@ -558,9 +608,7 @@ impl Mapvote {
             _ => {
                 // if no command matched, try parsing !metro pearl etc
                 match parse_maps(&msg.as_str()[1..]) {
-                    ParseMapsResult::Ok(maps) => {
-                        self.handle_maps(&bf4, player, &maps).await
-                    }
+                    ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, &maps).await,
                     ParseMapsResult::Nothing => Ok(()), // silently ignore
                     ParseMapsResult::NotAMapName { orig } => {
                         let _ = bf4

@@ -120,9 +120,7 @@ impl Players {
         tokio::spawn({
             let bf4 = Arc::clone(&bf4);
             let myself = Arc::clone(&self);
-            async move {
-                myself.poller(bf4).await
-            }
+            async move { myself.poller(bf4).await }
         });
 
         let mut events = bf4.event_stream().await?;
