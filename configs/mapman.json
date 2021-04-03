@@ -21,7 +21,7 @@
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": false}
                 ]
             },
-            "min_players": 1
+            "min_players": 3
         },
         {
             "name": "NormalPopulation",

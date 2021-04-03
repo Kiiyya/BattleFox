@@ -704,6 +704,9 @@ impl Mapvote {
                 } else {
                     "".to_string()
                 };
+
+
+
                 bf4.say_lines(vec![
                     format!("Mapvote: {} people voted", profile.ballots.len()),
                     format!("Winner: {:?} {}", winner.map, runner_up_text),
