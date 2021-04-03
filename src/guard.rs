@@ -166,6 +166,10 @@ impl<T, J: Judgement<T>> Guard<T, J> {
         Self { inner, judgement }
     }
 
+    pub unsafe fn get_judgement(&self) -> &J {
+        &self.judgement
+    }
+
     pub fn infer<TargetJ: Judgement<T>>(
         self,
         rule: impl FnOnce(J) -> TargetJ,

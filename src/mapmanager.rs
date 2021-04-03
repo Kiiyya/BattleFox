@@ -2,7 +2,7 @@
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, sync::Arc, time::Duration};
+use std::{cmp::Ordering, convert::TryFrom, sync::Arc, time::Duration};
 
 use battlefield_rcon::{
     bf4::{defs::Preset, Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility},
@@ -29,12 +29,20 @@ pub struct PopState<E: Eq + Clone> {
     pub min_players: usize,
 }
 
+impl<E: Eq + Clone> PopState<E> {
+    /// - `Greater`: min players is now higher. Means we changed to a higher pop level.
+    /// - etc.
+    pub fn change_direction(before: &PopState<E>, after: &PopState<E>) -> Ordering {
+        before.min_players.cmp(&after.min_players)
+    }
+}
+
 /// Find the correct popstate, given a certain population.
 pub fn determine_popstate<E: Eq + Clone>(states: &[PopState<E>], pop: usize) -> &PopState<E> {
     if let Some(state) = states
         .iter()
-        .filter(|p| p.min_players <= pop) // if a pop state starts with more players anyway, might as well ignore it.
-        .sorted_by(|a, b| Ord::cmp(&b.min_players, &a.min_players)) // note swapped a, b in cmp(): We want descending order.
+        .filter(|&p| p.min_players <= pop) // if a pop state starts with more players anyway, might as well ignore it.
+        .sorted_by(|&a, &b| Ord::cmp(&b.min_players, &a.min_players)) // note swapped a, b in cmp(): We want descending order.
         .next()
     {
         state
@@ -294,7 +302,9 @@ impl MapManager {
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
             match event {
-                Ok(Event::Join { player: _ }) => {
+                // Join also catches the seeder bots joining.
+                // Authenticated doesn't (hopefully).
+                Ok(Event::Authenticated { player: _ }) => {
                     self.pop_change(1, &bf4).await.map_err(|mle| match mle {
                         MapListError::Rcon(rcon) => rcon,
                         MapListError::MapListFull => panic!("Map list full, huh!"),

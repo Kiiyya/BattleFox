@@ -3,9 +3,11 @@
 use ascii::IntoAsciiString;
 use dotenv::dotenv;
 use guard::Guard;
+use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use vips::Vips;
 
 use battlefield_rcon::{
     bf4::Bf4Client,
@@ -19,6 +21,7 @@ pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
 // pub mod minicache;
+pub mod players;
 mod stv;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
@@ -77,6 +80,10 @@ async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     let coninfo = get_rcon_coninfo()?;
 
+    let players = Arc::new(Players::new());
+
+    let vips = Arc::new(Vips::new());
+
     // set up parts
     let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
     let mapman = Arc::new(MapManager::new(
@@ -84,7 +91,7 @@ async fn main() -> rcon::RconResult<()> {
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));
-    let mapvote = Mapvote::new(mapman.clone()).await;
+    let mapvote = Mapvote::new(mapman.clone(), vips.clone(), players.clone()).await;
 
     // connect
     println!(

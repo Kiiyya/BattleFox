@@ -1,16 +1,13 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{
-    mapmanager::{
+use crate::{guard::{Cases, Guard, recent::Age::{Old, Recent}}, mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    },
-    stv::Profile,
-};
+    }, players::Players, stv::{CheckBallotResult, Profile}, vips::{MaybeVip, Vips, YesVip}};
 
 use super::stv::tracing::NoTracer;
 use super::stv::Ballot;
-use ascii::AsciiString;
+use ascii::{AsciiString, IntoAsciiString};
 use battlefield_rcon::{
     bf4::{
         error::{Bf4Error, Bf4Result},
@@ -18,8 +15,9 @@ use battlefield_rcon::{
     },
     rcon::{RconError, RconResult},
 };
-use futures::StreamExt;
-use std::fmt::Debug;
+use either::Either::{Left, Right};
+use futures::{future::join_all, StreamExt};
+use itertools::Itertools;
 use std::hash::Hash;
 use std::{
     any::Any,
@@ -30,6 +28,7 @@ use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
+use std::{cmp::Ordering, fmt::Debug};
 use tokio::{
     sync::Mutex,
     time::{sleep, Interval},
@@ -40,7 +39,8 @@ use num_traits::One;
 
 #[derive(Debug)]
 struct MapvoteInner {
-    alternatives: HashSet<MapInPool<()>>,
+    alternatives: MapPool<()>,
+    /// Invariant: All ballots have at least one option on them.
     votes: HashMap<Player, Ballot<MapInPool<()>>>,
 
     pop_state: PopState<Vehicles>,
@@ -50,14 +50,74 @@ struct MapvoteInner {
 pub struct Mapvote {
     inner: Mutex<MapvoteInner>,
     mapman: Arc<MapManager>,
+    vips: Arc<Vips>,
+    players: Arc<Players>,
 }
 
 impl MapvoteInner {
     pub fn to_profile(&self) -> Profile<MapInPool<()>> {
         Profile {
-            alts: self.alternatives.clone(),
+            alts: self.alternatives.to_set(),
             ballots: self.votes.values().cloned().collect(),
         }
+    }
+}
+
+impl MapvoteInner {
+    /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
+    fn fmt_options(&self, lines: &mut Vec<String>) {
+        let x = self
+            .alternatives
+            .pool
+            .iter()
+            .map(|alt| alt.map.Pretty())
+            .join(", ");
+        lines.push(format!("Options: {}", x));
+    }
+
+    /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
+    fn fmt_personal_status(&self, lines: &mut Vec<String>, perspective: &Player) {
+        if let Some(ballot) = self.votes.get(perspective) {
+            if ballot.preferences.len() >= 2 {
+                // nice
+                lines.push(format!("Your ballot: {}", ballot));
+                lines.push("You can still change your ballot.".to_string());
+            } else {
+                let single = ballot.preferences.first().unwrap();
+                // person only voted for a single alternative, tell them how to do it better.
+                // first unwrap: safe, assumes ballots.length() >= 1. That is an invariant.
+                lines.push(format!("You only voted for a single map ({}), but you can specify multiple preferences here!",
+                    ballot.preferences.first().unwrap().map.Pretty()));
+
+                // construct a random example vote, but where the first vote is the same as the
+                // person had already voted.
+                let suggestion_tail_pool = self.pop_state.pool.without(single.map).choose_random(2);
+                let mut suggestion_pref = vec![single.to_owned()];
+                suggestion_pref.append(&mut suggestion_tail_pool.extra_remove().pool);
+                let suggestion_string = suggestion_pref.iter().map(|mip| mip.map.short()).join(" ");
+
+                lines.push(format!("Try it: !{}", suggestion_string));
+            }
+        } else {
+            // person hasn't voted yet at all.
+            let suggestion = self.pop_state.pool.choose_random(3);
+            let suggestion_str = suggestion.pool.iter().map(|mip| mip.map.short()).join(" ");
+            lines.push(format!("Vote like this: !{}", suggestion_str));
+        }
+    }
+
+    fn fmt_personal_vip_status(
+        &self,
+        lines: &mut Vec<String>,
+        perspective: &Guard<Player, YesVip>,
+    ) {
+        // TODO: put the Leader and Runner-up in here.
+    }
+
+    fn set_up_new_vote(&mut self) {
+        self.alternatives = self.pop_state.pool.choose_random(4).extra_remove();
+        self.votes.clear();
+        println!("I've set up a new vote with pool {:?}, so options are {:?}.", self.pop_state, self.alternatives);
     }
 }
 
@@ -67,34 +127,39 @@ enum VoteResult<E: Eq + Clone> {
     Ok {
         new: Ballot<MapInPool<E>>,
         old: Option<Ballot<MapInPool<E>>>,
-    },
 
-    /// User submitted duplicate votes, but they were continuously together, and thus could be
-    /// contracted into one. Emit warning, but accept vote.
-    OkDuplicateButRemoved {
-        new: Ballot<MapInPool<E>>,
-        old: Option<Ballot<MapInPool<E>>>,
-        duplicates: HashSet<Map>,
+        /// User submitted duplicate votes, but they were continuously together, and thus could be
+        /// contracted into one. Emit warning, but accept vote.
+        soft_dups: HashSet<MapInPool<E>>,
     },
 
     /// User submitted duplicates but they could not be untangled. Need to retry.
-    ErrDuplicate { duplicates: HashSet<Map> },
+    UnresolvableDuplicate { problem: MapInPool<E> },
 
     /// A map which the user voted on is not in the current map pool.
-    /// The API can choose to nominate the map and then re-call `vote()`, or notify user, etc...
-    ErrMapNotInPool { missing: HashSet<Map> },
+    NotInPopstate { missing: HashSet<Map> },
+
+    /// A map is in the current pool, but is not up for vote.
+    ///
+    /// It can be nominated though.
+    NotInOptions { missing: HashSet<Map> },
+
+    /// For some reason, managed to pass a list with zero options...
+    Empty,
 }
 
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
-    pub async fn new(mapman: Arc<MapManager>) -> Arc<Self> {
+    pub async fn new(mapman: Arc<MapManager>, vips: Arc<Vips>, players: Arc<Players>) -> Arc<Self> {
         let myself = Arc::new(Self {
             inner: Mutex::new(MapvoteInner {
-                alternatives: HashSet::new(),
+                alternatives: MapPool::new(),
                 votes: HashMap::new(),
                 pop_state: mapman.pop_state().await,
             }),
             mapman: mapman.clone(),
+            vips,
+            players,
         });
 
         // holy shit this is ugly.
@@ -127,31 +192,140 @@ impl Mapvote {
         // TODO: check alternatives, we may need to remove some & notify people who voted for them.
         // TODO: Notify everyone of pop state change
 
-        let removals = MapPool::removals(&lock.pop_state.pool, &popstate.pool);
+        let removals = dbg!(MapPool::removals(&lock.pop_state.pool, &popstate.pool));
+        let additions = dbg!(MapPool::additions(&lock.pop_state.pool, &popstate.pool));
+
+        let mut futures = Vec::new();
+        let direction = PopState::change_direction(&lock.pop_state, &popstate);
+        match direction {
+            Ordering::Less => {
+                // lock.alternatives
+                //     .retain(|alt| popstate.pool.contains_mapmode(alt.map, &alt.mode));
+                println!(
+                    "Mapman: PopState downgrade from {} to {}",
+                    lock.pop_state.name, popstate.name
+                );
+            }
+            Ordering::Equal => {
+                println!("Uhhh, popstate didn't change direction? Wot.");
+                return; // or maybe panic instead...?
+            }
+            Ordering::Greater => {
+                // futures.push(bf4.say_lines(
+                //     vec!["The map pool expanded! VIPs can nominate more maps now :)".to_string()],
+                //     Visibility::All,
+                // ));
+                // TODO: Notify every single VIP individually that they can nominate more now.
+                println!(
+                    "Mapman: PopState upgrade from {} to {}",
+                    lock.pop_state.name, popstate.name
+                );
+            }
+        }
+
+        // first, remove the current voting options fittingly and choose replacements.
+        let removed_alternatives = lock
+            .alternatives
+            .intersect(&removals.extra_remove())
+            .pool
+            .iter()
+            .map(|mip| mip.map)
+            .collect();
+        let replacements = popstate
+            .pool
+            .without_many(&removed_alternatives)
+            .choose_random(removed_alternatives.len());
+        lock.alternatives
+            .pool
+            .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode)); // <-- actually remove them here.
+                                                                               // and then inform players
+        if removed_alternatives.len() == 1 {
+            // special case so that the messages are nicer.
+            if replacements.pool.len() == 1 {
+                futures.push(bf4.say_lines(
+                    vec![
+                        "Server population shrunk, and with it the map pool.".to_string(),
+                        format!(
+                            "{} has been removed from voting options, and replaced with {}",
+                            removed_alternatives.iter().next().unwrap().Pretty(), // unwrap: safe because we tested len to be 1.
+                            replacements.pool[0].map.Pretty() // index: safe because we tested len to be 1.
+                        ),
+                    ],
+                    Visibility::All,
+                ));
+            } else {
+                futures.push(bf4.say_lines(vec![
+                    "Server population shrunk, and with it the map pool.".to_string(),
+                    format!("{} has been removed from voting options, and no map is available to replace it",
+                        removed_alternatives.iter().next().unwrap().Pretty()), // unwrap: safe because we tested len to be 1.
+                ], Visibility::All));
+            }
+        } else if removed_alternatives.len() >= 2 {
+            futures.push(bf4.say_lines(
+                vec![
+                    "Server population shrunk, and with it the map pool.".to_string(),
+                    format!("{} have been replaced with {}.",
+                    removed_alternatives.iter().map(|map| map.Pretty()).join(", "),
+                    replacements.pool.iter().map(|mip| mip.map.Pretty()).join(", ")),
+                ],
+                Visibility::All,
+            ))
+        }
+
+        // and now notify each individual person of their concrete changes to their ballot.
+        let mut futures_removals = Vec::new();
+        lock.votes.retain(|player, ballot| {
+            let yoinked = ballot.preferences.iter()
+                .filter(|&mip| removals.contains_map(mip.map)).cloned().collect::<HashSet<_>>();
+            if yoinked.len() == ballot.preferences.len() {
+                // ALL choices on the person's ballot were yoinked! Whoops!
+                futures_removals.push(bf4.say_lines(vec![
+                    format!("{}: Sorry, all maps you had voted for were removed from the map pool :(", player.to_owned()),
+                    "Please vote again :)".to_string(),
+                ], player.to_owned()));
+                false // remove this ballot entirely.
+            } else {
+                if !yoinked.is_empty() {
+                    // remove all yoinked maps.
+                    ballot.preferences.retain(|mip| {
+                        !yoinked.contains(mip)
+                    });
+                    futures_removals.push(bf4.say_lines(vec![
+                        format!("{}: Sorry, {} is/are no longer in the map pool and was removed from your ballot",
+                            player.to_owned(),
+                            yoinked.iter().join(", ")),
+                        format!("Your ballot was changed to: {}", ballot),
+                    ], player.to_owned()));
+                }
+                assert!(!ballot.preferences.is_empty());
+                true
+            }
+        });
 
         lock.pop_state = popstate;
         drop(lock);
-        todo!("Handle popstate changes");
+
+        // actually run the futures here, after we dropped the lock.
+        // This has a nice side effect of running them all in parallel.
+        join_all(futures).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        join_all(futures_removals).await;
     }
 
     /// Starts the main loop, listening for events, etc.
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
-        let jh1 = {
+        // first, set up
+        {
+            let mut inner = self.inner.lock().await;
+            inner.set_up_new_vote();
+        }
+
+        let jh_spammer = {
             let mapvote = self.clone();
             let bf4 = bf4.clone();
             tokio::spawn(async move {
                 mapvote.spam_status(bf4).await;
                 println!("mapvote spammer sutatus done");
-            })
-        };
-
-        let jh2 = {
-            let mapvote = self.clone();
-            let bf4 = bf4.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(313)).await;
-                mapvote.spam_voting_guide(bf4).await;
-                println!("mapvote spammer voting guide done");
             })
         };
 
@@ -190,59 +364,29 @@ impl Mapvote {
             }
         }
 
-        jh1.await.unwrap();
-        jh2.await.unwrap();
+        jh_spammer.await.unwrap();
         Ok(())
     }
 
     async fn spam_status(&self, bf4: Arc<Bf4Client>) {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
-            let lock = self.inner.lock().await;
-            let profile = lock.to_profile();
-            drop(lock); // drop lock before we spend 33ms in rcon call.
+            let players = self.players.players().await;
+            let mut futures = Vec::new();
 
-            let mut msg = vec!["========================================".to_string()];
-            if let Some((winner, runnerup)) =
-                dbg!(&profile).vanilla_stv_1_with_runnerup(&mut NoTracer)
-            {
-                msg.push(format!(
-                    "[[MAPVOTE]] {} is in the lead! Vote now!",
-                    winner.map.Pretty()
-                ));
+            let inner = self.inner.lock().await;
 
-                if let Some(runner_up) = runnerup {
-                    msg.push(format!("Current runner-up: {}", runner_up.map.Pretty()));
-                }
-            } else {
-                msg.push("[[MAPVOTE]] No map has been voted for yet!".to_string());
+            let mut lines = Vec::new();
+            for player in players.keys() {
+                inner.fmt_options(&mut lines);
+                inner.fmt_personal_status(&mut lines, player);
+                futures.push(bf4.say_lines(lines.to_owned(), player.to_owned()));
+                lines.clear();
             }
-            msg.push("You can vote first, second, third, preferences like this:".to_string());
-            msg.push("!metro oman_gulf pearlmarket".to_string());
 
-            // msg.push("We use a fancy map vote (STV) here :)".to_string());
-            // msg.push("You can vote first, second, third, preferences like this:".to_string());
-            // msg.push("!metro gulf-of-oman pearlmarket".to_string());
-            bf4.say_lines(msg, Visibility::All).await.unwrap();
-        }
-    }
+            drop(inner); // drop lock before we spend potentially 64 * 5 * 17ms = 5.4s in rcon calls...
 
-    async fn spam_voting_guide(&self, bf4: Arc<Bf4Client>) {
-        loop {
-            tokio::time::sleep(Duration::from_secs(603)).await;
-            // let mut msg = Vec::new();
-            // msg.push("You can vote first, second, third, preferences like this:".to_string());
-            // msg.push("!metro gulf-of-oman pearlmarket".to_string());
-            let _ = bf4
-                .say_lines(
-                    vec![
-                "We use a fancy voting rule here: Single Transferable Vote (STV) :)",
-                // "You vote will not be spoiled, vote your conscience!",
-                "If your first preference doesn't win, it gets transfered to 2nd, 3rd, etc..",
-            ],
-                    Visibility::All,
-                )
-                .await;
+            join_all(futures).await; // up to 5.4s, ouchies.
         }
     }
 
@@ -252,30 +396,132 @@ impl Mapvote {
     ///   - Optionally, old ballot of the previous time the player voted.
     /// - Err:
     ///   - Player did a derp.
-    async fn vote(&self, player: &Player, alts: &[(Map, GameMode)]) -> VoteResult<()> {
-        let ballot: Ballot<MapInPool<()>> = Ballot {
-            weight: Rat::one(),
-            preferences: alts
-                .iter()
-                .map(|(map, mode)| MapInPool {
-                    map: *map,
-                    mode: mode.clone(),
-                    extra: (),
-                })
-                .collect(),
+    async fn vote(
+        &self,
+        player: &Guard<Player, MaybeVip>,
+        alts: &[(Map, GameMode)],
+    ) -> VoteResult<()> {
+        let prefs_maps = alts
+            .iter()
+            .map(|(map, mode)| map)
+            .cloned()
+            .collect::<HashSet<Map>>();
+        let mut inner = self.inner.lock().await;
+
+        let mapvote_maps = inner
+            .pop_state
+            .pool
+            .pool
+            .iter()
+            .map(|mip| mip.map)
+            .collect::<HashSet<Map>>();
+        let too_many1 = prefs_maps
+            .difference(&mapvote_maps)
+            .cloned()
+            .collect::<HashSet<_>>();
+        if !too_many1.is_empty() {
+            // Maps are forbidden by pop state.
+            return VoteResult::NotInPopstate { missing: too_many1 };
+        }
+
+        let mapvote_opts = inner
+            .alternatives
+            .pool
+            .iter()
+            .map(|mip| mip.map)
+            .collect::<HashSet<Map>>();
+        let too_many2 = prefs_maps
+            .difference(&mapvote_opts)
+            .cloned()
+            .collect::<HashSet<_>>();
+        if !too_many2.is_empty() {
+            // the maps are in the pool, but aren't up to be chosen right now.
+            // Nomination possible.
+            return VoteResult::NotInOptions { missing: too_many2 };
+        }
+
+        let weight = match player.clone().cases() {
+            Left(yesvip) => Rat::one() + Rat::one(), // 2
+            Right(novip) => Rat::one(),
         };
 
-        let mut lock = self.inner.lock().await;
-
-        // TODO: make it so that only VIPs can nominate maps.
-        ballot.preferences.iter().for_each(|pref| {
-            // insert them all into the set. Set will dedup for us.
-            let _ = lock.alternatives.insert(pref.clone());
+        // now, attempt to deduplicate (Ballot:from_iter(..) does that for us)
+        let alts = alts.iter().map(|(map, mode)| MapInPool {
+            map: *map,
+            mode: mode.clone(),
+            extra: (),
         });
+        let (ballot, soft_dups) = match Ballot::from_iter(Rat::one(), alts) {
+            CheckBallotResult::Ok { ballot, soft_dups } => (ballot, soft_dups),
+            CheckBallotResult::UnresolvableDuplicate { problem } => return VoteResult::UnresolvableDuplicate { problem },
+            CheckBallotResult::Empty => return VoteResult::Empty,
+        };
 
-        let old = lock.votes.insert(player.clone(), ballot.clone());
+        // so now we have a ballot which can be cast. Let's check for existing ballot, and cast it!
+        let old = inner.votes.insert((**player).to_owned(), ballot.to_owned());
+        VoteResult::Ok {
+            new: ballot,
+            old,
+            soft_dups,
+        }
+    }
 
-        VoteResult::Ok { new: ballot, old }
+    async fn handle_maps(&self, bf4: &Arc<Bf4Client>, player: Player, maps: &[(Map, GameMode)]) -> RconResult<()> {
+        let vip = self.vips.get(&player.name, bf4).await?;
+
+        match vip.cases() {
+            Recent(g) => {
+                let ugh = unsafe { Guard::new_raw(player.clone(), *g.get_judgement()) };
+                match self.vote(&ugh, maps).await {
+                    VoteResult::Ok { new, old, soft_dups } => {
+                        if let Some(old) = old {
+                            let _ = bf4.say_lines(vec![
+                                format!("{} changed their ballot to {}", player, new)
+                            ], Visibility::All).await;
+                        } else {
+                            let _ = bf4.say_lines(vec![
+                                format!("{} voted: {}", player, new)
+                            ], Visibility::All).await;
+                        }
+                    }
+                    VoteResult::UnresolvableDuplicate { problem } => {
+                        let _ = bf4.say_lines(vec![
+                            format!("{}: Could not figure out your preference order", player),
+                            format!("The issue is with {}", problem.map.Pretty())
+                        ], player).await;
+                    }
+                    VoteResult::NotInPopstate { missing } => {
+                        let _ = bf4.say_lines(vec![
+                            format!("{}: Maps {} are not available with the current population level. Try again.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
+                        ], player).await;
+                    }
+                    VoteResult::NotInOptions { missing } => {
+                        match ugh.cases() {
+                            Left(yesvip) => {
+                                let _ = bf4.say_lines(vec![
+                                    format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
+                                    format!("...but you are VIP <3!! Try this: !nominate {}", missing.iter().next().unwrap().short())
+                                ], player).await;
+                            }
+                            Right(notvip) => {
+                                let _ = bf4.say_lines(vec![
+                                    format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
+                                    "VIPs can !nominate maps, get your VIP slot for $5/month at bfcube.com!".to_string(),
+                                ], player).await;
+                            }
+                        }
+                    }
+                    VoteResult::Empty => {}
+                }
+            }
+            Old => {
+                println!("[mapvote.rs handle_maps()] Couldn't resolve vip for {}? Retrying", player);
+                // tokio::time::sleep(Duration::from_secs(1)).await;
+                // return self.handle_maps(bf4, player, maps).await; // just retry.
+            }
+        }
+
+        Ok(())
     }
 
     async fn handle_chat_msg(
@@ -284,72 +530,38 @@ impl Mapvote {
         vis: Visibility,
         player: Player,
         msg: AsciiString,
-    ) {
+    ) -> RconResult<()> {
         let split = msg.as_str().split(' ').collect::<Vec<_>>();
         match split[0] {
             "/v" | "!v" => {
-                let mut msg = Vec::new();
-                let lock = self.inner.lock().await;
-                if let Some(vote) = lock.votes.get(&player) {
-                    // if player has already voted, just print that and nothing else.
-                    msg.push(format!("You voted for {}", vote));
-                } else {
-                    // otherwise, print instructions on how to vote.
-                    msg.push(
-                        "You can vote first, second, etc... preferences like this:".to_string(),
-                    );
-                    msg.push("!metro gulf-of-oman pearlmarket".to_string());
-                    msg.push("You haven't voted yet! Vote for ANY map you like".to_string());
-                }
+                let mut lines = Vec::new();
+                let inner = self.inner.lock().await;
+                inner.fmt_options(&mut lines);
+                inner.fmt_personal_status(&mut lines, &player);
 
-                drop(lock);
-                let _ = bf4.say_lines(msg, player).await;
-                return;
+                // if let Some(vote) = inner.votes.get(&player) {
+                //     // if player has already voted, just print that and nothing else.
+                //     lines.push(format!("You voted for {}", vote));
+                // } else {
+                //     // otherwise, print instructions on how to vote.
+                //     lines.push(
+                //         "You can vote first, second, etc... preferences like this:".to_string(),
+                //     );
+                //     lines.push("!metro gulf-of-oman pearlmarket".to_string());
+                //     lines.push("You haven't voted yet! Vote for ANY map you like".to_string());
+                // }
+
+                // drop(inner);
+                let _ = bf4.say_lines(lines, player).await;
+                return Ok(());
             }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
                 match parse_maps(&msg.as_str()[1..]) {
                     ParseMapsResult::Ok(maps) => {
-                        match self.vote(&player, &maps).await {
-                            // Ok((vote, old_vote)) => {
-                            //     // then just player feedback
-                            // }
-                            // Err(err) => {
-                            //     // TODO replace with something better.
-                            //     let _ = bf4
-                            //         .say(format!("You did a whoopsie: {:?}", err), player)
-                            //         .await;
-                            // }
-                            VoteResult::Ok { new, old } => {
-                                if maps.len() == 1 {
-                                    let _ = bf4.say_lines(vec![
-                                        format!("You voted for {}, BUT you can specify a second, third,... preference on this server!", &maps[0].0.Pretty()),
-                                        format!("Try it like this: !{} metro gulf-of-oman", &maps[0].0.short()),
-                                    ], player).await;
-                                } else {
-                                    let _ = bf4
-                                        .say(
-                                            format!("{} voted for {}", player, new),
-                                            Visibility::All,
-                                        )
-                                        .await;
-                                    let _ = bf4.say("(You changed your vote)", player).await;
-                                }
-                            }
-                            VoteResult::OkDuplicateButRemoved {
-                                new,
-                                old,
-                                duplicates,
-                            } => todo!("handle duplicates"),
-                            VoteResult::ErrDuplicate { duplicates } => {
-                                todo!("handle bad duplicates")
-                            }
-                            VoteResult::ErrMapNotInPool { missing } => {
-                                todo!("handle map not in pool")
-                            }
-                        }
+                        self.handle_maps(&bf4, player, &maps).await
                     }
-                    ParseMapsResult::Nothing => {}
+                    ParseMapsResult::Nothing => Ok(()), // silently ignore
                     ParseMapsResult::NotAMapName { orig } => {
                         let _ = bf4
                             .say(
@@ -357,6 +569,7 @@ impl Mapvote {
                                 player,
                             )
                             .await;
+                        Ok(())
                     }
                 }
             }
@@ -365,10 +578,9 @@ impl Mapvote {
 
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>, maplist: &Arc<MapManager>) {
         let profile = {
-            let mut lock = self.inner.lock().await;
-            let ret = lock.to_profile();
-            lock.votes.clear();
-            lock.alternatives.clear();
+            let mut inner = self.inner.lock().await;
+            let ret = inner.to_profile();
+            inner.set_up_new_vote();
             ret
         };
 

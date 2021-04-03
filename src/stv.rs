@@ -32,6 +32,57 @@ pub struct Ballot<A> {
     pub preferences: Vec<A>,
 }
 
+pub enum CheckBallotResult<A> {
+    Ok {
+        ballot: Ballot<A>,
+        soft_dups: HashSet<A>,
+    },
+    /// We have something of the form:
+    /// `problem` > `other` > `problem`.
+    UnresolvableDuplicate {
+        problem: A,
+    },
+    Empty,
+}
+
+impl<A: Eq + Hash + Clone> Ballot<A> {
+    pub fn from_iter(weight: Rat, slice: impl Iterator<Item = A>) -> CheckBallotResult<A> {
+        let mut result = Vec::new();
+        let mut soft_dups = HashSet::new();
+
+        let mut dedup = HashSet::new();
+
+        let mut current: Option<A> = None;
+        for a in slice {
+            if !dedup.insert(a.clone()) {
+                let current = current.unwrap(); // safety: have dup ==> at least one elem already scanned ==> have something in current.
+                if current == a {
+                    // that's okay, just log and continue.
+                    soft_dups.insert(a.clone());
+                } else {
+                    return CheckBallotResult::UnresolvableDuplicate { problem: a };
+                }
+            } else {
+                result.push(a.clone());
+            }
+
+            current = Some(a);
+        }
+
+        if result.is_empty() {
+            return CheckBallotResult::Empty;
+        }
+
+        CheckBallotResult::Ok {
+            ballot: Ballot {
+                weight,
+                preferences: result,
+            },
+            soft_dups,
+        }
+    }
+}
+
 impl<A> Debug for Ballot<A>
 where
     A: Debug,

@@ -65,8 +65,8 @@ impl<J: MaxAge> Recent<J> {
         }
     }
 
-    pub fn cases(&self) -> Age<&J> {
-        if let Age::Recent(j) = &self.judgement {
+    pub fn cases(self) -> Age<J> {
+        if let Age::Recent(j) = self.judgement {
             if self.timestamp.elapsed() < J::MAX_AGE {
                 Age::Recent(j)
             } else {
@@ -149,15 +149,15 @@ impl<T, J: Judgement<T> + MaxAge> Guard<T, Recent<J>> {
     //     }
     // }
 
-    // pub fn cases(&'a self) -> Age<Guard<&'a T, &'a J>> {
-    //     match self.judgement.cases() {
-    //         Age::Recent(j) => Age::Recent(Guard {
-    //             inner: &self.inner,
-    //             judgement: &j,
-    //         }),
-    //         Age::Old => Age::Old,
-    //     }
-    // }
+    pub fn cases(self) -> Age<Guard<T, J>> {
+        match self.judgement.cases() {
+            Age::Recent(j) => Age::Recent(Guard {
+                inner: self.inner,
+                judgement: j,
+            }),
+            Age::Old => Age::Old,
+        }
+    }
 }
 
 // if J is a judgement about T, then Recent<J> is a judgement about T as well.

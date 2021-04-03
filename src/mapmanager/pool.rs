@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display, hash::Hash};
 
 use battlefield_rcon::bf4::{GameMode, Map};
+use rand::{prelude::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 
 /// A map in a map pool.
@@ -119,6 +120,25 @@ impl<E: Eq + Clone> MapPool<E> {
         }
     }
 
+    /// Only considers the `map` and `mode` fields, ignoreing extra.
+    pub fn intersect(&self, other: &Self) -> Self {
+        Self {
+            pool: self
+                .pool
+                .iter()
+                .filter(|&selfmip| other.contains_mapmode(selfmip.map, &selfmip.mode))
+                .cloned()
+                .collect(),
+        }
+    }
+
+    pub fn to_set(&self) -> HashSet<MapInPool<E>>
+    where
+        E: Hash,
+    {
+        self.pool.iter().cloned().collect()
+    }
+
     /// Returns the maps which retain the same (Map, Mode), but whose `extra` changed.
     ///
     /// # Returns
@@ -155,6 +175,60 @@ impl<E: Eq + Clone> MapPool<E> {
                     mode: mip.mode.clone(),
                     extra: NRounds(f(mip)),
                 })
+                .collect(),
+        }
+    }
+
+    pub fn map_extra<E2: Eq + Clone>(&self, f: impl Fn(&MapInPool<E>) -> E2) -> MapPool<E2> {
+        MapPool {
+            pool: self
+                .pool
+                .iter()
+                .map(|mip| MapInPool::<E2> {
+                    map: mip.map,
+                    mode: mip.mode.clone(),
+                    extra: f(mip),
+                })
+                .collect(),
+        }
+    }
+
+    pub fn extra_remove(&self) -> MapPool<()> {
+        self.map_extra(|_| ())
+    }
+
+    /// Selects at most `n_max` maps from the pool at random.
+    pub fn choose_random(&self, n_max: usize) -> Self {
+        let mut rng = thread_rng();
+        Self {
+            pool: self
+                .pool
+                .choose_multiple(&mut rng, n_max)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Returns a new map pool which contains the same items, except with any with `map` removed.
+    pub fn without(&self, map: Map) -> Self {
+        Self {
+            pool: self
+                .pool
+                .iter()
+                .filter(|&mip| mip.map != map)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Returns a new map pool which contains the same items, except with any with `map` removed.
+    pub fn without_many(&self, maps: &HashSet<Map>) -> Self {
+        Self {
+            pool: self
+                .pool
+                .iter()
+                .filter(|&mip| !maps.contains(&mip.map))
+                .cloned()
                 .collect(),
         }
     }
