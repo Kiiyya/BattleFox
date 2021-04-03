@@ -33,7 +33,7 @@ impl<E: Eq + Clone> PopState<E> {
     /// - `Greater`: min players is now higher. Means we changed to a higher pop level.
     /// - etc.
     pub fn change_direction(before: &PopState<E>, after: &PopState<E>) -> Ordering {
-        before.min_players.cmp(&after.min_players)
+        after.min_players.cmp(&before.min_players)
     }
 }
 

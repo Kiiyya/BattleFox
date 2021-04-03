@@ -515,7 +515,7 @@ impl Mapvote {
                 }
             }
             Old => {
-                println!("[mapvote.rs handle_maps()] Couldn't resolve vip for {}? Retrying", player);
+                println!("[mapvote.rs handle_maps()] Couldn't resolve vip for {}?", player);
                 // tokio::time::sleep(Duration::from_secs(1)).await;
                 // return self.handle_maps(bf4, player, maps).await; // just retry.
             }
