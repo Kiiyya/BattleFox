@@ -91,6 +91,11 @@ impl Inner {
             hs.insert(map);
             self.nominations.insert(vip.to_owned(), hs);
         }
+        self.alternatives.pool.push(MapInPool {
+            map,
+            mode: GameMode::Rush,
+            extra: (),
+        });
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
@@ -110,7 +115,7 @@ impl Inner {
             if ballot.preferences.len() >= 2 {
                 // nice
                 lines.push(format!("Your ballot: {}", ballot));
-                lines.push("You can still change your ballot.".to_string());
+                // lines.push("You can still change your ballot.".to_string());
             } else {
                 let single = ballot.preferences.first().unwrap();
                 // person only voted for a single alternative, tell them how to do it better.
@@ -129,7 +134,7 @@ impl Inner {
             }
         } else {
             // person hasn't voted yet at all.
-            let suggestion = self.pop_state.pool.choose_random(3);
+            let suggestion = self.alternatives.choose_random(3);
             let suggestion_str = suggestion.pool.iter().map(|mip| mip.map.short()).join(" ");
             lines.push(format!("Vote like this: !{}", suggestion_str));
         }
@@ -432,7 +437,8 @@ impl Mapvote {
                     // fire and forget about it, so we don't block other events. Yay concurrency!
                     tokio::spawn(async move {
                         // let's wait like 10 seconds because people might still vote in the end screen.
-                        tokio::time::sleep(Duration::from_secs(12)).await;
+                        let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", 15), Visibility::All).await;
+                        tokio::time::sleep(Duration::from_secs(15)).await;
 
                         mapvote.handle_round_over(&bf4).await;
                     });
@@ -448,7 +454,7 @@ impl Mapvote {
 
     async fn spam_status(&self, bf4: Arc<Bf4Client>) {
         loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(15)).await;
 
             let players = self.players.players(&bf4).await;
             let mut futures = Vec::new();
@@ -664,7 +670,7 @@ impl Mapvote {
                                 // make sure map isn't already in the options
                                 if !inner.alternatives.pool.iter().any(|mip| mip.map == map) {
                                     // make sure the map is in the pool
-                                    if inner.alternatives.contains_map(map) {
+                                    if inner.pop_state.pool.contains_map(map) {
                                         // make sure this VIP hasn't exceeded their nomination limit this round.
                                         if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
                                             // phew, that's a lot of ifs...
@@ -681,7 +687,7 @@ impl Mapvote {
                                         }
                                     } else {
                                         futures.push(bf4.say_lines(vec![
-                                            format!("Sorry, {} is not avilable in this population level :(", &*player),
+                                            format!("Sorry, {} is not avilable in this population level :(", map.Pretty()),
                                             "Maybe once more players join, it'll become available :)".to_string(),
                                         ], player.get().into()));
                                     }
@@ -847,6 +853,9 @@ impl Mapvote {
                 ], Visibility::All)
                 .await
                 .unwrap();
+
+                tokio::time::sleep(Duration::from_secs(4)).await;
+
                 self.mapman.switch_to(bf4, &winner).await.unwrap();
                 // maplist.switch_to(bf4, mipmap, mode, false).await.unwrap();
             } else {

@@ -235,7 +235,7 @@ impl Map {
                 ALL.iter()
             }
             Map::Shanghai => {
-                static ALL: [&str; 4] = ["shang", "shanghai", "shangai", "shangay"];
+                static ALL: [&str; 7] = ["shang", "shanghai", "shangai", "shangay", "siege", "siegeshanghai", "siegeofshanghai"];
                 ALL.iter()
             }
             Map::RogueTransmission => {

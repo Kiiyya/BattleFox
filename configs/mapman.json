@@ -28,7 +28,7 @@
                     {"map": "Lumphini", "mode": "Rush", "extra": false}
                 ]
             },
-            "min_players": 8
+            "min_players": 2
         },
         {
             "name": "MediumPopulation",
