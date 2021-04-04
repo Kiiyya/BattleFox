@@ -381,7 +381,13 @@ pub async fn switch_map_to(
 
     let _ = bf4.set_preset(Preset::Custom).await;
     let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
-    let _ = dbg!(bf4.set_tickets(tickets).await);
+
+    // Force the vehicle spawn delay to the default value, 100.
+    // We do this as a safeguard against previously seen quirks,
+    // where the value would be automatically set to 400.
+    let _ = bf4.set_vehicle_spawn_delay(100).await;
+
+    let _  = dbg!(bf4.set_tickets(tickets).await);
     sleep(Duration::from_secs(1)).await;
 
     bf4.maplist_run_next_round().await?;

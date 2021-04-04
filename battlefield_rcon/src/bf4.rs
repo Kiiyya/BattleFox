@@ -676,10 +676,21 @@ impl Bf4Client {
             .await
     }
 
+    // TODO(dek): Rename to `set_vehicle_spawn_allowed()` to match the var name.
     pub async fn set_vehicles_spawn_allowed(&self, allowed: bool) -> RconResult<()> {
         self.rcon
             .query(
                 &veca!["vars.vehicleSpawnAllowed", allowed.to_string()],
+                ok_eof,
+                |_| None,
+            )
+            .await
+    }
+
+    pub async fn set_vehicle_spawn_delay(&self, delay: usize) -> RconResult<()> {
+        self.rcon
+            .query(
+                &veca!["vars.vehicleSpawnDelay", format!("{}", delay)],
                 ok_eof,
                 |_| None,
             )
