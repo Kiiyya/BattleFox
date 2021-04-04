@@ -182,18 +182,18 @@ impl<A: Clone> StvTracer<A> for ElectElimTiebreakTracer<A> {
 /// Logs all events, even the very low-level ones.
 #[derive(Debug)]
 pub struct DetailedTracer<A> {
-    pub traces: Vec<StvAction<A>>,
+    pub trace: Vec<StvAction<A>>,
 }
 
 impl<A> DetailedTracer<A> {
     pub fn new() -> Self {
-        Self { traces: Vec::new() }
+        Self { trace: Vec::new() }
     }
 }
 
 impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::ElemT {
+        self.trace.push(StvAction::ElemT {
             a: a.to_owned(),
             b: b.to_owned(),
             s: s.to_owned(),
@@ -202,21 +202,21 @@ impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
     }
 
     fn electing(&mut self, alts: &HashSet<A>, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::Elected {
+        self.trace.push(StvAction::Elected {
             elected: alts.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
     }
 
     fn eliminating(&mut self, alt: &A, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::Eliminated {
+        self.trace.push(StvAction::Eliminated {
             alt: alt.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
     }
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::ToAll {
+        self.trace.push(StvAction::ToAll {
             from: a.to_owned(),
             howmuch: s.to_owned(),
             profile_afterwards: profile_after.to_owned(),
@@ -224,14 +224,14 @@ impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
     }
 
     fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {
-        self.traces.push(StvAction::StrikeOut {
+        self.trace.push(StvAction::StrikeOut {
             alt: a.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
     }
 
     fn reject_tie_break(&mut self, between: &HashSet<A>, chosen: &A, score: &Rat) {
-        self.traces.push(StvAction::RejectTiebreak {
+        self.trace.push(StvAction::RejectTiebreak {
             tied: between.to_owned(),
             chosen: chosen.to_owned(),
             score: score.to_owned(),
@@ -239,7 +239,7 @@ impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
     }
 
     fn stv_1winner_tiebreak(&mut self, between: &HashSet<A>, chosen: &A) {
-        self.traces.push(StvAction::Stv1WinnerTiebreak {
+        self.trace.push(StvAction::Stv1WinnerTiebreak {
             tied: between.to_owned(),
             chosen: chosen.to_owned(),
         })

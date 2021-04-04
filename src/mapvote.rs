@@ -6,7 +6,7 @@ use crate::{guard::{
     }, mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    }, players::Players, stv::{CheckBallotResult, Profile, tracing::ElectElimTiebreakTracer}, vips::{MaybeVip, Vips, YesVip}};
+    }, players::Players, stv::{CheckBallotResult, Profile, tracing::{DetailedTracer, ElectElimTiebreakTracer}}, vips::{MaybeVip, Vips, YesVip}};
 
 use self::config::MapVoteConfig;
 
@@ -769,7 +769,7 @@ impl Mapvote {
                 let _ = bf4.say_lines(lines, player).await;
                 Ok(())
             }
-            "!nominate" | "/nominate" => {
+            "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
                     Some(&word) => match Map::try_from_short(word) {
                         Some(map) => NomMapParseResult::Ok(map),
@@ -829,23 +829,32 @@ impl Mapvote {
         // only do something if we have an Inner.
         if let Some(profile) = profile {
             // let mut tracer = ElectElimTiebreakTracer::new();
-            if let Some((winner, runner_up)) = profile.vanilla_stv_1_with_runnerup(&mut NoTracer) {
-                // let x = tracer.trace.iter().map(|t| match t {
-                //     StvAction::Elected { elected, profile_afterwards } => {
+            let mut tracer = DetailedTracer::new();
+            let mut tracer_runnerup = DetailedTracer::new();
+            if let Some((winner, runner_up)) = profile.vanilla_stv_1_with_runnerup(&mut tracer, &mut tracer_runnerup) {
+                println!("Starting with {}: {:?}", &profile, &profile);
+                for action in tracer.trace {
+                    if let Some(p) = action.get_profile_after() {
+                        println!("  {} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+                    } else {
+                        println!("  {}", &action);
+                    }
+                }
 
-                //     }
-                //     StvAction::Eliminated { alt, profile_afterwards } => {}
-                //     StvAction::RejectTiebreak { tied, chosen, score } => {}
-                //     StvAction::Stv1WinnerTiebreak { tied, chosen } => {}
-                //     _ => {}
-                // });
                 let runner_up_text = if let Some(runner_up) = runner_up {
+                    println!("(Re-run for runner-up) Starting with {}", profile);
+                    for action in tracer_runnerup.trace {
+                        if let Some(p) = action.get_profile_after() {
+                            println!("  {} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+                        } else {
+                            println!("  {}", &action);
+                        }
+                    }
+
                     format!("(runner-up: {})", runner_up.map.Pretty())
                 } else {
                     "".to_string()
                 };
-
-
 
                 bf4.say_lines(vec![
                     format!("Mapvote: {} people voted", profile.ballots.len()),

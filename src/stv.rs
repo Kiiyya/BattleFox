@@ -11,7 +11,7 @@ use std::{
     write,
 };
 
-use self::tracing::StvTracer;
+use self::tracing::{NoTracer, StvTracer};
 
 pub mod tracing;
 
@@ -501,11 +501,12 @@ where
     pub fn vanilla_stv_1_with_runnerup<T: StvTracer<A>>(
         &self,
         tracer: &mut T,
+        tracer_runnerup: &mut T,
     ) -> Option<(A, Option<A>)> {
         if let Some(winner) = self.vanilla_stv_1(tracer) {
             let runnerup = self
-                .strike_out_single(&winner, tracer)
-                .vanilla_stv_1(tracer);
+                .strike_out_single(&winner, &mut NoTracer)
+                .vanilla_stv_1(tracer_runnerup);
             Some((winner, runnerup))
         } else {
             None
