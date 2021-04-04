@@ -229,9 +229,7 @@ where
     /// - Ballots may have a weight of 2
     /// - Ballots may have a weight of 0.5
     pub fn weight_sum(&self) -> Rat {
-        self.ballots.iter()
-            .map(|b| &b.weight)
-            .sum()
+        self.ballots.iter().map(|b| &b.weight).sum()
     }
 
     /// Elementary STV vote transfer function.

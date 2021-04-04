@@ -374,17 +374,20 @@ pub async fn switch_map_to(
     tickets: usize,
 ) -> Result<(), MapListError> {
     bf4.maplist_set_next_map(index).await?;
-    println!("[mapman switch_map_to()] index: {}, vehicles: {}, tickets: {}", index, vehicles, tickets);
+    println!(
+        "[mapman switch_map_to()] index: {}, vehicles: {}, tickets: {}",
+        index, vehicles, tickets
+    );
 
     let _ = bf4.set_preset(Preset::Custom).await;
     let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
-    let _  = dbg!(bf4.set_tickets(tickets).await);
+    let _ = dbg!(bf4.set_tickets(tickets).await);
     sleep(Duration::from_secs(1)).await;
 
     bf4.maplist_run_next_round().await?;
 
     sleep(Duration::from_secs(10)).await;
-    let _  = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
+    let _ = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
 

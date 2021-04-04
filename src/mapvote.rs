@@ -1,25 +1,28 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{guard::{
+use crate::{
+    guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
-    }, mapmanager::{
+    },
+    mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    }, players::Players, stv::{CheckBallotResult, Profile, tracing::{DetailedTracer, ElectElimTiebreakTracer}}, vips::{MaybeVip, Vips, YesVip}};
+    },
+    players::Players,
+    stv::{
+        tracing::{DetailedTracer, ElectElimTiebreakTracer},
+        CheckBallotResult, Profile,
+    },
+    vips::{MaybeVip, Vips, YesVip},
+};
 
 use self::config::MapVoteConfig;
 
 use super::stv::tracing::{NoTracer, StvAction};
 use super::stv::Ballot;
 use ascii::{AsciiString, IntoAsciiString};
-use battlefield_rcon::{
-    bf4::{
-        error::{Bf4Error, Bf4Result},
-        Bf4Client, Event, GameMode, Map, Player, Visibility,
-    },
-    rcon::{RconError, RconResult},
-};
+use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}, wrap_msg_chars}, rcon::{RconError, RconResult}};
 use either::Either::{Left, Right};
 use futures::{future::join_all, StreamExt};
 use itertools::Itertools;
@@ -44,8 +47,6 @@ use num_traits::One;
 
 pub mod config;
 
-
-
 #[derive(Debug)]
 struct Inner {
     alternatives: MapPool<()>,
@@ -54,7 +55,7 @@ struct Inner {
 
     pop_state: PopState<Vehicles>,
 
-    nominations: HashMap<Guard<Player, YesVip>, HashSet<Map>>
+    nominations: HashMap<Guard<Player, YesVip>, HashSet<Map>>,
 }
 
 #[derive(Debug)]
@@ -199,7 +200,12 @@ enum NomMapParseResult {
 
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
-    pub async fn new(mapman: Arc<MapManager>, vips: Arc<Vips>, players: Arc<Players>, config: MapVoteConfig) -> Arc<Self> {
+    pub async fn new(
+        mapman: Arc<MapManager>,
+        vips: Arc<Vips>,
+        players: Arc<Players>,
+        config: MapVoteConfig,
+    ) -> Arc<Self> {
         let myself = Arc::new(Self {
             inner: Mutex::new(None),
             //     Inner {
@@ -285,10 +291,14 @@ impl Mapvote {
             dbg!(&alternatives_additions);
 
             // actually remove and replace the alternatives.
-            inner.alternatives
+            inner
+                .alternatives
                 .pool
                 .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode));
-            inner.alternatives.pool.append(&mut alternatives_additions.clone().extra_remove().pool);
+            inner
+                .alternatives
+                .pool
+                .append(&mut alternatives_additions.clone().extra_remove().pool);
 
             // and then inform players
             if alternatives_removals.len() == 1 {
@@ -313,15 +323,26 @@ impl Mapvote {
                     ], Visibility::All));
                 } else {
                     assert!(alternatives_additions.pool.len() >= 2);
-                    futures.push(bf4.say_lines(
-                        vec![
-                            "Server population shrunk, and with it the map pool.".to_string(),
-                            format!("{} has been replaced with {}.",
-                            alternatives_removals.iter().map(|map| map.Pretty()).join(", "),
-                            alternatives_additions.pool.iter().map(|mip| mip.map.Pretty()).join(", ")),
-                        ],
-                        Visibility::All,
-                    ))
+                    futures.push(
+                        bf4.say_lines(
+                            vec![
+                                "Server population shrunk, and with it the map pool.".to_string(),
+                                format!(
+                                    "{} has been replaced with {}.",
+                                    alternatives_removals
+                                        .iter()
+                                        .map(|map| map.Pretty())
+                                        .join(", "),
+                                    alternatives_additions
+                                        .pool
+                                        .iter()
+                                        .map(|mip| mip.map.Pretty())
+                                        .join(", ")
+                                ),
+                            ],
+                            Visibility::All,
+                        ),
+                    )
                 }
             } else if alternatives_removals.len() >= 2 {
                 futures.push(bf4.say_lines(
@@ -368,7 +389,10 @@ impl Mapvote {
             // notify any VIP who nominated a map that is has been removed,
             // and that they can nominate something again.
             for (vip, noms) in &mut inner.nominations {
-                let yoinked = noms.intersection(&alternatives_removals).cloned().collect::<HashSet<Map>>();
+                let yoinked = noms
+                    .intersection(&alternatives_removals)
+                    .cloned()
+                    .collect::<HashSet<Map>>();
                 if !yoinked.is_empty() {
                     futures_removals.push(bf4.say_lines(vec![
                         "Your nomination(s) have been retracted, you can now nominate something else :)".to_string()
@@ -385,7 +409,6 @@ impl Mapvote {
             join_all(futures).await;
             tokio::time::sleep(Duration::from_secs(10)).await;
             join_all(futures_removals).await;
-
         } else {
             let mut init = Inner {
                 alternatives: MapPool::new(),
@@ -459,7 +482,8 @@ impl Mapvote {
             let players = self.players.players(&bf4).await;
             let mut futures = Vec::new();
             let lock = self.inner.lock().await;
-            if let Some(inner) = &*lock { // only do something when we are initialized
+            if let Some(inner) = &*lock {
+                // only do something when we are initialized
                 let mut lines = Vec::new();
                 for player in players.keys() {
                     inner.fmt_options(&mut lines);
@@ -496,13 +520,7 @@ impl Mapvote {
             .collect::<HashSet<Map>>();
         let mut lock = self.inner.lock().await;
         if let Some(inner) = &mut *lock {
-            let mapvote_maps = inner
-                .pop_state
-                .pool
-                .pool
-                .iter()
-                .map(|mip| mip.map)
-                .collect::<HashSet<Map>>();
+            let mapvote_maps = inner.pop_state.pool.to_mapset();
             let too_many1 = prefs_maps
                 .difference(&mapvote_maps)
                 .cloned()
@@ -512,12 +530,7 @@ impl Mapvote {
                 return VoteResult::NotInPopstate { missing: too_many1 };
             }
 
-            let mapvote_opts = inner
-                .alternatives
-                .pool
-                .iter()
-                .map(|mip| mip.map)
-                .collect::<HashSet<Map>>();
+            let mapvote_opts = inner.alternatives.to_mapset();
             let too_many2 = prefs_maps
                 .difference(&mapvote_opts)
                 .cloned()
@@ -655,7 +668,12 @@ impl Mapvote {
         Ok(())
     }
 
-    async fn handle_nomination(&self, bf4: Arc<Bf4Client>, player: Guard<Player, MaybeVip>, map: NomMapParseResult) {
+    async fn handle_nomination(
+        &self,
+        bf4: Arc<Bf4Client>,
+        player: Guard<Player, MaybeVip>,
+        map: NomMapParseResult,
+    ) {
         match player.cases() {
             Left(player) => {
                 // make sure the map was parsed correctly
@@ -672,7 +690,8 @@ impl Mapvote {
                                     // make sure the map is in the pool
                                     if inner.pop_state.pool.contains_map(map) {
                                         // make sure this VIP hasn't exceeded their nomination limit this round.
-                                        if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
+                                        if inner.vip_n_noms(&player) < self.config.max_noms_per_vip
+                                        {
                                             // phew, that's a lot of ifs...
                                             inner.vip_nom(&player, map);
                                             futures.push(bf4.say_lines(vec![
@@ -716,6 +735,10 @@ impl Mapvote {
                         let mut futures = Vec::new();
                         let lock = self.inner.lock().await;
                         if let Some(inner) = &*lock {
+                            let nominatable = MapPool::additions(
+                                &inner.alternatives,
+                                &inner.pop_state.pool.extra_remove(),
+                            );
                             let nominatable = MapPool::additions(&inner.alternatives, &inner.pop_state.pool.extra_remove());
                             let nominatable = nominatable.pool.iter().map(|mip| mip.map.Pretty()).collect::<Vec<_>>();
                             futures.push(bf4.say_lines(vec![
@@ -782,11 +805,12 @@ impl Mapvote {
                     let bf4 = bf4.clone();
                     let myself = self.clone();
                     async move {
-                        let vip = myself.vips.get_player_use(&player, &bf4,
-                            |g| async {
+                        let vip = myself
+                            .vips
+                            .get_player_use(&player, &bf4, |g| async {
                                 myself.handle_nomination(bf4.clone(), g, map).await;
-                            }
-                        ).await;
+                            })
+                            .await;
                         if let Ok(vip) = vip {
                             vip.await
                         }
@@ -831,7 +855,9 @@ impl Mapvote {
             // let mut tracer = ElectElimTiebreakTracer::new();
             let mut tracer = DetailedTracer::new();
             let mut tracer_runnerup = DetailedTracer::new();
-            if let Some((winner, runner_up)) = profile.vanilla_stv_1_with_runnerup(&mut tracer, &mut tracer_runnerup) {
+            if let Some((winner, runner_up)) =
+                profile.vanilla_stv_1_with_runnerup(&mut tracer, &mut tracer_runnerup)
+            {
                 println!("Starting with {}: {:?}", &profile, &profile);
                 for action in tracer.trace {
                     if let Some(p) = action.get_profile_after() {
