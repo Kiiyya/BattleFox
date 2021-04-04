@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 use core::panic;
-use num_bigint::BigInt;
 pub use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
@@ -224,6 +223,17 @@ where
         score
     }
 
+    /// Sums all weights together.
+    ///
+    /// This is different from just counting the amount of ballots, because:
+    /// - Ballots may have a weight of 2
+    /// - Ballots may have a weight of 0.5
+    pub fn weight_sum(&self) -> Rat {
+        self.ballots.iter()
+            .map(|b| &b.weight)
+            .sum()
+    }
+
     /// Elementary STV vote transfer function.
     ///
     /// Transfers from `a` to `b`, exactly `s` much. Where `s` is a number between 0 and 1.
@@ -344,7 +354,7 @@ where
         for e in &result.e {
             let score = self.score(e);
             // transfer surplus
-            profile = profile.t_to_all(e, &(&score - q), tracer);
+            profile = profile.t_to_all(e, &((&score - q) / &score), tracer);
             profile = profile.strike_out_single(e, tracer);
         }
         if !result.e.is_empty() {
@@ -477,8 +487,11 @@ where
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
     pub fn vanilla_stv_1<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<A> {
-        let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
-        let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
+        // let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
+        // let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
+        let q = dbg!(dbg!(self.weight_sum()) / (Rat::one() + Rat::one()));
+        let q = dbg!(q.floor());
+        let q = dbg!(q + Rat::one());
         let result = self.vanilla_stv(1, &q, tracer);
 
         let winner = result.e.iter().find(|_| true).cloned();
@@ -516,42 +529,48 @@ where
 
 #[cfg(test)]
 pub mod test {
+    use std::fmt::{Debug, Display};
+    use std::hash::Hash;
+
     use super::tracing::*;
     use super::{Ballot, Profile};
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
 
     macro_rules! ballot {
-        [$($pref: expr),*] => {{
+        [1, $($pref: expr),*] => {{
             Ballot {
                 weight: Rat::one(),
                 preferences: vec![
                     $($pref),*
                 ],
             }
-        }}
+        }};
+        [2, $($pref: expr),*] => {{
+            Ballot {
+                weight: Rat::one() + Rat::one(),
+                preferences: vec![
+                    $($pref),*
+                ],
+            }
+        }};
+        [0.5, $($pref: expr),*] => {{
+            Ballot {
+                weight: Rat::one() / (Rat::one() + Rat::one()),
+                preferences: vec![
+                    $($pref),*
+                ],
+            }
+        }};
     }
 
-    #[test]
-    fn stv() {
-        let profile = Profile {
-            alts: hashset!["Wolf", "Fox", "Eagle", "Penguin"],
-            ballots: vec![
-                ballot!["Eagle"],
-                ballot!["Eagle"],
-                ballot!["Eagle"],
-                ballot!["Wolf", "Fox", "Eagle"],
-                ballot!["Fox", "Wolf", "Eagle"],
-                ballot!["Wolf", "Fox", "Eagle"],
-                ballot!["Wolf", "Fox"],
-            ],
-        };
-
-        let mut tracer = ElectElimTiebreakTracer::new();
-
-        let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
-
-        println!("Starting with {}", profile);
+    fn print_trace<A>(start: &Profile<A>, tracer: ElectElimTiebreakTracer<A>)
+    where
+        // T: StvTracer<A>,
+        // T::Trace: IntoIterator<Item = StvAction<A>>,
+        A: Display + Debug + Clone + Eq + Hash + 'static,
+    {
+        println!("Starting with {}", start);
         for action in tracer.trace {
             if let Some(p) = action.get_profile_after() {
                 println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
@@ -559,6 +578,53 @@ pub mod test {
                 println!("{}", &action);
             }
         }
+    }
+
+    #[test]
+    fn stv() {
+        let profile = Profile {
+            alts: hashset!["Wolf", "Fox", "Eagle", "Penguin"],
+            ballots: vec![
+                ballot![1, "Eagle"],
+                ballot![1, "Eagle"],
+                ballot![1, "Eagle"],
+                ballot![1, "Wolf", "Fox", "Eagle"],
+                ballot![1, "Fox", "Wolf", "Eagle"],
+                ballot![1, "Wolf", "Fox", "Eagle"],
+                ballot![1, "Wolf", "Fox"],
+            ],
+        };
+
+        let mut tracer = ElectElimTiebreakTracer::new();
+
+        let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
+
+        print_trace(&profile, tracer);
+
+        assert_eq!("Wolf", winner);
+        // assert!(false);
+    }
+
+    #[test]
+    fn ballotweight_2() {
+        let profile = Profile {
+            alts: hashset!["Wolf", "Fox", "Eagle", "Penguin"],
+            ballots: vec![
+                ballot![2, "Eagle"],
+                ballot![2, "Eagle"],
+                ballot![2, "Eagle"],
+                ballot![0.5, "Wolf", "Fox", "Eagle"],
+                ballot![2, "Fox", "Wolf", "Eagle"],
+                ballot![2, "Wolf", "Fox", "Eagle"],
+                ballot![2, "Wolf", "Fox"],
+            ],
+        };
+
+        let mut tracer = ElectElimTiebreakTracer::new();
+
+        let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
+
+        print_trace(&profile, tracer);
 
         assert_eq!("Wolf", winner);
         // assert!(false);

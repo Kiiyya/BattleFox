@@ -14,12 +14,18 @@ pub trait StvTracer<A> {
     /// When there's two or more alts tied for last place.
     fn reject_tie_break(&mut self, between: &HashSet<A>, chosen: &A, score: &Rat) {}
     fn stv_1winner_tiebreak(&mut self, between: &HashSet<A>, chosen: &A) {}
+
+    // type Trace : Iterator<;
+    // fn iter(&self) -> Self::Trace;
 }
 
 ////////////////////////////////////
 
 pub struct NoTracer;
-impl<A> StvTracer<A> for NoTracer {}
+impl<A> StvTracer<A> for NoTracer {
+    // type Trace = ();
+    // fn trace(&self) -> &Self::Trace { &() }
+}
 
 ////////////////////////////////////
 
@@ -177,6 +183,12 @@ impl<A: Clone> StvTracer<A> for ElectElimTiebreakTracer<A> {
             score: score.to_owned(),
         })
     }
+
+    // type Trace = Vec<StvAction<A>>;
+
+    // fn trace(&self) -> &Self::Trace {
+    //     &self.trace
+    // }
 }
 
 /// Logs all events, even the very low-level ones.
@@ -244,10 +256,10 @@ impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
             chosen: chosen.to_owned(),
         })
     }
+
+    // type Trace = Vec<StvAction<A>>;
+
+    // fn trace(&self) -> &Self::Trace {
+    //     &self.trace
+    // }
 }
-
-/////////////////////////////////
-
-// pub struct PrintlnTracer<A> {
-
-// }
