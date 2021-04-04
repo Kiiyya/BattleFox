@@ -5,6 +5,7 @@ use dotenv::dotenv;
 use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use weaponforcer::WeaponEnforcer;
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vips::Vips;
@@ -26,6 +27,7 @@ pub mod vips;
 // pub mod minicache;
 pub mod players;
 mod stv;
+pub mod weaponforcer;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -105,6 +107,8 @@ async fn main() -> rcon::RconResult<()> {
     )
     .await;
 
+    let weaponforcer = WeaponEnforcer::new();
+
     // connect
     println!(
         "Connecting to {}:{} with password ***...",
@@ -124,6 +128,9 @@ async fn main() -> rcon::RconResult<()> {
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
+
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
 
     // Wait for all our spawned tasks to finish.
     // This'll happen at shutdown, or never, when you CTRL-C.

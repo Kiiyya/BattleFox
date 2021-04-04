@@ -509,7 +509,7 @@ impl Bf4Client {
     /// # Other notes
     /// This function is fucking ugly internally...
     pub async fn say_lines<Line>(
-        self: &Arc<Self>,
+        &self,
         lines: impl IntoIterator<Item = Line>,
         vis: impl Into<Visibility>,
     ) -> Result<(), SayError>
