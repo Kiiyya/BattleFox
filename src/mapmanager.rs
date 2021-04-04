@@ -391,7 +391,6 @@ pub async fn switch_map_to(
 
     sleep(Duration::from_secs(10)).await;
     let _  = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
-    let _ = bf4.set_vehicle_spawn_delay(100).await;
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
 
