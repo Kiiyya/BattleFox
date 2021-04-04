@@ -505,7 +505,7 @@ impl RconClient {
                                 // wake up the waiting `query()` function.
                                 let response_time = std::time::Instant::now().duration_since(waiter.sent).as_millis();
                                 // rcon_response_times.push()
-                                if response_time > 333 { // 333ms
+                                if response_time > 2000 { // 333ms
                                     println!("response time is high: {}ms", response_time);
                                 }
                                 waiter.replier.send(Ok(packet.words)).expect("Query issuer no longer wants the result?"); // FIXME: this shouldn't panic. Handle error instead.
