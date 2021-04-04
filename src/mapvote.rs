@@ -739,11 +739,13 @@ impl Mapvote {
                                 &inner.alternatives,
                                 &inner.pop_state.pool.extra_remove(),
                             );
-                            let nominatable = MapPool::additions(&inner.alternatives, &inner.pop_state.pool.extra_remove());
-                            let nominatable = nominatable.pool.iter().map(|mip| mip.map.Pretty()).collect::<Vec<_>>();
-                            futures.push(bf4.say_lines(vec![
-                                format!("You can nominate the following: {}", nominatable.iter().join(", ")), // TODO: if there's too many maps, this might overflow.
-                            ], &*player));
+                            let nominatable = nominatable
+                                .pool
+                                .iter()
+                                .map(|mip| mip.map.short().to_string())
+                                .collect::<Vec<_>>();
+                            let lines = wrap_msg_chars("You can nominate the following: ", &nominatable, ", ", "");
+                            futures.push(bf4.say_lines(lines,&*player));
                         } else {
                             futures.push(bf4.say_lines(vec![
                                 "There is no mapvote going currently. Try again in a couple minutes :).".to_string()

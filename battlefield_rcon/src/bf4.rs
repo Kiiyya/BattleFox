@@ -765,11 +765,48 @@ impl Bf4Client {
     }
 }
 
-// impl Drop for Bf4Client {
-//     fn drop(&mut self) {
-//         println!("Dropped Bf4Client");
-//     }
-// }
+/// Makes sure we don't exceed the 127 char limit when sending bf4 rcon messages.
+///
+/// Formats into (assuming `sep` = `, `):
+/// ```raw
+/// [ADMIN] {init}ITEM1, ITEM2, ITEM3,
+/// ITEM4, ITEM5,
+/// [ADMIN] {indent}ITEM6, ITEM7, ITEM8,
+/// ITEM9, ITEM5,
+/// [ADMIN] {indent}ITEM10, ITEM11, ITEM12,
+/// ITEM13, ITEM14,
+/// ```
+pub fn wrap_msg_chars(init: impl Into<String>, items: &[String], sep: impl Into<String>, indent: impl Into<String>) -> Vec<String> {
+    let sep = sep.into();
+    let indent = indent.into();
+    let mut messages = Vec::new();
+    let mut line = init.into();
+    for (i, item) in items.iter().enumerate() {
+        let to_push = if items.len() - 1 == i {
+            // if we're on the last item, skip trailing sep.
+            item.to_owned()
+        } else {
+            format!("{}{}", item, sep)
+        };
+
+        if line.len() + to_push.len() > 127 {
+            // dbg!(line.len());
+            messages.push(line);
+            line = indent.clone();
+        }
+
+        line.push_str(&to_push);
+    }
+
+    if !line.is_empty() {
+        dbg!(line.len());
+        messages.push(line);
+    }
+
+    messages
+}
+
+// pub fn wrap_msg_vislen(items: &[String]) -> Vec<String> { }
 
 #[cfg(test)]
 mod test {
@@ -777,6 +814,25 @@ mod test {
     use crate::rcon;
     use crate::rcon::RconConnectionInfo;
     use std::time::Instant;
+
+    #[test]
+    fn wrapping_test() {
+        assert_eq!(
+            wrap_msg_chars("INIT ".to_string(), &vec![
+                    "hi".to_string(),
+                    "123456789".to_string().repeat(9),
+                    "HAIiiiiiiiiiiiiiiiiiiiiiiiiiiiiii".to_string(),
+                    "HAI".to_string(),
+                    "HAI".to_string(),
+                ],
+                ", ".to_string(),
+                "INDENT ".to_string()
+            ),
+            vec![
+               "INIT hi, 123456789123456789123456789123456789123456789123456789123456789123456789123456789, HAIiiiiiiiiiiiiiiiiiiiiiiiiiiiiii, ".to_string(),
+               "INDENT HAI, HAI".to_string()
+            ]);
+    }
 
     #[allow(dead_code)]
     async fn spammer(i: usize) -> rcon::RconResult<()> {
