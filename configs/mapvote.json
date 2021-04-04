@@ -1,5 +1,6 @@
 {
     "n_options": 4,
     "max_options": 7,
-    "max_noms_per_vip": 1
+    "max_noms_per_vip": 2,
+    "spammer_interval": 60
 }

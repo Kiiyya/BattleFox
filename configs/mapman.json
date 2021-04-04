@@ -5,10 +5,9 @@
             "pool": {
                 "pool": [
                     {"map": "Locker", "mode": "Rush", "extra": false},
-                
                     {"map": "Metro", "mode": "Rush", "extra": false},
-                
-                    {"map": "PearlMarket", "mode": "Rush", "extra": false}
+                    {"map": "PearlMarket", "mode": "Rush", "extra": false},
+                    {"map": "Propaganda", "mode": "Rush", "extra": false}
                 ]
             },
             "min_players": 0
@@ -21,9 +20,9 @@
                     {"map": "Locker", "mode": "Rush", "extra": false},
                     {"map": "Shanghai", "mode": "Rush", "extra": false},
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": false},
-                
+
                     {"map": "Metro", "mode": "Rush", "extra": false},
-                
+
                     {"map": "PearlMarket", "mode": "Rush", "extra": false},
                     {"map": "Propaganda", "mode": "Rush", "extra": false},
                     {"map": "Lumphini", "mode": "Rush", "extra": false}
@@ -45,9 +44,9 @@
                     {"map": "Shanghai", "mode": "Rush", "extra": false},
                     {"map": "RogueTransmission", "mode": "Rush", "extra": false},
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": false},
-                
+
                     {"map": "Metro", "mode": "Rush", "extra": false},
-                
+
                     {"map": "PearlMarket", "mode": "Rush", "extra": false},
                     {"map": "Propaganda", "mode": "Rush", "extra": false},
                     {"map": "Lumphini", "mode": "Rush", "extra": false}
@@ -69,24 +68,24 @@
                     {"map": "Shanghai", "mode": "Rush", "extra": true},
                     {"map": "RogueTransmission", "mode": "Rush", "extra": true},
                     {"map": "Dawnbreaker", "mode": "Rush", "extra": true},
-                
+
                     {"map": "GuilinPeaks", "mode": "Rush", "extra": true},
                     {"map": "DragonPass", "mode": "Rush", "extra": true},
-                
+
                     {"map": "Caspian", "mode": "Rush", "extra": true},
                     {"map": "Firestorm", "mode": "Rush", "extra": true},
                     {"map": "Metro", "mode": "Rush", "extra": true},
                     {"map": "Oman", "mode": "Rush", "extra": true},
-                
+
                     {"map": "LostIslands", "mode": "Rush", "extra": true},
                     {"map": "NanshaStrike", "mode": "Rush", "extra": true},
                     {"map": "OpMortar", "mode": "Rush", "extra": true},
-                
+
                     {"map": "PearlMarket", "mode": "Rush", "extra": true},
                     {"map": "Propaganda", "mode": "Rush", "extra": true},
                     {"map": "Lumphini", "mode": "Rush", "extra": true},
                     {"map": "SunkenDragon", "mode": "Rush", "extra": true},
-                
+
                     {"map": "Whiteout", "mode": "Rush", "extra": true},
                     {"map": "Hammerhead", "mode": "Rush", "extra": true},
                     {"map": "Hangar21", "mode": "Rush", "extra": true},
@@ -96,6 +95,6 @@
             "min_players": 32
         }
     ],
-    "vehicle_threshold": 16,
-    "leniency": 0
+    "vehicle_threshold": 20,
+    "leniency": 2
 }

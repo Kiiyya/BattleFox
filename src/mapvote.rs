@@ -468,7 +468,7 @@ impl Mapvote {
 
             join_all(futures).await; // up to 5.4s, ouchies.
 
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(self.config.spammer_interval).await;
         }
     }
 
