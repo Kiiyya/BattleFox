@@ -207,10 +207,11 @@ impl Map {
                 ALL.iter()
             }
             Map::ParacelStorm => {
-                static ALL: [&str; 10] = [
+                static ALL: [&str; 11] = [
                     "paracel",
                     "parcel",
                     "parc",
+                    "para",
                     "paracelstorm",
                     "storm",
                     "parcelstorm",
