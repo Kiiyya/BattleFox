@@ -170,21 +170,28 @@ enum VoteResult<E: Eq + Clone> {
         /// User submitted duplicate votes, but they were continuously together, and thus could be
         /// contracted into one. Emit warning, but accept vote.
         soft_dups: HashSet<MapInPool<E>>,
+
+        not_in_options: MapPool<E>,
+
+        not_in_popstate: MapPool<E>,
     },
 
     /// User submitted duplicates but they could not be untangled. Need to retry.
     UnresolvableDuplicate { problem: MapInPool<E> },
 
-    /// A map which the user voted on is not in the current map pool.
-    NotInPopstate { missing: HashSet<Map> },
+    // /// A map which the user voted on is not in the current map pool.
+    // NotInPopstate { missing: HashSet<Map> },
 
-    /// A map is in the current pool, but is not up for vote.
-    ///
-    /// It can be nominated though.
-    NotInOptions { missing: HashSet<Map> },
+    // /// A map is in the current pool, but is not up for vote.
+    // ///
+    // /// It can be nominated though.
+    // NotInOptions { missing: HashSet<Map> },
 
     /// For some reason, managed to pass a list with zero options...
-    Empty,
+    Empty {
+        not_in_options: MapPool<E>,
+        not_in_popstate: MapPool<E>,
+    },
 
     /// There is no vote currently ongoing, this may be because:
     /// - Mapvote is currently in initialization phase
@@ -511,35 +518,26 @@ impl Mapvote {
     async fn vote(
         &self,
         player: &Guard<Player, MaybeVip>,
-        alts: &[(Map, GameMode)],
+        mut prefs: Vec<(Map, GameMode)>,
     ) -> VoteResult<()> {
-        let prefs_maps = alts
-            .iter()
-            .map(|(map, mode)| map)
-            .cloned()
-            .collect::<HashSet<Map>>();
         let mut lock = self.inner.lock().await;
         if let Some(inner) = &mut *lock {
-            let mapvote_maps = inner.pop_state.pool.to_mapset();
-            let too_many1 = prefs_maps
-                .difference(&mapvote_maps)
+            let not_in_popstate = prefs
+                .iter()
+                .filter(|(map, mode)| !inner.pop_state.pool.contains_map(*map))
                 .cloned()
-                .collect::<HashSet<_>>();
-            if !too_many1.is_empty() {
-                // Maps are forbidden by pop state.
-                return VoteResult::NotInPopstate { missing: too_many1 };
-            }
+                .collect::<Vec<_>>();
+            // Remove maps which are forbidden by pop state.
+            prefs.retain(|(map, mode)| inner.pop_state.pool.contains_map(*map));
 
-            let mapvote_opts = inner.alternatives.to_mapset();
-            let too_many2 = prefs_maps
-                .difference(&mapvote_opts)
+            let not_in_options = prefs
+                .iter()
+                .filter(|(map, mode)| !inner.alternatives.contains_map(*map))
                 .cloned()
-                .collect::<HashSet<_>>();
-            if !too_many2.is_empty() {
-                // the maps are in the pool, but aren't up to be chosen right now.
-                // Nomination possible.
-                return VoteResult::NotInOptions { missing: too_many2 };
-            }
+                .collect::<Vec<_>>();
+            // the maps are in the popstate, but aren't up to be chosen right now.
+            // Nomination possible.
+            prefs.retain(|(map, mode)| inner.alternatives.contains_map(*map));
 
             let weight = match player.clone().cases() {
                 Left(yesvip) => Rat::one() + Rat::one(), // 2
@@ -547,7 +545,7 @@ impl Mapvote {
             };
 
             // now, attempt to deduplicate (Ballot:from_iter(..) does that for us)
-            let alts = alts.iter().map(|(map, mode)| MapInPool {
+            let alts = prefs.iter().map(|(map, mode)| MapInPool {
                 map: *map,
                 mode: mode.clone(),
                 extra: (),
@@ -557,7 +555,10 @@ impl Mapvote {
                 CheckBallotResult::UnresolvableDuplicate { problem } => {
                     return VoteResult::UnresolvableDuplicate { problem }
                 }
-                CheckBallotResult::Empty => return VoteResult::Empty,
+                CheckBallotResult::Empty => return VoteResult::Empty {
+                    not_in_options: not_in_options.into(),
+                    not_in_popstate: not_in_popstate.into(),
+                },
             };
 
             // so now we have a ballot which can be cast. Let's check for existing ballot, and cast it!
@@ -566,9 +567,38 @@ impl Mapvote {
                 new: ballot,
                 old,
                 soft_dups,
+                not_in_options: not_in_options.into(),
+                not_in_popstate: not_in_popstate.into(),
             }
         } else {
             VoteResult::Inactive
+        }
+    }
+
+    async fn notify_skipped(&self, not_in_options: MapPool<()>, not_in_popstate: MapPool<()>, g: Guard<Player, MaybeVip>, bf4: &Bf4Client, player: &Player) {
+        if !not_in_options.pool.is_empty() {
+            let list = not_in_options.to_mapset().union(&not_in_popstate.to_mapset())
+                .map(|map| map.short())
+                .join(", ");
+            match g.cases() {
+                Left(yesvip) => {
+                    let _ = bf4.say_lines(vec![
+                        format!("Skipped {}: Currently not in options", list),
+                        format!("..but you are VIP <3!! Try this: !nominate {}", not_in_options.pool[0].map.short()),
+                    ], player).await;
+                }
+                Right(notvip) => {
+                    let _ = bf4.say_lines(vec![
+                        format!("Skipped {}: Currently not in options", list),
+                        self.config.vip_nom.clone(),
+                    ], player).await;
+                }
+            }
+        } else if !not_in_popstate.pool.is_empty() {
+            let list = not_in_options.to_mapset().union(&not_in_popstate.to_mapset())
+                .map(|map| map.short())
+                .join(", ");
+            let _ = bf4.say_lines(vec![format!("Skipped {}: Not available due to population", list)], player).await;
         }
     }
 
@@ -576,7 +606,8 @@ impl Mapvote {
         &self,
         bf4: &Arc<Bf4Client>,
         player: Player,
-        maps: &[(Map, GameMode)],
+        maps: Vec<(Map, GameMode)>,
+        vis: Visibility,
     ) -> RconResult<()> {
         let vip = self.vips.get_player(&player, bf4).await?;
 
@@ -587,69 +618,27 @@ impl Mapvote {
                         new,
                         old,
                         soft_dups,
+                        not_in_options,
+                        not_in_popstate
                     } => {
+                        self.notify_skipped(not_in_options, not_in_popstate, g, bf4, &player).await;
+
                         if let Some(old) = old {
-                            let _ = bf4
-                                .say_lines(
-                                    vec![format!("{} changed their ballot to {}", player, new)],
-                                    Visibility::All,
-                                )
-                                .await;
+                            let _ = bf4.say_lines(vec![format!("{} changed their ballot to {}", player, new)], vis.clone()).await;
                         } else {
-                            let _ = bf4
-                                .say_lines(
-                                    vec![format!("{} voted: {}", player, new)],
-                                    Visibility::All,
-                                )
-                                .await;
+                            let _ = bf4.say_lines(vec![format!("{} voted: {}", player, new)], vis.clone()).await;
                         }
                     }
                     VoteResult::UnresolvableDuplicate { problem } => {
-                        let _ = bf4
-                            .say_lines(
-                                vec![
-                                    format!(
-                                        "{}: Could not figure out your preference order",
-                                        player
-                                    ),
-                                    format!("The issue is with {}", problem.map.Pretty()),
-                                ],
-                                player,
-                            )
-                            .await;
-                    }
-                    VoteResult::NotInPopstate { missing } => {
                         let _ = bf4.say_lines(vec![
-                            format!("{}: Maps {} are not available with the current population level. Try again.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
-                        ], player).await;
+                            format!("{}: Could not figure out your preference order", player),
+                            format!("The issue is with {} (cycle?)", problem.map.Pretty()),
+                        ],player).await;
                     }
-                    VoteResult::NotInOptions { missing } => match g.cases() {
-                        Left(yesvip) => {
-                            let _ = bf4
-                                .say_lines(
-                                    vec![
-                                        format!(
-                                            "{}: Maps {} are not up for vote right now.",
-                                            player,
-                                            missing.iter().map(|mip| mip.Pretty()).join(", ")
-                                        ),
-                                        format!(
-                                            "...but you are VIP <3!! Try this: !nominate {}",
-                                            missing.iter().next().unwrap().short()
-                                        ),
-                                    ],
-                                    player,
-                                )
-                                .await;
-                        }
-                        Right(notvip) => {
-                            let _ = bf4.say_lines(vec![
-                                    format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
-                                    self.config.vip_nom.clone(),
-                                ], player).await;
-                        }
-                    },
-                    VoteResult::Empty => {}
+                    VoteResult::Empty { not_in_options, not_in_popstate } => {
+                        self.notify_skipped(not_in_options, not_in_popstate, g, bf4, &player).await;
+                        let _ = bf4.say("Try again.", player).await;
+                    }
                     VoteResult::Inactive => {
                         let _ = bf4.say("Mapvote is currently inactive, try again later :)".to_string(), player).await;
                     }
@@ -657,11 +646,9 @@ impl Mapvote {
             }
             Old => {
                 println!(
-                    "[mapvote.rs handle_maps()] Couldn't resolve vip for {}?",
+                    "[mapvote.rs handle_maps()] Couldn't resolve vip for {}? (this is a bug, report it to Kiiya#0456)",
                     player
                 );
-                // tokio::time::sleep(Duration::from_secs(1)).await;
-                // return self.handle_maps(bf4, player, maps).await; // just retry.
             }
         }
 
@@ -822,8 +809,13 @@ impl Mapvote {
             _ => {
                 // if no command matched, try parsing !metro pearl etc
                 if !msg.is_empty() {
+                    let vis = if msg[0] == '/' {
+                        Visibility::Player(player.name.clone())
+                    } else {
+                        vis
+                    };
                     match parse_maps(&msg.as_str()[1..]) {
-                        ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, &maps).await?,
+                        ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, maps, vis).await?,
                         ParseMapsResult::Nothing => {}, // silently ignore
                         ParseMapsResult::NotAMapName { orig } => {
                             let _ = bf4
@@ -909,6 +901,8 @@ impl Mapvote {
         }
     }
 }
+
+
 
 pub enum ParseMapsResult {
     Ok(Vec<(Map, GameMode)>),

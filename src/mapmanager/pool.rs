@@ -60,6 +60,25 @@ impl<E: Eq + Clone> Default for MapPool<E> {
     }
 }
 
+impl <E: Eq + Clone> From<Vec<MapInPool<E>>> for MapPool<E> {
+    fn from(pool: Vec<MapInPool<E>>) -> Self {
+        Self {
+            pool
+        }
+    }
+}
+impl From<Vec<(Map, GameMode)>> for MapPool<()> {
+    fn from(pool: Vec<(Map, GameMode)>) -> Self {
+        Self {
+            pool: pool.iter().map(|(map, mode)| MapInPool {
+                map: *map,
+                mode: mode.clone(),
+                extra: (),
+            }).collect()
+        }
+    }
+}
+
 impl<E: Eq + Clone> MapPool<E> {
     pub fn new() -> Self {
         Self { pool: Vec::new() }
