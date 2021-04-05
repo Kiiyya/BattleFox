@@ -792,7 +792,6 @@ impl Mapvote {
 
                 drop(lock);
                 let _ = bf4.say_lines(lines, player).await;
-                Ok(())
             }
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
@@ -819,25 +818,27 @@ impl Mapvote {
                     }
                 });
 
-                Ok(())
             }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
-                match parse_maps(&msg.as_str()[1..]) {
-                    ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, &maps).await,
-                    ParseMapsResult::Nothing => Ok(()), // silently ignore
-                    ParseMapsResult::NotAMapName { orig } => {
-                        let _ = bf4
-                            .say(
-                                format!("{}: \"{}\" is not a valid map name.", player, orig),
-                                player,
-                            )
-                            .await;
-                        Ok(())
+                if !msg.is_empty() {
+                    match parse_maps(&msg.as_str()[1..]) {
+                        ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, &maps).await?,
+                        ParseMapsResult::Nothing => {}, // silently ignore
+                        ParseMapsResult::NotAMapName { orig } => {
+                            let _ = bf4
+                                .say(
+                                    format!("{}: \"{}\" is not a valid map name.", player, orig),
+                                    player,
+                                )
+                                .await;
+                        }
                     }
                 }
             }
         }
+
+        Ok(())
     }
 
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
