@@ -552,7 +552,7 @@ impl Mapvote {
                 mode: mode.clone(),
                 extra: (),
             });
-            let (ballot, soft_dups) = match Ballot::from_iter(Rat::one(), alts) {
+            let (ballot, soft_dups) = match Ballot::from_iter(weight, alts) {
                 CheckBallotResult::Ok { ballot, soft_dups } => (ballot, soft_dups),
                 CheckBallotResult::UnresolvableDuplicate { problem } => {
                     return VoteResult::UnresolvableDuplicate { problem }
