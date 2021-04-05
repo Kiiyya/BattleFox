@@ -15,6 +15,9 @@ pub struct MapVoteConfig {
 
     pub endscreen_votetime: Duration,
     pub endscreen_post_votetime: Duration,
+
+    pub vip_nom: String,
+    pub vip_ad: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +33,9 @@ pub struct MapVoteConfigJson {
 
     pub endscreen_votetime: u64,
     pub endscreen_post_votetime: u64,
+
+    pub vip_ad: String,
+    pub vip_nom: String,
 }
 
 impl MapVoteConfig {
@@ -41,6 +47,8 @@ impl MapVoteConfig {
             spammer_interval: Duration::from_secs(other.spammer_interval),
             endscreen_votetime: Duration::from_secs(other.endscreen_votetime),
             endscreen_post_votetime: Duration::from_secs(other.endscreen_post_votetime),
+            vip_nom: other.vip_ad,
+            vip_ad: other.vip_nom,
         }
     }
 }

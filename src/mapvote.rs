@@ -645,7 +645,7 @@ impl Mapvote {
                         Right(notvip) => {
                             let _ = bf4.say_lines(vec![
                                     format!("{}: Maps {} are not up for vote right now.", player, missing.iter().map(|mip| mip.Pretty()).join(", ")),
-                                    "VIPs can !nominate maps, get your VIP slot for $5/month at bfcube.com!".to_string(),
+                                    self.config.vip_nom.clone(),
                                 ], player).await;
                         }
                     },
@@ -765,7 +765,7 @@ impl Mapvote {
             Right(player) => {
                 let _ = bf4.say_lines(vec![
                     format!("Sorry {}, but you are not a VIP (yet), and thus can't nominate maps :(", &*player),
-                    "Get your VIP slot for $5/month at bfcube.com! <3".to_string(),
+                    self.config.vip_ad.clone(),
                 ], &*player).await;
             }
         }
