@@ -430,7 +430,7 @@ impl Mapvote {
             let mapvote = self.clone();
             let bf4 = bf4.clone();
             tokio::spawn(async move {
-                mapvote.spam_status(bf4).await;
+                mapvote.status_spammer(bf4).await;
                 println!("mapvote spammer sutatus done");
             })
         };
@@ -459,10 +459,6 @@ impl Mapvote {
                     let mapman = self.mapman.clone();
                     // fire and forget about it, so we don't block other events. Yay concurrency!
                     tokio::spawn(async move {
-                        // let's wait like 10 seconds because people might still vote in the end screen.
-                        let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", 15), Visibility::All).await;
-                        tokio::time::sleep(Duration::from_secs(15)).await;
-
                         mapvote.handle_round_over(&bf4).await;
                     });
                 }
@@ -475,28 +471,32 @@ impl Mapvote {
         Ok(())
     }
 
-    async fn spam_status(&self, bf4: Arc<Bf4Client>) {
+    async fn broadcast_status(&self, bf4: &Bf4Client) {
+        let players = self.players.players(&bf4).await;
+        let mut futures = Vec::new();
+        let lock = self.inner.lock().await;
+        if let Some(inner) = &*lock {
+            // only do something when we are initialized
+            let mut lines = Vec::new();
+            for player in players.keys() {
+                inner.fmt_options(&mut lines);
+                inner.fmt_personal_status(&mut lines, player);
+                futures.push(bf4.say_lines(lines.clone(), player.clone()));
+                lines.clear();
+            }
+        }
+
+        // drop lock before we spend potentially 64 * 5 * 17ms = 5.4s in rcon calls...
+        drop(lock);
+
+        join_all(futures).await; // up to 5.4s, ouchies.
+    }
+
+    async fn status_spammer(&self, bf4: Arc<Bf4Client>) {
         loop {
             tokio::time::sleep(Duration::from_secs(15)).await;
 
-            let players = self.players.players(&bf4).await;
-            let mut futures = Vec::new();
-            let lock = self.inner.lock().await;
-            if let Some(inner) = &*lock {
-                // only do something when we are initialized
-                let mut lines = Vec::new();
-                for player in players.keys() {
-                    inner.fmt_options(&mut lines);
-                    inner.fmt_personal_status(&mut lines, player);
-                    futures.push(bf4.say_lines(lines.clone(), player.clone()));
-                    lines.clear();
-                }
-            }
-
-            // drop lock before we spend potentially 64 * 5 * 17ms = 5.4s in rcon calls...
-            drop(lock);
-
-            join_all(futures).await; // up to 5.4s, ouchies.
+            self.broadcast_status(&bf4).await;
 
             tokio::time::sleep(self.config.spammer_interval).await;
         }
@@ -787,7 +787,7 @@ impl Mapvote {
                     inner.fmt_options(&mut lines);
                     inner.fmt_personal_status(&mut lines, &player);
                 } else {
-                    let _ = bf4.say("Mapvote is currently inactive, try again later :)".to_string(), player.clone()).await;
+                    lines.push("Mapvote is currently inactive, try again later :)".to_owned());
                 }
 
                 drop(lock);
@@ -841,6 +841,11 @@ impl Mapvote {
     }
 
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
+        self.broadcast_status(bf4).await; // send everyone the voting options.
+        // let's wait like 10 seconds because people might still vote in the end screen.
+        let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
+        tokio::time::sleep(self.config.endscreen_votetime).await;
+
         let profile = {
             let mut lock = self.inner.lock().await;
             if let Some(inner) = &mut *lock {
@@ -891,7 +896,7 @@ impl Mapvote {
                 .await
                 .unwrap();
 
-                tokio::time::sleep(Duration::from_secs(4)).await;
+                tokio::time::sleep(self.config.endscreen_post_votetime).await;
 
                 self.mapman.switch_to(bf4, &winner).await.unwrap();
                 // maplist.switch_to(bf4, mipmap, mode, false).await.unwrap();
