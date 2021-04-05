@@ -45,7 +45,10 @@ pub enum Map {
     Hammerhead,
     Hangar21,
     Karelia,
-    // Other(AsciiString),
+
+    ZavodNight,
+    Outbreak,
+    DragonValley,
 }
 
 impl Map {
@@ -84,6 +87,9 @@ impl Map {
             Map::Hammerhead => "Hammerhead",
             Map::Hangar21 => "Hangar 21",
             Map::Karelia => "Karelia",
+            Map::ZavodNight => "Zavod Graveyard",
+            Map::Outbreak => "Community Ops",
+            Map::DragonValley => "Dragon Valley",
         }
     }
 
@@ -415,6 +421,38 @@ impl Map {
                 ];
                 ALL.iter()
             }
+            Map::ZavodNight => {
+                static ALL: [&str; 9] = [
+                    "grave",
+                    "graveyard",
+                    "gravey",
+                    "yard",
+                    "gyard",
+                    "zavodgraveyard",
+                    "zavodgrave",
+                    "night",
+                    "nightshift",
+                ];
+                ALL.iter()
+            }
+            Map::Outbreak => {
+                static ALL: [&str; 2] = [
+                    "outbreak",
+                    "cmp",
+                ];
+                ALL.iter()
+            }
+            Map::DragonValley => {
+                static ALL: [&str; 6] = [
+                    "valley",
+                    "dragonvalley",
+                    "dragon_valley",
+                    "dragon-valley",
+                    "val",
+                    "vall",
+                ];
+                ALL.iter()
+            }
         }
     }
 
@@ -488,6 +526,10 @@ impl RconDecoding for Map {
             "XP4_SubBase" => Map::Hammerhead,
             "XP4_Titan" => Map::Hangar21,
             "XP4_WlkrFtry" => Map::Karelia,
+
+            "XP7_Valley" => Map::DragonValley,
+            "XP6_CMP" => Map::Outbreak,
+            "XP5_Night_01" => Map::ZavodNight,
             _ => return Err(RconError::protocol_msg("Unknown map".to_string())),
         })
     }
@@ -531,6 +573,10 @@ impl RconEncoding for Map {
             Map::Hammerhead => "XP4_SubBase",
             Map::Hangar21 => "XP4_Titan",
             Map::Karelia => "XP4_WlkrFtry",
+
+            Map::ZavodNight => "XP5_Night_01",
+            Map::Outbreak => "XP6_CMP",
+            Map::DragonValley => "XP7_Valley",
         };
 
         AsciiString::from_str(str).unwrap()
