@@ -28,5 +28,7 @@ lazy_static = "1.4"
 # strsim = "0.10"
 
 # for login.hashed
-rust-crypto = "0.2"
+# rust-crypto = "0.2"
+md5 = "0.7"
+
 serde = {version = "1", features = ["derive"]}

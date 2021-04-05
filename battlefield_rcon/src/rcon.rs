@@ -3,7 +3,6 @@ use std::{collections::HashMap, convert::TryInto, io::ErrorKind, num::ParseIntEr
 
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
-use crypto::{digest::Digest, md5::Md5};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
@@ -236,13 +235,16 @@ impl RconClient {
             )
             .await?;
 
-        let mut hasher = Md5::new();
-        hasher.input(&salt);
-        hasher.input_str(myself._connection_info.password.as_str());
-        let hash = hasher.result_str().as_str().to_uppercase();
+        let mut hash_in = salt;
+        // let mut hasher = Md5::new();
+        hash_in.extend_from_slice(myself._connection_info.password.as_bytes());
+        // hasher.input(&salt);
+        // hasher.input_str(myself._connection_info.password.as_str());
+        // let hash = hasher.result_str().as_str().to_uppercase();
+        let hash = md5::compute(hash_in);
 
         myself
-            .query(&veca!["login.hashed", hash], ok_eof, |err| match err {
+            .query(&veca!["login.hashed", format!("{:?}", hash).to_ascii_uppercase()], ok_eof, |err| match err {
                 "InvalidPasswordHash" => Some(RconError::WrongPassword),
                 "PasswordNotSet" => Some(RconError::other(
                     "The server has no password set. Login is impossible.",
