@@ -147,10 +147,10 @@ impl MapManager {
         let pop = self.get_pop_count(bf4).await?;
         let vehicles = pop >= self.vehicle_threshold;
 
-        let pop_state = {
-            let lock = self.inner.lock().await;
-            lock.pop_state.clone()
-        };
+        // let pop_state = {
+        //     let lock = self.inner.lock().await;
+        //     lock.pop_state.clone()
+        // };
 
         let tickets = match pop {
             x if x <= 8 => 75_f64,
@@ -162,18 +162,18 @@ impl MapManager {
         // let tickets = ()
         let tickets = tickets as usize;
 
-        if let Some(index) = pop_state.pool.get_rcon_index(mip.map, &mip.mode, |_| true) {
-            // sweet, index is valid. Go for it.
-            switch_map_to(bf4, index, vehicles, tickets).await?;
-            Ok(())
-        } else {
-            println!("Failed to find RCON index of {} {:?}. This is possible, but should not happen tooo often.", mip.map.Pretty(), mip.mode);
-            // just add the map temporarily and switch anyway.
-            bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
-            switch_map_to(bf4, 0, vehicles, tickets).await?;
-            bf4.maplist_remove(0).await?;
-            Ok(())
-        }
+        dbg!(bf4.maplist_list().await?);
+        println!("[mapman switch_to()] Adding {:?} {:?} 1 round at index 0 temporarily...", mip.map, mip.mode);
+
+        bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
+        dbg!(bf4.maplist_list().await?);
+
+        switch_map_to(bf4, 0, vehicles, tickets).await?;
+        bf4.maplist_remove(0).await?;
+        println!("[mapman switch_to()] ...removed rcon maplist index 0 again.");
+        dbg!(bf4.maplist_list().await?);
+
+        Ok(())
     }
 
     /// Gets the cached amount of players currently on the server, or fetches it by listing all
@@ -396,6 +396,8 @@ pub async fn switch_map_to(
     let _ = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
+
+    println!("[mapman switch_map_to()] done.");
 
     Ok(())
 }
