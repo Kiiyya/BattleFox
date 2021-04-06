@@ -487,9 +487,9 @@ where
     pub fn vanilla_stv_1<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<A> {
         // let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
         // let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
-        let q = dbg!(dbg!(self.weight_sum()) / (Rat::one() + Rat::one()));
-        let q = dbg!(q.floor());
-        let q = dbg!(q + Rat::one());
+        let q = self.weight_sum() / (Rat::one() + Rat::one());
+        let q = q.floor();
+        let q = q + Rat::one();
         let result = self.vanilla_stv(1, &q, tracer);
 
         let winner = result.e.iter().find(|_| true).cloned();
