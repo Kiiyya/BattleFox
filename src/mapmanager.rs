@@ -268,7 +268,7 @@ impl MapManager {
     ) -> Result<(), MapListError> {
         // fill maps, set one round on each map (we ignore rounds, but RCON needs something).
         // In turn, RCON isn't aware of vehicles yes/no...
-        fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 2)).await?;
+        fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 1)).await?;
 
         let mut lock = self.inner.lock().await;
         lock.pop_state = newpop.clone();
