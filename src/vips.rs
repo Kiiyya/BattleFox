@@ -11,8 +11,11 @@ use tokio::{sync::Mutex, time::Instant};
 use crate::guard::{
     or::Or,
     recent::{Age, MaxAge, Recent},
-    Guard, Judgement,
+    Guard, Judgement, Cases
 };
+
+use either::{Left, Right};
+use itertools::Itertools;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct YesVip;
@@ -159,15 +162,22 @@ impl Vips {
         let mut inner = self.inner.lock().await;
         inner.trim_old();
         for reserved in reserved_list.iter() {
-            if let Some(old) = inner
-                .vips
-                .insert(reserved.to_owned(), Recent::now(MaybeVip::left(YesVip)))
-            {
-                println!("{} is now VIP. (previously: {:?})", reserved, old);
-            } else {
-                println!("{} is now VIP.", reserved);
-            }
+            inner.vips.insert(reserved.to_owned(), Recent::now(MaybeVip::left(YesVip)))
+                .and_then(|j| j.and_then(|or| {
+                    or.cases().either(|_yes| (), |_no| println!("{} is now VIP! (was previously recorded as not)", reserved));
+                }));
         }
+
+        // :3
+        inner.vips.insert(AsciiString::from_ascii("Kiiyya").unwrap(), Recent::now(MaybeVip::left(YesVip)));
+        inner.vips.insert(AsciiString::from_ascii("PocketWolfy").unwrap(), Recent::now(MaybeVip::left(YesVip)));
+
+        let mut vips = inner.vips.iter().filter_map(|(k, v)|
+            v.and_then(|g| match g.cases() {
+                Left(_) => format!("{} (yes)", k),
+                Right(_) => format!("{} (no)", k),
+            }));
+        println!("VIPs: {}", vips.join(", "));
 
         Ok(getter(&mut inner)) // before we drop the lock, use the getter on it.
     }

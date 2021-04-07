@@ -65,6 +65,14 @@ impl<A, B> Cases for Or<A, B> {
     }
 }
 
+impl<'a, A, B> Cases for &'a Or<A, B> {
+    type Cases = Either<&'a A, &'a B>;
+
+    fn cases(self) -> Self::Cases {
+        self.0.as_ref()
+    }
+}
+
 impl<A: Clone, B: Clone> Clone for Or<A, B> {
     fn clone(&self) -> Self {
         Or(match &self.0 {
@@ -127,18 +135,18 @@ impl<T, A: Judgement<T>, B: Judgement<T>> Guard<T, Or<A, B>> {
         }
     }
 
-    // pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
-    //     match self.judgement.cases() {
-    //         Either::Left(l) => Either::Left(Guard {
-    //             inner: self.inner,
-    //             judgement: l,
-    //         }),
-    //         Either::Right(r) => Either::Right(Guard {
-    //             inner: self.inner,
-    //             judgement: r,
-    //         }),
-    //     }
-    // }
+    pub fn cases(self) -> Either<Guard<T, A>, Guard<T, B>> {
+        match self.judgement.cases() {
+            Either::Left(l) => Either::Left(Guard {
+                inner: self.inner,
+                judgement: l,
+            }),
+            Either::Right(r) => Either::Right(Guard {
+                inner: self.inner,
+                judgement: r,
+            }),
+        }
+    }
 }
 
 impl<T, A: Judgement<T>, B: Judgement<T>> Cases for Guard<T, Or<A, B>> {

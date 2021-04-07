@@ -26,6 +26,13 @@ impl<J: MaxAge> Recent<J> {
     pub fn is_recent(&self) -> bool {
         self.timestamp.elapsed() < J::MAX_AGE
     }
+
+    pub fn and_then<T>(self, f: impl FnOnce(J) -> T) -> Option<T> {
+        match self.cases() {
+            Age::Recent(j) => Some(f(j)),
+            Age::Old => None,
+        }
+    }
 }
 
 impl<T, J: Judgement<T>> Guard<T, Recent<J>> {
