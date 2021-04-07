@@ -88,7 +88,7 @@ impl Map {
             Map::Hangar21 => "Hangar 21",
             Map::Karelia => "Karelia",
             Map::ZavodNight => "Zavod Graveyard",
-            Map::Outbreak => "Community Ops",
+            Map::Outbreak => "Outbreak",
             Map::DragonValley => "Dragon Valley",
         }
     }
