@@ -87,7 +87,7 @@ impl Map {
             Map::Hammerhead => "Hammerhead",
             Map::Hangar21 => "Hangar 21",
             Map::Karelia => "Karelia",
-            Map::ZavodNight => "Zavod Graveyard",
+            Map::ZavodNight => "Zavod Night",
             Map::Outbreak => "Outbreak",
             Map::DragonValley => "Dragon Valley",
         }
@@ -154,8 +154,9 @@ impl Map {
                 ALL.iter()
             }
             Map::Locker => {
-                static ALL: [&str; 4] = [
+                static ALL: [&str; 5] = [
                     "locker",
+                    "lock",
                     "operationlocker",
                     "operation_locker",
                     "operation-locker",
@@ -163,8 +164,9 @@ impl Map {
                 ALL.iter()
             }
             Map::PearlMarket => {
-                static ALL: [&str; 6] = [
+                static ALL: [&str; 7] = [
                     "pearl",
+                    "pear",
                     "paerl",
                     "market",
                     "pearlmarket",
@@ -371,7 +373,7 @@ impl Map {
                 ALL.iter()
             }
             Map::Lumphini => {
-                static ALL: [&str; 8] = [
+                static ALL: [&str; 9] = [
                     "lumphini",
                     "lump",
                     "garden",
@@ -380,6 +382,7 @@ impl Map {
                     "lumphini-garden",
                     "lumpini",
                     "lumfini",
+                    "lumpi"
                 ];
                 ALL.iter()
             }
