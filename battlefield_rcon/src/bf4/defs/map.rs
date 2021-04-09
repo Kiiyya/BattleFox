@@ -104,7 +104,7 @@ impl Map {
 
     /// Gets an iterator over all currently known maps. (Excluding `Other(...)`).
     pub fn all() -> std::slice::Iter<'static, Map> {
-        static ALL: [Map; 30] = [
+        static ALL: [Map; 33] = [
             Map::Metro,
             Map::Locker,
             Map::PearlMarket,
@@ -135,6 +135,9 @@ impl Map {
             Map::Hammerhead,
             Map::Hangar21,
             Map::Karelia,
+            Map::DragonValley,
+            Map::ZavodNight,
+            Map::Outbreak,
         ];
         ALL.iter()
     }
