@@ -763,8 +763,9 @@ impl Mapvote {
         bf4: Arc<Bf4Client>,
         vis: Visibility,
         player: Player,
-        msg: AsciiString,
+        mut msg: AsciiString,
     ) -> RconResult<()> {
+        msg.make_ascii_lowercase();
         let split = msg.as_str().split(' ').collect::<Vec<_>>();
         match split[0] {
             "/v" | "!v" => {
