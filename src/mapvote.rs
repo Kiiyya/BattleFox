@@ -766,7 +766,11 @@ impl Mapvote {
         mut msg: AsciiString,
     ) -> RconResult<()> {
         msg.make_ascii_lowercase();
-        let split = msg.as_str().split(' ').collect::<Vec<_>>();
+        let split = msg.as_str()
+            .split(' ')
+            .filter(|&s| !s.is_empty())
+            .collect::<Vec<_>>();
+
         match split[0] {
             "/v" | "!v" => {
                 let mut lines = Vec::new();
@@ -922,7 +926,10 @@ pub enum ParseMapsResult {
 /// If the first map is not an exact map name, it will just return `Nothing`.
 pub fn parse_maps(str: &str) -> ParseMapsResult {
     let mut res = Vec::new();
-    let words = str.split(' ').collect::<Vec<_>>();
+    let words = str
+        .split(' ')
+        .filter(|&s| !s.is_empty())
+        .collect::<Vec<_>>();
 
     #[allow(clippy::needless_range_loop)]
     for i in 0..words.len() {
