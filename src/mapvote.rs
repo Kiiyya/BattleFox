@@ -947,3 +947,41 @@ pub fn parse_maps(str: &str) -> ParseMapsResult {
 
     ParseMapsResult::Ok(res)
 }
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+    use tokio::time::Instant;
+    use futures::future::join_all;
+
+    pub async fn sleeper(str: String) {
+        // tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn bench_tokio_spawn() {
+        const N: u32 = 100_000;
+        let mut jhs = Vec::with_capacity(N as usize);
+
+        let t = Instant::now();
+
+        for i in 0..N {
+            jhs.push(tokio::spawn(sleeper(format!("I'm {}!", i))));
+        }
+
+        let duration = t.elapsed();
+        println!("Spawned {} tasks in {}ms (--> {}ns/task)", N, duration.as_millis(), (duration / N).as_nanos());
+        let t = Instant::now();
+
+        join_all(jhs).await;
+        // for jh in jhs {
+        //     jh.await;
+        // }
+
+        let duration = t.elapsed();
+        println!("Joined {} tasks in {}ms (--> {}ns/task)", N, duration.as_millis(), (duration / N).as_nanos());
+
+        // assert!(false);
+    }
+}
