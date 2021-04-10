@@ -28,6 +28,7 @@ pub mod vips;
 pub mod players;
 mod stv;
 pub mod weaponforcer;
+pub mod humanlang;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
