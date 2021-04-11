@@ -118,16 +118,27 @@ impl<A> Ballot<A>
 where
     A: PartialEq + Clone + Eq + Hash,
 {
+    // /// Removes all candidates in `a` in the ballot.
+    // pub fn strike_out(&self, a: &HashSet<A>) -> Self {
+    //     Self {
+    //         weight: self.weight.clone(),
+    //         preferences: self
+    //             .preferences
+    //             .iter()
+    //             .filter(|&aa| !a.contains(aa))
+    //             .cloned()
+    //             .collect(),
+    //     }
+    // }
+
     /// Removes all candidates in `a` in the ballot.
-    pub fn strike_out(&self, a: &HashSet<A>) -> Self {
+    pub fn strike_out_single(&self, a: &A) -> Self {
         Self {
             weight: self.weight.clone(),
-            preferences: self
-                .preferences
-                .iter()
-                .filter(|&aa| !a.contains(aa))
+            preferences: self.preferences.iter()
+                .filter(|&aa| a != aa)
                 .cloned()
-                .collect(),
+                .collect()
         }
     }
 }
@@ -249,41 +260,33 @@ where
             return self.clone();
         }
 
+        println!("elem_t {:?} {:?} {}", a, b, s);
+
         let mut ret = Vec::<Ballot<A>>::new();
         for ballot in self
             .ballots
             .iter()
             .filter(|&b| !Rat::is_zero(&b.weight) && !b.preferences.is_empty())
         {
-            if ballot.preferences[0] == *a {
-                if ballot.preferences.len() >= 2 {
-                    if ballot.preferences[1] == *b {
-                        // bingo, ballots where first preference is `a` and second `b` is where we transfer stuff!
-                        // split ballot up into residual and transferred part.
+            if ballot.preferences.len() >= 2 && &ballot.preferences[0] == a && &ballot.preferences[1] == b {
+                // bingo, ballots where first preference is `a` and second `b` is where we transfer stuff!
+                // split ballot up into residual and transferred part.
 
-                        if !Rat::is_one(s) {
-                            // if s == 1, then we would just create empty ballots here. not technically wrong, but
-                            // might as well skip them. small optimization.
-                            let residual = Ballot {
-                                weight: &ballot.weight * (Rat::one() - s),
-                                preferences: ballot.preferences.clone(),
-                            };
-                            ret.push(residual);
-                        }
-
-                        let transfer = Ballot {
-                            weight: &ballot.weight * s,
-                            preferences: ballot.preferences[1..].into(), // remove `a` from transferred ballots.
-                        };
-                        ret.push(transfer);
-                    } else {
-                        // otherwise do nothing.
-                        ret.push(ballot.clone());
-                    }
-                } else {
-                    // we have nobody to transfer to, so we yeet this ballot entirely.
-                    continue;
+                if !Rat::is_one(s) {
+                    // if s == 1, then we would just create empty ballots here. not technically wrong, but
+                    // might as well skip them. small optimization.
+                    let residual = Ballot {
+                        weight: &ballot.weight * (Rat::one() - s),
+                        preferences: ballot.preferences.clone(),
+                    };
+                    ret.push(residual);
                 }
+
+                let transfer = Ballot {
+                    weight: &ballot.weight * s,
+                    preferences: ballot.preferences[1..].into(), // remove `a` from transferred ballots.
+                };
+                ret.push(transfer);
             } else {
                 // otherwise do nothing.
                 ret.push(ballot.clone());
@@ -313,23 +316,34 @@ where
         profile
     }
 
-    /// `limit_to` basically.
-    /// Removes candidate `a` from all ballots, and from `alts`
-    pub fn strike_out(&self, eliminated: &HashSet<A>) -> Self {
-        Self {
-            alts: self.alts.difference(eliminated).cloned().collect(),
-            ballots: self
-                .ballots
-                .iter()
-                .map(|b| b.strike_out(eliminated))
-                .collect(),
-        }
-    }
+    // /// `limit_to` basically.
+    // /// Removes candidate `a` from all ballots, and from `alts`
+    // pub fn strike_out(&self, eliminated: &HashSet<A>) -> Self {
+    //     Self {
+    //         alts: self.alts.difference(eliminated).cloned().collect(),
+    //         ballots: self
+    //             .ballots
+    //             .iter()
+    //             // .filter(|&b| b.)
+    //             .map(|b| b.strike_out(eliminated))
+    //             .collect(),
+    //     }
+    // }
 
-    /// `limit_to` basically.
+    /// `consume` basically.
     /// Removes candidate `a` from all ballots, and from `alts`
     pub fn strike_out_single<T: StvTracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
-        let profile = self.strike_out(&[eliminated.clone()].iter().cloned().collect());
+        // let profile = self.strike_out(&[eliminated.clone()].iter().cloned().collect());
+        let profile = Self {
+            alts: self.alts.iter()
+                .filter(|&a| a != eliminated)
+                .cloned()
+                .collect(),
+            ballots: self.ballots.iter()
+                .filter(|&b| !b.preferences.is_empty() && &b.preferences[0] != eliminated)
+                .map(|b| b.strike_out_single(eliminated))
+                .collect()
+        };
         tracer.strike_out(eliminated, &profile);
         profile
     }
@@ -578,6 +592,22 @@ pub mod test {
         }
     }
 
+    fn print_trace2<A>(start: &Profile<A>, tracer: DetailedTracer<A>)
+    where
+        // T: StvTracer<A>,
+        // T::Trace: IntoIterator<Item = StvAction<A>>,
+        A: Display + Debug + Clone + Eq + Hash + 'static,
+    {
+        println!("Starting with {}", start);
+        for action in tracer.trace {
+            if let Some(p) = action.get_profile_after() {
+                println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+            } else {
+                println!("{}", &action);
+            }
+        }
+    }
+
     #[test]
     fn stv() {
         let profile = Profile {
@@ -626,5 +656,30 @@ pub mod test {
 
         assert_eq!("Wolf", winner);
         // assert!(false);
+    }
+
+    #[test]
+    fn consume() {
+        let profile = Profile {
+            alts: hashset!["Wolf", "Fox", "Eagle", "Penguin"],
+            ballots: vec![
+                ballot![1, "Eagle"],
+                ballot![1, "Eagle"],
+                ballot![2, "Eagle"],
+                ballot![0.5, "Wolf", "Fox", "Eagle"],
+                ballot![2, "Fox", "Wolf", "Eagle"],
+                ballot![2, "Wolf", "Fox", "Eagle"],
+                ballot![2, "Wolf", "Fox"],
+            ],
+        };
+
+        let mut tracer = DetailedTracer::new();
+
+        let result = profile.vanilla_stv(2, &(Rat::one() + Rat::one() + Rat::one() + Rat::one() + Rat::one()), &mut tracer);
+        println!("Result: {:?}", result);
+
+        print_trace2(&profile, tracer);
+
+        assert!(false);
     }
 }
