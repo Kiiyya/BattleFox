@@ -428,7 +428,7 @@ impl Map {
                 ALL.iter()
             }
             Map::ZavodNight => {
-                static ALL: [&str; 9] = [
+                static ALL: [&str; 10] = [
                     "grave",
                     "graveyard",
                     "gravey",
@@ -438,6 +438,7 @@ impl Map {
                     "zavodgrave",
                     "night",
                     "nightshift",
+                    "nightzavod",
                 ];
                 ALL.iter()
             }
