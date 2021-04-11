@@ -771,6 +771,10 @@ impl Mapvote {
             .filter(|&s| !s.is_empty())
             .collect::<Vec<_>>();
 
+        if split.is_empty() {
+            return Ok(())
+        }
+
         match split[0] {
             "/v" | "!v" => {
                 let mut lines = Vec::new();
