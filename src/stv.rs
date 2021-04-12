@@ -260,7 +260,7 @@ where
             return self.clone();
         }
 
-        println!("elem_t {:?} {:?} {}", a, b, s);
+        // println!("elem_t {:?} {:?} {}", a, b, s);
 
         let mut ret = Vec::<Ballot<A>>::new();
         for ballot in self
@@ -592,14 +592,14 @@ pub mod test {
         }
     }
 
-    fn print_trace2<A>(start: &Profile<A>, tracer: DetailedTracer<A>)
+    fn print_trace2<A>(start: &Profile<A>, tracer: &DetailedTracer<A>)
     where
         // T: StvTracer<A>,
         // T::Trace: IntoIterator<Item = StvAction<A>>,
         A: Display + Debug + Clone + Eq + Hash + 'static,
     {
         println!("Starting with {}", start);
-        for action in tracer.trace {
+        for action in &tracer.trace {
             if let Some(p) = action.get_profile_after() {
                 println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
             } else {
@@ -658,28 +658,59 @@ pub mod test {
         // assert!(false);
     }
 
+    /// When ballots aren't full (all candidates on each ballot), then transfering votes has a
+    /// problem. Look at the output and you'll see
     #[test]
-    fn consume() {
+    #[ignore]
+    fn unfull_ballots_broken() {
         let profile = Profile {
-            alts: hashset!["Wolf", "Fox", "Eagle", "Penguin"],
+            alts: hashset!["Wolf", "Fox"],
             ballots: vec![
-                ballot![1, "Eagle"],
-                ballot![1, "Eagle"],
-                ballot![2, "Eagle"],
-                ballot![0.5, "Wolf", "Fox", "Eagle"],
-                ballot![2, "Fox", "Wolf", "Eagle"],
-                ballot![2, "Wolf", "Fox", "Eagle"],
-                ballot![2, "Wolf", "Fox"],
+                ballot![1, "Fox"],
+                ballot![1, "Fox", "Wolf"],
+                ballot![1, "Fox", "Wolf"],
+                ballot![1, "Wolf", "Fox"],
             ],
         };
+        println!("Starting with: {:?}", profile);
 
         let mut tracer = DetailedTracer::new();
 
-        let result = profile.vanilla_stv(2, &(Rat::one() + Rat::one() + Rat::one() + Rat::one() + Rat::one()), &mut tracer);
+        let two = Rat::one() + Rat::one();
+
+        let result = profile.vanilla_stv(1, &two, &mut tracer);
         println!("Result: {:?}", result);
 
-        print_trace2(&profile, tracer);
+        print_trace2(&profile, &tracer);
+        let profile2 = tracer.trace[0].get_profile_after().unwrap();
+        println!("After first step: {:?}", profile2);
+        assert_eq!(two, profile2.score(&"Fox"));
+        assert_eq!(two, profile2.score(&"Wolf"));
+    }
 
-        assert!(false);
+    #[test]
+    fn full_ballots_elemt_exact_shave_off() {
+        let profile = Profile {
+            alts: hashset!["Wolf", "Fox", "No"],
+            ballots: vec![
+                ballot![1, "Fox", "No"],
+                ballot![1, "Fox", "Wolf"],
+                ballot![1, "Fox", "Wolf"],
+                ballot![1, "Wolf", "Fox"],
+            ],
+        };
+        println!("Starting with: {:?}", profile);
+
+        let mut tracer = DetailedTracer::new();
+
+        let two = Rat::one() + Rat::one();
+
+        let result = profile.vanilla_stv(1, &two, &mut tracer);
+        println!("Result: {:?}", result);
+
+        print_trace2(&profile, &tracer);
+        let profile2 = tracer.trace[1].get_profile_after().unwrap();
+        println!("After second step: {:?}", profile2); // after we've done Fox -> No, Fox -> Wolf (both at 1/3).
+        assert_eq!(two, profile2.score(&"Fox"));
     }
 }

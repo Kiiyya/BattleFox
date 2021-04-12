@@ -209,9 +209,13 @@ impl RconClient {
         };
 
         // at this point we should have a fully functional async way to query.
-        // so we just login and set stuff up, and done!
 
-        let salt = myself
+        Ok(myself)
+    }
+
+    #[allow(clippy::useless_vec)]
+    pub async fn login_hashed(&self, password: AsciiString) -> RconResult<()> {
+        let salt = self
             .query(
                 &veca!["login.hashed"],
                 |ok| {
@@ -236,14 +240,10 @@ impl RconClient {
             .await?;
 
         let mut hash_in = salt;
-        // let mut hasher = Md5::new();
-        hash_in.extend_from_slice(myself._connection_info.password.as_bytes());
-        // hasher.input(&salt);
-        // hasher.input_str(myself._connection_info.password.as_str());
-        // let hash = hasher.result_str().as_str().to_uppercase();
+        hash_in.extend_from_slice(password.as_bytes());
         let hash = md5::compute(hash_in);
 
-        myself
+        self
             .query(&veca!["login.hashed", format!("{:?}", hash).to_ascii_uppercase()], ok_eof, |err| match err {
                 "InvalidPasswordHash" => Some(RconError::WrongPassword),
                 "PasswordNotSet" => Some(RconError::other(
@@ -253,7 +253,7 @@ impl RconClient {
             })
             .await?;
 
-        Ok(myself)
+        Ok(())
     }
 
     pub fn take_nonresponse_rx(&mut self) -> Option<mpsc::UnboundedReceiver<RconResult<Packet>>> {

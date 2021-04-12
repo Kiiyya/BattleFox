@@ -58,6 +58,7 @@ pub struct Bf4Client {
 impl Bf4Client {
     pub async fn connect(coninfo: &RconConnectionInfo) -> RconResult<Arc<Self>> {
         let rcon = RconClient::connect(coninfo).await?;
+        rcon.login_hashed(coninfo.password.clone()).await?;
         Bf4Client::new_from(rcon).await
     }
 
