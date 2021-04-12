@@ -4,7 +4,7 @@ use std::{collections::HashMap, convert::TryInto, io::ErrorKind, num::ParseIntEr
 // use crate::error::{Error, Result};
 use ascii::{AsciiString, FromAsciiError, IntoAsciiString};
 use packet::{Packet, PacketDeserializeResult, PacketOrigin};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::ToSocketAddrs};
 use tokio::{
     net::tcp::OwnedReadHalf,
     sync::{mpsc, oneshot},
@@ -147,8 +147,8 @@ pub struct RconClient {
 
     nonresponse_rx: Option<mpsc::UnboundedReceiver<RconResult<Packet>>>,
 
-    /// ip, port, password.
-    _connection_info: RconConnectionInfo,
+    // / ip, port, password.
+    // _connection_info: RconConnectionInfo,
 }
 
 // #[derive(Debug)]
@@ -176,9 +176,8 @@ pub trait RconEventPacketHandler {
 /// Just used internally to do a remote procedure call.
 impl RconClient {
     #[allow(clippy::useless_vec)]
-    pub async fn connect(conn: &RconConnectionInfo) -> RconResult<Self> {
-        let conn = conn.clone();
-        let tcp = TcpStream::connect((conn.ip.clone(), conn.port)).await?;
+    pub async fn connect(addr: impl ToSocketAddrs) -> RconResult<Self> {
+        let tcp = TcpStream::connect(addr).await?;
 
         let (query_tx, query_rx) = mpsc::unbounded_channel::<SendQuery>();
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel::<()>();
@@ -201,11 +200,6 @@ impl RconClient {
             queries: query_tx,
             nonresponse_rx: Some(nonresponses_rx),
             mainloop_shutdown: shutdown_tx,
-
-            _connection_info: RconConnectionInfo {
-                password: conn.password.clone(),
-                ..conn
-            },
         };
 
         // at this point we should have a fully functional async way to query.
@@ -214,7 +208,9 @@ impl RconClient {
     }
 
     #[allow(clippy::useless_vec)]
-    pub async fn login_hashed(&self, password: AsciiString) -> RconResult<()> {
+    pub async fn login_hashed(&self, password: impl IntoAsciiString + Into<String>) -> RconResult<()> {
+        let password = password.into_ascii_string()?;
+
         let salt = self
             .query(
                 &veca!["login.hashed"],

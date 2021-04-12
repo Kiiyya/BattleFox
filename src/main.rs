@@ -115,7 +115,7 @@ async fn main() -> rcon::RconResult<()> {
         "Connecting to {}:{} with password ***...",
         coninfo.ip, coninfo.port
     );
-    let bf4 = Bf4Client::connect(&coninfo).await.unwrap();
+    let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     println!("Connected!");
 
     // start parts.
