@@ -46,6 +46,7 @@ use num_rational::BigRational as Rat;
 use num_traits::One;
 
 pub mod config;
+mod animate;
 
 #[derive(Debug)]
 struct Inner {

@@ -19,4 +19,10 @@ BFOX_RCON_PORT=12345
 BFOX_RCON_PASSWORD=qw3RTy
 ```
 
+## Rust/VSCode tips & tricks:
+- Some Rust-Analyzer goodies:
+  - https://rust-analyzer.github.io/manual.html#on-enter
+  - https://rust-analyzer.github.io/manual.html#on-typing-assists
+-
+
 🇪🇺

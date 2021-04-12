@@ -1,3 +1,5 @@
+use std::slice::Iter;
+
 use super::*;
 
 /// Visitor-like pattern.
@@ -17,6 +19,11 @@ pub trait StvTracer<A> {
 
     // type Trace : Iterator<;
     // fn iter(&self) -> Self::Trace;
+}
+
+pub trait StvLoggingTracer<'log, A: 'log> {
+    type Trace : Iterator<Item = &'log StvAction<A>>;
+    fn log(&'log self) -> Self::Trace;
 }
 
 ////////////////////////////////////
@@ -161,6 +168,14 @@ impl<A> ElectElimTiebreakTracer<A> {
     }
 }
 
+impl<'log, A: 'log> StvLoggingTracer<'log, A> for ElectElimTiebreakTracer<A> {
+    type Trace = Iter<'log, StvAction<A>>;
+
+    fn log(&'log self) -> Self::Trace {
+        self.trace.iter()
+    }
+}
+
 impl<A: Clone> StvTracer<A> for ElectElimTiebreakTracer<A> {
     fn electing(&mut self, alts: &HashSet<A>, profile_after: &Profile<A>) {
         self.trace.push(StvAction::Elected {
@@ -200,6 +215,14 @@ pub struct DetailedTracer<A> {
 impl<A> DetailedTracer<A> {
     pub fn new() -> Self {
         Self { trace: Vec::new() }
+    }
+}
+
+impl<'log, A: 'static> StvLoggingTracer<'log, A> for DetailedTracer<A> {
+    type Trace = Iter<'log, StvAction<A>>;
+
+    fn log(&'log self) -> Self::Trace {
+        self.trace.iter()
     }
 }
 
@@ -263,3 +286,22 @@ impl<A: Clone> StvTracer<A> for DetailedTracer<A> {
     //     &self.trace
     // }
 }
+
+// /// Given one original ballot, holds which alternatives it is assigned to right now.
+// pub struct AssignmentDistribution<A> {
+
+// }
+
+// pub struct PersonalAssignmentTracker<A> {
+
+// }
+
+// impl<A> StvTracer<A> for PersonalAssignmentTracker<A> {
+//     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, profile_after: &Profile<A>) {
+
+//     }
+
+//     fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {
+
+//     }
+// }
