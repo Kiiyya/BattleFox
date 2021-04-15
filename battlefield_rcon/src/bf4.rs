@@ -417,7 +417,7 @@ impl Bf4Client {
             match ev {
                 Ok(x) => Some(x),
                 Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                    println!("warn [Bf4Client::event_stream] Too many events at once! Had to drop {} events", n);
+                    warn!("Too many events at once! Had to drop {} events", n);
                     None // filter out errors like this.
                 },
             }

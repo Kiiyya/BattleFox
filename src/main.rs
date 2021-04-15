@@ -88,11 +88,24 @@ struct MapManagerConfig {
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
-    pretty_env_logger::init();
+    flexi_logger::Logger::with_env_or_str("trace")
+        .print_message()
+        .log_to_file()
+        .format_for_files(flexi_logger::detailed_format)
+        .set_palette("196;208;-;245;241".to_string()) // https://jonasjacek.github.io/colors/
+        .format_for_stderr(flexi_logger::colored_opt_format)
+        .format_for_stdout(flexi_logger::colored_opt_format)
+        .duplicate_to_stderr(flexi_logger::Duplicate::All)
+        .directory("logs")
+        .start().unwrap();
+
+    // also log panics
+    std::panic::set_hook(Box::new(|panic_info| {
+        error!(target: "PANIC", "{}\n{:?}", panic_info, backtrace::Backtrace::new());
+    }));
+
     let coninfo = get_rcon_coninfo()?;
-
     let players = Arc::new(Players::new());
-
     let vips = Arc::new(Vips::new());
 
     // set up parts
@@ -121,11 +134,6 @@ async fn main() -> rcon::RconResult<()> {
     );
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     info!("Connected!");
-
-    // for map in battlefield_rcon::bf4::Map::all() {
-    //     let _ = bf4.say(format!("\n\t{}o", map.map_constlen_tabbed()), battlefield_rcon::bf4::Visibility::All).await;
-    //     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    // }
 
     // start parts.
     let mut jhs = Vec::new();

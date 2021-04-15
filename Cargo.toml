@@ -47,4 +47,7 @@ lerp = "0.4"
 maplit = "1"
 
 log = "0.4"
-pretty_env_logger = "0.4"
+# pretty_env_logger = "0.4"
+humantime = "2.1"
+flexi_logger = { version = "0.17", features = ["colors"] }
+backtrace = "0.3"

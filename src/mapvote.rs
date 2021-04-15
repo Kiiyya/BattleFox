@@ -276,7 +276,7 @@ impl Mapvote {
                     );
                 }
                 Ordering::Equal => {
-                    println!("Uhhh, popstate didn't change direction? Wot.");
+                    debug!("Uhhh, popstate didn't change direction? Wot.");
                     return; // or maybe panic instead...?
                 }
                 Ordering::Greater => {
@@ -450,7 +450,6 @@ impl Mapvote {
             let bf4 = bf4.clone();
             tokio::spawn(async move {
                 mapvote.status_spammer(bf4).await;
-                println!("mapvote spammer sutatus done");
             })
         };
 
@@ -657,7 +656,7 @@ impl Mapvote {
                 }
             }
             Old => {
-                println!(
+                warn!(
                     "[mapvote.rs handle_maps()] Couldn't resolve vip for {}? (this is a bug, report it to Kiiya#0456)",
                     player
                 );
@@ -896,7 +895,8 @@ impl Mapvote {
                     .sorted_by(|a, b| Ord::cmp(&profile.score(b), &profile.score(a)))
                     .cloned()
                     .collect_vec();
-                let animation = dbg!(animate::stv_anim_frames(&alts_start, players.keys(), &tracer));
+                let animation = animate::stv_anim_frames(&alts_start, players.keys(), &tracer);
+                trace!("Animations for all players: {:?}", animation);
 
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {

@@ -134,7 +134,7 @@ impl Vips {
             match vip.cases() {
                 Age::Recent(g) => break Ok(user(g)),
                 Age::Old => {
-                    println!("[vips.rs get_player_use] retrying... ({})", player.name);
+                    info!("[vips.rs get_player_use] retrying... ({})", player.name);
                     tokio::time::sleep(Duration::from_secs(2)).await;
                 }
             }
@@ -150,7 +150,7 @@ impl Vips {
         let mut inner = self.inner.lock().await;
         if let Some(last_checked) = inner.last_checked {
             if last_checked.elapsed() < Duration::from_secs(2) {
-                println!("Double VIP refresh prevented, woo!");
+                debug!("Double VIP refresh prevented, woo!");
                 return Ok(getter(&mut inner));
             }
         }
@@ -164,7 +164,7 @@ impl Vips {
         for reserved in reserved_list.iter() {
             inner.vips.insert(reserved.to_owned(), Recent::now(MaybeVip::left(YesVip)))
                 .and_then(|j| j.and_then(|or| {
-                    or.cases().either(|_yes| (), |_no| println!("{} is now VIP! (was previously recorded as not)", reserved));
+                    or.cases().either(|_yes| (), |_no| debug!("{} is now VIP! (was previously recorded as not)", reserved));
                 }));
         }
 
@@ -177,7 +177,7 @@ impl Vips {
                 Left(_) => format!("{} (yes)", k),
                 Right(_) => format!("{} (no)", k),
             }));
-        println!("VIPs: {}", vips.join(", "));
+        debug!("VIPs: {}", vips.join(", "));
 
         Ok(getter(&mut inner)) // before we drop the lock, use the getter on it.
     }

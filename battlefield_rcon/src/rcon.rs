@@ -361,7 +361,7 @@ impl RconClient {
                                 }
                             },
                             _ = shutdown_rx.recv() => {
-                                println!("warn [Rcon tcp_read_loop] received shutdown signal, but had a packet partially read.");
+                                warn!("received shutdown signal, but had a packet partially read.");
                                 break 'outer;
                             }
                         }
@@ -460,7 +460,7 @@ impl RconClient {
                             Ok(n) if n == bytes.len() => {},
                             Ok(_) /* otherwise */     => panic!("Failed to send packet in its entirety"), // TODO potentially better error handling.
                             Err(e) => {
-                                println!("debg [RconClient::mainloop] Got error while writing to socket: {:?}", e);
+                                debug!("Got error while writing to socket: {:?}", e);
                                 break;
                             },
                         }
@@ -484,7 +484,7 @@ impl RconClient {
                                 Ok(n) if n == bytes.len() => {},
                                 Ok(_) /* otherwise */     => panic!("Failed to send packet in its entirety"), // TODO potentially better error handling.
                                 Err(e) => {
-                                    println!("debg [RconClient::mainloop] Got error while writing to socket: {:?}", e);
+                                    debug!("Got error while writing to socket: {:?}", e);
                                     break;
                                 },
                             }
@@ -504,12 +504,12 @@ impl RconClient {
                                 let response_time = std::time::Instant::now().duration_since(waiter.sent).as_millis();
                                 // rcon_response_times.push()
                                 if response_time > 2000 { // 333ms
-                                    println!("response time is high: {}ms", response_time);
+                                    warn!("response time is high: {}ms", response_time);
                                 }
                                 waiter.replier.send(Ok(packet.words)).expect("Query issuer no longer wants the result?"); // FIXME: this shouldn't panic. Handle error instead.
                             } else {
                                 // just ignore it then.
-                                println!("warn [RconClient::mainloop] Received a response to a packet which was never a request. Maybe timed out? Packet = {}", packet);
+                                warn!("Received a response to a packet which was never a request. Maybe timed out? Packet = {}", packet);
                             }
                         } else {
                             todo!("handle non-response packets.")
@@ -528,7 +528,7 @@ impl RconClient {
                     },
                     Some(Err(e)) => {
                         // some other error, e.g. malformed packet received.
-                        println!("warn [RconClient::mainloop] Tcp read loop ended with error: {:?}", e);
+                        warn!("Tcp read loop ended with error: {:?}", e);
                         break;
                     },
                 },
@@ -538,7 +538,7 @@ impl RconClient {
                         break;
                     },
                     None => {
-                        println!("warn [RconClient::mainloop] Received shutdown signal (only because all Sender halves have dropped).");
+                        warn!("Received shutdown signal (only because all Sender halves have dropped).");
                     }
                 }
             }
