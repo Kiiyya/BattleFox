@@ -28,8 +28,9 @@ impl WeaponEnforcer {
                     ], victim).await;
 
                     let n = offenses.entry(killer.clone()).or_insert(0);
+                    *n += 1;
 
-                    if *n >= 3 {
+                    if *n >= 2 {
                         let _ = dbg!(bf4.kick(killer.name.clone(), format!("{} is forbidden on this server!", weapon)).await);
                     } else {
                         let _ = dbg!(bf4.kill(killer.name.clone()).await); // ignore potential fails with let _ = ...

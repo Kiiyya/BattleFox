@@ -1,5 +1,6 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
+use ascii::{AsciiString, IntoAsciiString};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
@@ -18,6 +19,9 @@ pub struct MapVoteConfig {
 
     pub vip_nom: String,
     pub vip_ad: String,
+
+    pub animate: bool,
+    pub animate_override: HashMap<AsciiString, bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +40,9 @@ pub struct MapVoteConfigJson {
 
     pub vip_ad: String,
     pub vip_nom: String,
+
+    pub animate: bool,
+    pub animate_override: HashMap<String, bool>,
 }
 
 impl MapVoteConfig {
@@ -49,6 +56,8 @@ impl MapVoteConfig {
             endscreen_post_votetime: Duration::from_secs(other.endscreen_post_votetime),
             vip_nom: other.vip_ad,
             vip_ad: other.vip_nom,
+            animate: other.animate,
+            animate_override: other.animate_override.iter().map(|(k, v)| (k.clone().into_ascii_string().unwrap(), *v)).collect(),
         }
     }
 }

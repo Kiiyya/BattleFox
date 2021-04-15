@@ -24,9 +24,9 @@ tokio-stream = "0.1"
 dotenv = "0.15"
 
 # for voting
-num-rational = { version = "0.4.0", features = ["num-bigint"] }
+num-rational = { version = "0.4.0", features = ["num-bigint", "serde"] }
 num-traits = "0.2.14"
-num-bigint = "0.4.0"
+num-bigint = { version = "0.4.0", features = ["serde"] }
 
 async-trait = "0.1.42"
 futures = "0.3.12"
@@ -42,3 +42,9 @@ validator = { version = "0.12", features = ["derive"] }
 itertools = "0.10" # for sorting...
 rand = "0.8" # For randomly choosing maps from a pool.
 lerp = "0.4"
+
+# HashMap literals, very simple crate.
+maplit = "1"
+
+log = "0.4"
+pretty_env_logger = "0.4"

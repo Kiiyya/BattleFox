@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex, Weak};
 
 use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
 use crate::rcon::{
-    ok_eof, packet::Packet, RconClient, RconConnectionInfo, RconError, RconQueryable, RconResult,
+    ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult,
 };
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::{parse_pib, PlayerInfo};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::{net::ToSocketAddrs, sync::{broadcast, mpsc, oneshot}};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 pub mod defs;
@@ -56,9 +56,9 @@ pub struct Bf4Client {
 }
 
 impl Bf4Client {
-    pub async fn connect(coninfo: &RconConnectionInfo) -> RconResult<Arc<Self>> {
-        let rcon = RconClient::connect(coninfo).await?;
-        rcon.login_hashed(coninfo.password.clone()).await?;
+    pub async fn connect(addr: impl ToSocketAddrs, password: AsciiString) -> RconResult<Arc<Self>> {
+        let rcon = RconClient::connect(addr).await?;
+        rcon.login_hashed(password).await?;
         Bf4Client::new_from(rcon).await
     }
 
@@ -824,7 +824,6 @@ pub fn wrap_msg_chars(init: impl Into<String>, items: &[String], sep: impl Into<
 mod test {
     use super::*;
     use crate::rcon;
-    use crate::rcon::RconConnectionInfo;
     use std::time::Instant;
 
     #[test]
@@ -848,12 +847,8 @@ mod test {
 
     #[allow(dead_code)]
     async fn spammer(i: usize) -> rcon::RconResult<()> {
-        let coninfo = RconConnectionInfo {
-            ip: "127.0.0.1".to_string(),
-            port: 47200,
-            password: "smurf".into_ascii_string()?,
-        };
-        let rcon = RconClient::connect(&coninfo).await?;
+        let rcon = RconClient::connect(("127.0.0.1", 47200)).await?;
+        rcon.login_hashed("smurf").await?;
         let bf4 = Bf4Client::new_from(rcon).await.unwrap();
         let start = Instant::now();
 

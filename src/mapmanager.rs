@@ -162,16 +162,16 @@ impl MapManager {
         // let tickets = ()
         let tickets = tickets as usize;
 
-        dbg!(bf4.maplist_list().await?);
-        println!("[mapman switch_to()] Adding {:?} {:?} 1 round at index 0 temporarily...", mip.map, mip.mode);
+        bf4.maplist_list().await?;
+        trace!("Adding {:?} {:?} 1 round at index 0 temporarily...", mip.map, mip.mode);
 
         bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
-        dbg!(bf4.maplist_list().await?);
+        bf4.maplist_list().await?;
 
         switch_map_to(bf4, 0, vehicles, tickets).await?;
         bf4.maplist_remove(0).await?;
-        println!("[mapman switch_to()] ...removed rcon maplist index 0 again.");
-        dbg!(bf4.maplist_list().await?);
+        trace!("...removed rcon maplist index 0 again.");
+        bf4.maplist_list().await?;
 
         Ok(())
     }
@@ -309,7 +309,7 @@ impl MapManager {
                 MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
                 MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
                 MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-            })?;
+            }).unwrap();
 
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
@@ -323,7 +323,7 @@ impl MapManager {
                         MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
                         MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
                         MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                    })?
+                    }).unwrap()
                 }
                 Ok(Event::Leave {
                     player: _,
@@ -334,7 +334,7 @@ impl MapManager {
                     MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
                     MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
                     MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                })?,
+                }).unwrap(),
                 _ => {}
             }
         }
@@ -374,7 +374,7 @@ pub async fn switch_map_to(
     tickets: usize,
 ) -> Result<(), MapListError> {
     bf4.maplist_set_next_map(index).await?;
-    println!(
+    debug!(
         "[mapman switch_map_to()] index: {}, vehicles: {}, tickets: {}",
         index, vehicles, tickets
     );
@@ -387,17 +387,17 @@ pub async fn switch_map_to(
     // where the value would be automatically set to 400.
     let _ = bf4.set_vehicle_spawn_delay(100).await;
 
-    let _  = dbg!(bf4.set_tickets(tickets).await);
+    let _  = bf4.set_tickets(tickets).await;
     sleep(Duration::from_secs(1)).await;
 
     bf4.maplist_run_next_round().await?;
 
     sleep(Duration::from_secs(10)).await;
-    let _ = dbg!(bf4.set_tickets(std::cmp::max(100, tickets)).await);
+    let _ = bf4.set_tickets(std::cmp::max(100, tickets)).await;
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
 
-    println!("[mapman switch_map_to()] done.");
+    // println!("[mapman switch_map_to()] done.");
 
     Ok(())
 }

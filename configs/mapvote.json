@@ -8,5 +8,10 @@
     "endscreen_post_votetime": 5,
 
     "vip_ad": "Get your VIP slot for 5$/month at bfcube.com!",
-    "vip_nom": "VIPs can !nominate maps, get your VIP slot for 5$/month at bfcube.com!"
+    "vip_nom": "VIPs can !nominate maps, get your VIP slot for 5$/month at bfcube.com!",
+
+    "animate": false,
+    "animate_override": {
+        "Kiiyya": true
+    }
 }

@@ -1,25 +1,16 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::{
-    guard::{
+use crate::{guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
-    },
-    mapmanager::{
+    }, mapmanager::{
         pool::{MapInPool, MapPool, Vehicles, VehiclesSpecified},
         CallbackResult, MapManager, PopState,
-    },
-    players::Players,
-    stv::{
-        tracing::{DetailedTracer, ElectElimTiebreakTracer},
-        CheckBallotResult, Profile,
-    },
-    vips::{MaybeVip, Vips, YesVip},
-};
+    }, players::Players, stv::{CheckBallotResult, Profile, tracing::{Assignment, DetailedTracer, Distr}}, vips::{MaybeVip, Vips, YesVip}};
 
 use self::config::MapVoteConfig;
 
-use super::stv::tracing::{NoTracer, StvAction};
+use super::stv::tracing::{NoTracer, StvAction, LoggingTracer, AnimTracer};
 use super::stv::Ballot;
 use ascii::{AsciiString, IntoAsciiString};
 use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}, wrap_msg_chars}, rcon::{RconError, RconResult}};
@@ -46,6 +37,7 @@ use num_rational::BigRational as Rat;
 use num_traits::One;
 
 pub mod config;
+mod animate;
 
 #[derive(Debug)]
 struct Inner {
@@ -73,6 +65,16 @@ impl Inner {
             alts: self.alternatives.to_set(),
             ballots: self.votes.values().cloned().collect(),
         }
+    }
+
+    /// # Panics
+    /// When any ballot does not have a first preference, panics.
+    /// This should never happen since it's an invariant that all ballots must have at least
+    /// one preference
+    pub fn to_assignment(&self) -> Assignment<Player, MapInPool<()>> {
+        self.votes.iter().map(|(player, ballot)| {
+            (player.clone(), Distr::single(ballot.preferences[0].clone(), ballot.weight.clone()))
+        }).collect()
     }
 
     /// Gets the amount of nominations that the VIP has done this round.
@@ -153,9 +155,13 @@ impl Inner {
         self.alternatives = self.pop_state.pool.choose_random(n).extra_remove();
         self.votes.clear();
         self.nominations.clear();
-        println!(
-            "I've set up a new vote with pool {:?}, so options are {:?}.",
-            self.pop_state, self.alternatives
+        let mut pool = self.pop_state.pool.pool.iter().map(|mip| mip.map.short());
+        let mut options = self.alternatives.pool.iter().map(|mip| mip.map.short());
+        debug!(
+            "I've set up a new vote with pool {}: [{}], so options are [{}].",
+            self.pop_state.name,
+            pool.join(", "),
+            options.join(", ")
         );
     }
 }
@@ -226,6 +232,9 @@ impl Mapvote {
             config,
         });
 
+
+        // trace!("before setting up ugly callback");
+
         // holy shit this is ugly.
         let myself_weak = Arc::downgrade(&myself);
         mapman
@@ -235,6 +244,7 @@ impl Mapvote {
                     // try to upgrade to strong Arc<MapVote>. If that fails, it means the mapvote
                     // instance was dropped. In that case, RemoveMe.
                     if let Some(strong) = weak.upgrade() {
+                        trace!("popstate changed!");
                         tokio::spawn(async move {
                             strong.on_popstate_changed(bf4, popstate).await;
                         });
@@ -246,19 +256,21 @@ impl Mapvote {
             })
             .await;
 
+        // trace!("after setting up ugly callback");
+
         myself
     }
 
     async fn on_popstate_changed(&self, bf4: Arc<Bf4Client>, popstate: PopState<Vehicles>) {
         let mut lock = self.inner.lock().await;
         if let Some(inner) = &mut *lock {
-            println!("Popstate changed! New: {}", popstate.name);
+            info!("Popstate changed! New: {}", popstate.name);
 
             let mut futures = Vec::new();
             let direction = PopState::change_direction(&inner.pop_state, &popstate);
             match direction {
                 Ordering::Less => {
-                    println!(
+                    debug!(
                         "Mapman: PopState downgrade from {} to {}",
                         inner.pop_state.name, popstate.name
                     );
@@ -269,7 +281,7 @@ impl Mapvote {
                 }
                 Ordering::Greater => {
                     // TODO: Notify every single VIP individually that they can nominate more now.
-                    println!(
+                    debug!(
                         "Mapman: PopState upgrade from {} to {}",
                         inner.pop_state.name, popstate.name
                     );
@@ -424,7 +436,7 @@ impl Mapvote {
                 nominations: HashMap::new(),
             };
             init.set_up_new_vote(self.config.n_options);
-            println!("Popstate initialized! New: {}", init.pop_state.name);
+            info!("Popstate initialized! New: {}", init.pop_state.name);
             *lock = Some(init);
         }
     }
@@ -846,72 +858,79 @@ impl Mapvote {
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
-        tokio::time::sleep(self.config.endscreen_votetime).await;
+        tokio::time::sleep(self.config.endscreen_votetime - Duration::from_secs(7)).await;
+        self.broadcast_status(bf4).await; // send everyone the voting options.
+        tokio::time::sleep(Duration::from_secs(7)).await;
 
-        let profile = {
+        let players = self.players.players(bf4).await;
+
+        debug!("Voting ended");
+
+        let maybe = {
             let mut lock = self.inner.lock().await;
             if let Some(inner) = &mut *lock {
-                let ret = inner.to_profile();
+                let profile = inner.to_profile();
+                let assignment = inner.to_assignment();
+
                 inner.set_up_new_vote(self.config.n_options);
-                Some(ret)
+                Some((profile, assignment))
             } else {
                 None
             }
+            // important: lock is dropped here at end of scope!
         };
 
+        dbg!(&maybe);
+
         // only do something if we have an Inner.
-        if let Some(profile) = profile {
-            // let mut tracer = ElectElimTiebreakTracer::new();
-            let mut tracer = DetailedTracer::new();
-            let mut tracer_runnerup = DetailedTracer::new();
-            if let Some((winner, runner_up)) =
-                profile.vanilla_stv_1_with_runnerup(&mut tracer, &mut tracer_runnerup)
-            {
-                println!("Starting with {}: {:?}", &profile, &profile);
-                for action in tracer.trace {
-                    if let Some(p) = action.get_profile_after() {
-                        println!("  {} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
-                    } else {
-                        println!("  {}", &action);
-                    }
+        if let Some((profile, assignment)) = maybe {
+            let mut tracer = AnimTracer::start(profile.clone(), assignment);
+            if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
+                trace!("AnimTracer: {:?}", &tracer);
+
+                for ass in tracer.log_iter() {
+                    debug!("Ass: {:?}", ass);
                 }
 
-                let runner_up_text = if let Some(runner_up) = runner_up {
-                    println!("(Re-run for runner-up) Starting with {}", profile);
-                    for action in tracer_runnerup.trace {
-                        if let Some(p) = action.get_profile_after() {
-                            println!("  {} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+                let alts_start = profile.alts.iter()
+                    .sorted_by(|a, b| Ord::cmp(&profile.score(b), &profile.score(a)))
+                    .cloned()
+                    .collect_vec();
+                let animation = dbg!(animate::stv_anim_frames(&alts_start, players.keys(), &tracer));
+
+                let mut jhs = Vec::new();
+                for (player, frames) in animation {
+                    let bf4clone = bf4.clone();
+                    let animate = *self.config.animate_override.get(&player.name).unwrap_or(&self.config.animate);
+                    let winner = winner.clone();
+                    jhs.push(tokio::spawn(async move {
+                        trace!("Animate for {}: {}", &player.name, animate);
+                        if animate {
+                            for frame in frames {
+                                // let f1 = bf4clone.say(frame, &player);
+                                // let f2 = tokio::time::sleep(Duration::from_secs(2));
+                                // join_all(vec![f1, f2]).await;
+                                let _ = bf4clone.say(frame, &player).await;
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
                         } else {
-                            println!("  {}", &action);
+                            let _ = bf4clone.say(format!("Winner: {}", winner.map.Pretty()), player).await;
                         }
-                    }
-
-                    format!("(runner-up: {})", runner_up.map.Pretty())
-                } else {
-                    "".to_string()
-                };
-
-                bf4.say_lines(vec![
-                    format!("Mapvote: {} people voted", profile.ballots.len()),
-                    format!("Winner: {:?} {}", winner.map, runner_up_text),
-                ], Visibility::All)
-                .await
-                .unwrap();
+                    }));
+                }
+                join_all(jhs).await;
+                trace!("Done sending animation");
 
                 tokio::time::sleep(self.config.endscreen_post_votetime).await;
 
                 self.mapman.switch_to(bf4, &winner).await.unwrap();
-                // maplist.switch_to(bf4, mipmap, mode, false).await.unwrap();
             } else {
-                bf4.say("Round over, no winner", Visibility::All)
-                    .await
-                    .unwrap(); // TODO!!
+                warn!("No mapvote winner somehow? This is likely a bug, report to Kiiya#0456 on Discord. Profile: {}", &profile);
+                let _ = bf4.say("Round over, no winner", Visibility::All).await;
             }
         }
     }
 }
-
-
 
 pub enum ParseMapsResult {
     Ok(Vec<(Map, GameMode)>),
