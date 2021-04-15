@@ -122,6 +122,11 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     info!("Connected!");
 
+    // for map in battlefield_rcon::bf4::Map::all() {
+    //     let _ = bf4.say(format!("\n\t{}o", map.map_constlen_tabbed()), battlefield_rcon::bf4::Visibility::All).await;
+    //     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // }
+
     // start parts.
     let mut jhs = Vec::new();
 

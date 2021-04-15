@@ -19,17 +19,6 @@ fn usize_of_rat(rat: &Rat) -> usize {
     *digits.get(0).unwrap_or(&0) as usize
 }
 
-fn map_constlen_tabbed(map: Map) -> &'static str {
-    match map {
-        Map::Zavod => "Zavod\t",
-        Map::Locker => "Locker\t",
-        Map::Metro => "Metro\t",
-        Map::Propaganda => "Propa\t",
-        Map::PearlMarket => "Pearl\t",
-        map => map.short(), // TODO: do the rest.
-    }
-}
-
 type Bars = HashMap<MapInPool<()>, String>;
 
 /// Make sure `alts_all` is the alternatives we *started* with, not the current iteration's
@@ -48,12 +37,12 @@ fn render_bars_diff(alts_start: &[MapInPool<()>], previous: Option<&Profile<MapI
             assert!(score_previous <= score);
 
             ret.insert(alt.clone(), format!("{}{}{}",
-                map_constlen_tabbed(alt.map),
-                "o".repeat(score_previous),
+                alt.map.map_constlen_tabbed(),
+                "=".repeat(score_previous),
                 "+".repeat(score - score_previous),
             ));
         } else {
-            ret.insert(alt.clone(), format!("({} eliminated)", alt.map.Pretty()));
+            ret.insert(alt.clone(), format!("({})", alt.map.short()));
         }
     }
     ret
@@ -80,8 +69,6 @@ fn render_bars_sequence(alts_start: &[MapInPool<()>], tracer: &AnimTracer<Player
     }
     vec
 }
-
-
 
 /// Render the STV calculation animation.
 ///
@@ -124,9 +111,9 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<
                     render_frame(&mut lines, alts_start, bars, your_vote);
                 }
                 HistEntry::Elect { elected, profile, assignment } => {
-                    assert_eq!(1, elected.len());
-                    let winner = elected.iter().next().unwrap();
-                    lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
+                    // assert_eq!(1, elected.len());
+                    // let winner = elected.iter().next().unwrap();
+                    // lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
                 }
             };
             player_frames.push(lines.join("\n"));

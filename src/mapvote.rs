@@ -854,7 +854,9 @@ impl Mapvote {
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
-        tokio::time::sleep(self.config.endscreen_votetime).await;
+        tokio::time::sleep(self.config.endscreen_votetime - Duration::from_secs(7)).await;
+        self.broadcast_status(bf4).await; // send everyone the voting options.
+        tokio::time::sleep(Duration::from_secs(7)).await;
 
         let players = self.players.players(bf4).await;
 
@@ -895,14 +897,20 @@ impl Mapvote {
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {
                     let bf4clone = bf4.clone();
+                    let animate = *self.config.animate_override.get(&player.name).unwrap_or(&self.config.animate);
+                    let winner = winner.clone();
                     jhs.push(tokio::spawn(async move {
-                        for frame in frames {
-
-                            // let f1 = bf4clone.say(frame, &player);
-                            // let f2 = tokio::time::sleep(Duration::from_secs(2));
-                            // join_all(vec![f1, f2]).await;
-                            let _ = bf4clone.say(frame, &player).await;
-                            tokio::time::sleep(Duration::from_secs(2)).await;
+                        trace!("Animate for {}: {}", &player.name, animate);
+                        if animate {
+                            for frame in frames {
+                                // let f1 = bf4clone.say(frame, &player);
+                                // let f2 = tokio::time::sleep(Duration::from_secs(2));
+                                // join_all(vec![f1, f2]).await;
+                                let _ = bf4clone.say(frame, &player).await;
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
+                        } else {
+                            let _ = bf4clone.say(format!("Winner: {}", winner.map.Pretty()), player).await;
                         }
                     }));
                 }

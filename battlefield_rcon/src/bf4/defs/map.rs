@@ -142,6 +142,44 @@ impl Map {
         ALL.iter()
     }
 
+    pub fn map_constlen_tabbed(&self) -> &'static str {
+        match self {
+            Map::Zavod => "Zavod\t",
+            Map::Locker => "Locker\t",
+            Map::Metro => "Metro\t",
+            Map::Propaganda => "Propa\t",
+            Map::PearlMarket => "Pearl\t\t",
+            Map::LancangDam => "Lancang\t",
+            Map::FloodZone => "Flood\t",
+            Map::GolmudRailway => "Golmud\t",
+            Map::ParacelStorm => "Parcel\t",
+            Map::HainanResort => "Hainan\t",
+            Map::Shanghai => "Shanghai\t",
+            Map::RogueTransmission => "Rogue\t",
+            Map::Dawnbreaker => "Dawn\t",
+            Map::SilkRoad => "Silk Road\t",
+            Map::Altai => "Altai\t\t",
+            Map::GuilinPeaks => "Guilin\t",
+            Map::DragonPass => "Dr. Pass\t",
+            Map::Caspian => "Caspian\t",
+            Map::Firestorm => "Firestorm\t",
+            Map::Oman => "Oman\t",
+            Map::LostIslands => "Lost Isl.\t",
+            Map::NanshaStrike => "Nansha\t",
+            Map::WaveBreaker => "Wavebr.\t",
+            Map::OpMortar => "Mortar\t",
+            Map::Lumphini => "Lumphi\t",
+            Map::SunkenDragon => "Sunken\t",
+            Map::Whiteout => "Whiteout\t",
+            Map::Hammerhead => "Hammer\t",
+            Map::Hangar21 => "Hangar\t",
+            Map::Karelia => "Karelia\t",
+            Map::ZavodNight => "Z. Night\t",
+            Map::Outbreak => "Outbreak\t",
+            Map::DragonValley => "Dr. Valley\t",
+        }
+    }
+
     pub fn short_names(&self) -> std::slice::Iter<'static, &'static str> {
         match self {
             Map::Metro => {
