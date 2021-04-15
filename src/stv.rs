@@ -9,12 +9,14 @@ use std::{
     hash::Hash,
     write,
 };
+use serde::{Serialize, Deserialize};
 
-use self::tracing::{NoTracer, StvTracer};
+use self::tracing::{NoTracer, Tracer};
 
 pub mod tracing;
 
 // from https://stackoverflow.com/questions/28392008/more-concise-hashmap-initialization
+#[macro_export]
 macro_rules! hashset {
     ($( $key: expr),*) => {{
             let mut map = ::std::collections::HashSet::new();
@@ -23,7 +25,7 @@ macro_rules! hashset {
     }}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Ballot<A> {
     /// some value between 0 and 1
     pub weight: Rat,
@@ -144,8 +146,8 @@ where
 }
 
 /// (e, r, d) triple
-#[derive(Debug, Clone)]
-pub struct Result<A> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Result<A: Eq + Hash> {
     /// Elected
     pub e: HashSet<A>,
     /// Rejected
@@ -155,13 +157,13 @@ pub struct Result<A> {
 }
 
 /// A set of ballots. Equivalent to one "election".
-#[derive(Clone)]
-pub struct Profile<A> {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Profile<A: Eq + Hash> {
     pub alts: HashSet<A>,
     pub ballots: Vec<Ballot<A>>,
 }
 
-impl<A> Debug for Profile<A>
+impl<A: Eq + Hash> Debug for Profile<A>
 where
     A: Debug,
 {
@@ -248,7 +250,7 @@ where
     /// Transfers from `a` to `b`, exactly `s` much. Where `s` is a number between 0 and 1.
     /// - `s = 0`: This function is a no-op, nothing is transferred.
     /// - `s = 1`: Transfer everything, leave no residual.
-    pub fn elem_t<T: StvTracer<A>>(&self, a: &A, b: &A, s: &Rat, tracer: &mut T) -> Self {
+    pub fn elem_t<T: Tracer<A>>(&self, a: &A, b: &A, s: &Rat, tracer: &mut T) -> Self {
         if *s < Rat::zero() || *s > Rat::one() {
             panic!(
                 "Single Transferable Vote elem_t got s out of bounds! s = {}",
@@ -304,7 +306,7 @@ where
     }
 
     /// Transfer votes from `a` to all other alternatives.
-    pub fn t_to_all<T: StvTracer<A>>(&self, a: &A, s: &Rat, tracer: &mut T) -> Self {
+    pub fn t_to_all<T: Tracer<A>>(&self, a: &A, s: &Rat, tracer: &mut T) -> Self {
         let mut profile = self.clone();
         // I think (for single seat at least), it's completely irrelavant in which order we do this?
         for b in self.alts.iter().filter(|&alt| alt != a) {
@@ -332,7 +334,7 @@ where
 
     /// `consume` basically.
     /// Removes candidate `a` from all ballots, and from `alts`
-    pub fn strike_out_single<T: StvTracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
+    pub fn strike_out_single<T: Tracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
         // let profile = self.strike_out(&[eliminated.clone()].iter().cloned().collect());
         let profile = Self {
             alts: self.alts.iter()
@@ -361,7 +363,7 @@ where
 
     /// Expects quota in absolute form.
     #[allow(non_snake_case)]
-    pub fn vanilla_T<T: StvTracer<A>>(&self, q: &Rat, result: &Result<A>, tracer: &mut T) -> Self {
+    pub fn vanilla_T<T: Tracer<A>>(&self, q: &Rat, result: &Result<A>, tracer: &mut T) -> Self {
         let mut profile = self.clone();
         for e in &result.e {
             let score = self.score(e);
@@ -391,7 +393,7 @@ where
 
     /// `it = (threshold q || drop 1 (worst))`.
     /// Guarantees that `d` decreases by at least 1, unless we reached a fixed point.
-    pub fn elect_or_reject<T: StvTracer<A>>(&self, q: &Rat, tracer: &mut T) -> Result<A> {
+    pub fn elect_or_reject<T: Tracer<A>>(&self, q: &Rat, tracer: &mut T) -> Result<A> {
         // get everyone who crossed quota
         let elected: HashSet<_> = self
             .alts
@@ -453,13 +455,13 @@ where
     }
 
     /// performs a single iteration of vSTV.
-    pub fn vanilla_stv_step<T: StvTracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
+    pub fn vanilla_stv_step<T: Tracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
         let result = self.elect_or_reject(q, tracer);
         let profile = self.vanilla_T(q, &result, tracer);
         (result, profile)
     }
 
-    pub fn vanilla_stv<T: StvTracer<A>>(&self, seats: usize, q: &Rat, tracer: &mut T) -> Result<A> {
+    pub fn vanilla_stv<T: Tracer<A>>(&self, seats: usize, q: &Rat, tracer: &mut T) -> Result<A> {
         if self.alts.len() <= seats {
             // if we only have `seats` candidates left, just elect everyone, even if they don't cross quota.
             // case of one bf4map only: means only one map had been nominated.
@@ -498,7 +500,7 @@ where
     /// # Returns
     /// - `Some(winner)` if there was a winner.
     /// - `None` if winner couldn't be determined.
-    pub fn vanilla_stv_1<T: StvTracer<A>>(&self, tracer: &mut T) -> Option<A> {
+    pub fn vanilla_stv_1<T: Tracer<A>>(&self, tracer: &mut T) -> Option<A> {
         // let q = self.ballots.len() / 2 + 1; // Droop quota for one seat.
         // let q = Rat::from_integer(BigInt::from_usize(q).unwrap());
         let q = self.weight_sum() / (Rat::one() + Rat::one());
@@ -523,15 +525,15 @@ where
     /// - `Some((winner, X))` if there was a winner.
     ///    - The X is the runner-up, with similar Some(runnerup) or None.
     /// - `None` if winner couldn't be determined.
-    pub fn vanilla_stv_1_with_runnerup<T: StvTracer<A>>(
+    pub fn vanilla_stv_1_with_runnerup<T: Tracer<A>>(
         &self,
         tracer: &mut T,
-        tracer_runnerup: &mut T,
+        // tracer_runnerup: &mut T,
     ) -> Option<(A, Option<A>)> {
         if let Some(winner) = self.vanilla_stv_1(tracer) {
             let runnerup = self
                 .strike_out_single(&winner, &mut NoTracer)
-                .vanilla_stv_1(tracer_runnerup);
+                .vanilla_stv_1(&mut NoTracer);
             Some((winner, runnerup))
         } else {
             None
@@ -545,21 +547,22 @@ pub mod test {
     use std::hash::Hash;
 
     use super::tracing::*;
-    use super::{Ballot, Profile};
+    use super::Profile;
     use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
     use num_traits::One;
 
+    #[macro_export]
     macro_rules! ballot {
         [1, $($pref: expr),*] => {{
-            Ballot {
-                weight: Rat::one(),
+            crate::stv::Ballot {
+                weight: num_rational::BigRational::one(),
                 preferences: vec![
                     $($pref),*
                 ],
             }
         }};
         [2, $($pref: expr),*] => {{
-            Ballot {
+            crate::stv::Ballot {
                 weight: Rat::one() + Rat::one(),
                 preferences: vec![
                     $($pref),*
@@ -567,8 +570,8 @@ pub mod test {
             }
         }};
         [0.5, $($pref: expr),*] => {{
-            Ballot {
-                weight: Rat::one() / (Rat::one() + Rat::one()),
+            crate::stv::Ballot {
+                weight: num_rational::BigRational::one() / (num_rational::BigRational::one() + num_rational::BigRational::one()),
                 preferences: vec![
                     $($pref),*
                 ],
@@ -576,36 +579,18 @@ pub mod test {
         }};
     }
 
-    fn print_trace<A>(start: &Profile<A>, tracer: ElectElimTiebreakTracer<A>)
+    fn print_trace<'log, A, T>(tracer: &'log T)
     where
-        // T: StvTracer<A>,
-        // T::Trace: IntoIterator<Item = StvAction<A>>,
         A: Display + Debug + Clone + Eq + Hash + 'static,
+        T: LoggingTracer<'log, A, Item = StvAction<A>>,
     {
-        println!("Starting with {}", start);
-        for action in tracer.trace {
+        tracer.log_iter().for_each(|action| {
             if let Some(p) = action.get_profile_after() {
                 println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
             } else {
                 println!("{}", &action);
             }
-        }
-    }
-
-    fn print_trace2<A>(start: &Profile<A>, tracer: &DetailedTracer<A>)
-    where
-        // T: StvTracer<A>,
-        // T::Trace: IntoIterator<Item = StvAction<A>>,
-        A: Display + Debug + Clone + Eq + Hash + 'static,
-    {
-        println!("Starting with {}", start);
-        for action in &tracer.trace {
-            if let Some(p) = action.get_profile_after() {
-                println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
-            } else {
-                println!("{}", &action);
-            }
-        }
+        });
     }
 
     #[test]
@@ -623,11 +608,11 @@ pub mod test {
             ],
         };
 
-        let mut tracer = ElectElimTiebreakTracer::new();
+        let mut tracer = DetailedTracer::start(profile.clone());
 
         let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
 
-        print_trace(&profile, tracer);
+        print_trace(&tracer);
 
         assert_eq!("Wolf", winner);
         // assert!(false);
@@ -648,14 +633,13 @@ pub mod test {
             ],
         };
 
-        let mut tracer = ElectElimTiebreakTracer::new();
+        let mut tracer = DetailedTracer::start(profile.clone());
 
         let winner = profile.vanilla_stv_1(&mut tracer).unwrap();
 
-        print_trace(&profile, tracer);
+        print_trace(&tracer);
 
         assert_eq!("Wolf", winner);
-        // assert!(false);
     }
 
     /// When ballots aren't full (all candidates on each ballot), then transfering votes has a
@@ -674,15 +658,15 @@ pub mod test {
         };
         println!("Starting with: {:?}", profile);
 
-        let mut tracer = DetailedTracer::new();
+        let mut tracer = DetailedTracer::start(profile.clone());
 
         let two = Rat::one() + Rat::one();
 
         let result = profile.vanilla_stv(1, &two, &mut tracer);
         println!("Result: {:?}", result);
 
-        print_trace2(&profile, &tracer);
-        let profile2 = tracer.trace[0].get_profile_after().unwrap();
+        print_trace(&tracer);
+        let profile2 = tracer.log_iter().nth(1).unwrap().get_profile_after().unwrap();
         println!("After first step: {:?}", profile2);
         assert_eq!(two, profile2.score(&"Fox"));
         assert_eq!(two, profile2.score(&"Wolf"));
@@ -701,15 +685,15 @@ pub mod test {
         };
         println!("Starting with: {:?}", profile);
 
-        let mut tracer = DetailedTracer::new();
+        let mut tracer = DetailedTracer::start(profile.clone());
 
         let two = Rat::one() + Rat::one();
 
         let result = profile.vanilla_stv(1, &two, &mut tracer);
         println!("Result: {:?}", result);
 
-        print_trace2(&profile, &tracer);
-        let profile2 = tracer.trace[1].get_profile_after().unwrap();
+        print_trace(&tracer);
+        let profile2 = tracer.log_iter().nth(2).unwrap().get_profile_after().unwrap();
         println!("After second step: {:?}", profile2); // after we've done Fox -> No, Fox -> Wolf (both at 1/3).
         assert_eq!(two, profile2.score(&"Fox"));
     }

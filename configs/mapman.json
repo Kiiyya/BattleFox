@@ -5,6 +5,9 @@
             "pool": {
                 "pool": [
                     {"map": "Locker", "mode": "Rush", "extra": false},
+                    {"map": "PearlMarket", "mode": "Rush", "extra": false},
+                    {"map": "Propaganda", "mode": "Rush", "extra": false},
+                    {"map": "FloodZone", "mode": "Rush", "extra": false},
                     {"map": "Metro", "mode": "Rush", "extra": false}
                 ]
             },

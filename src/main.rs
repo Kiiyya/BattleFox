@@ -1,5 +1,8 @@
 #![allow(clippy::new_without_default)]
 
+#[macro_use] extern crate maplit;
+#[macro_use] extern crate log;
+
 use ascii::IntoAsciiString;
 use dotenv::dotenv;
 use guard::Guard;
@@ -51,7 +54,7 @@ enum ConfigError {
 }
 
 async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> {
-    println!("Loading {}", path);
+    info!("Loading {}", path);
     let mut file = tokio::fs::File::open(path).await.map_err(ConfigError::Io)?;
     let mut s = String::new();
     file.read_to_string(&mut s).await.map_err(ConfigError::Io)?;
@@ -85,6 +88,7 @@ struct MapManagerConfig {
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
+    pretty_env_logger::init();
     let coninfo = get_rcon_coninfo()?;
 
     let players = Arc::new(Players::new());
@@ -111,12 +115,12 @@ async fn main() -> rcon::RconResult<()> {
     let weaponforcer = WeaponEnforcer::new();
 
     // connect
-    println!(
+    info!(
         "Connecting to {}:{} with password ***...",
         coninfo.ip, coninfo.port
     );
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
-    println!("Connected!");
+    info!("Connected!");
 
     // start parts.
     let mut jhs = Vec::new();
@@ -138,6 +142,8 @@ async fn main() -> rcon::RconResult<()> {
     for jh in jhs.drain(..) {
         jh.await.unwrap()?
     }
+
+    trace!("Exiting gracefully :)");
 
     Ok(())
 }
