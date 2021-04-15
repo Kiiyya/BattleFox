@@ -99,7 +99,7 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<
             let mut lines = Vec::new();
             let frame = match hist_entry {
                 HistEntry::Starting { profile, assignment } => {
-                    lines.push("Starting with:".to_string());
+                    lines.push("Everyones' votes:".to_string());
                     let your_vote = assignment.get(player)
                         .and_then(|distr| distr.get_single());
                     render_frame(&mut lines, alts_start, bars, your_vote);
@@ -116,6 +116,7 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<
                     lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
                 }
             };
+            player_frames.push(lines.join("\n"));
         }
 
         ret.insert(player.clone(), player_frames);
@@ -136,6 +137,8 @@ fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool<()>], bars: &Ha
                 } else {
                     line += "   You ->\t";
                 }
+            } else {
+                line += "\t\t";
             }
         } else {
             line += "\t\t";

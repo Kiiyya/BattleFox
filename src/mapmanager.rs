@@ -375,7 +375,7 @@ pub async fn switch_map_to(
 ) -> Result<(), MapListError> {
     bf4.maplist_set_next_map(index).await?;
     debug!(
-        "[mapman switch_map_to()] index: {}, vehicles: {}, tickets: {}",
+        "index: {}, vehicles: {}, tickets: {}",
         index, vehicles, tickets
     );
 
