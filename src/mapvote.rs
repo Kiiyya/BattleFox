@@ -155,9 +155,13 @@ impl Inner {
         self.alternatives = self.pop_state.pool.choose_random(n).extra_remove();
         self.votes.clear();
         self.nominations.clear();
-        println!(
-            "I've set up a new vote with pool {:?}, so options are {:?}.",
-            self.pop_state, self.alternatives
+        let mut pool = self.pop_state.pool.pool.iter().map(|mip| mip.map.short());
+        let mut options = self.alternatives.pool.iter().map(|mip| mip.map.short());
+        debug!(
+            "I've set up a new vote with pool {}: [{}], so options are [{}].",
+            self.pop_state.name,
+            pool.join(", "),
+            options.join(", ")
         );
     }
 }
@@ -893,8 +897,12 @@ impl Mapvote {
                     let bf4clone = bf4.clone();
                     jhs.push(tokio::spawn(async move {
                         for frame in frames {
+
+                            // let f1 = bf4clone.say(frame, &player);
+                            // let f2 = tokio::time::sleep(Duration::from_secs(2));
+                            // join_all(vec![f1, f2]).await;
                             let _ = bf4clone.say(frame, &player).await;
-                            tokio::time::sleep(Duration::from_secs(3)).await;
+                            tokio::time::sleep(Duration::from_secs(2)).await;
                         }
                     }));
                 }
