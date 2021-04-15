@@ -111,12 +111,11 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<
                     render_frame(&mut lines, alts_start, bars, your_vote);
                 }
                 HistEntry::Elect { elected, profile, assignment } => {
-                    // assert_eq!(1, elected.len());
-                    // let winner = elected.iter().next().unwrap();
-                    // lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
+                    assert_eq!(1, elected.len());
+                    let winner = elected.iter().next().unwrap();
+                    lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
                 }
             };
-            player_frames.push(lines.join("\n"));
         }
 
         ret.insert(player.clone(), player_frames);
@@ -137,9 +136,9 @@ fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool<()>], bars: &Ha
                 } else {
                     line += "   You ->\t";
                 }
-            } else {
-                line += "\t\t";
             }
+        } else {
+            line += "\t\t";
         }
 
         line += bars.get(alt).unwrap();
