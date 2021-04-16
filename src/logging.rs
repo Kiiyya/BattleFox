@@ -8,11 +8,12 @@ fn reduced_colored_format(
     let level = record.level();
     write!(
         w,
-        "[{}] {:<5} [{}:{}] {}",
-        now.now().format("%Y-%m-%d %H:%M:%S"),
-        flexi_logger::style(level, level),
+        "{} {:<5} {}:{} {} {}",
+        now.now().format("%H:%M:%S"),
+        style(level, level),
         record.file().unwrap_or("<unnamed>"),
         record.line().unwrap_or(0),
+        style(level, ">"),
         &record.args(),
     )
 }
@@ -23,8 +24,8 @@ fn fully_colored_format(
     record: &flexi_logger::Record,
 ) -> Result<(), std::io::Error> {
     let level = record.level();
-    let part1 = format!("[{}] {:<5} [{}:{}] ",
-        now.now().format("%Y-%m-%d %H:%M:%S"),
+    let part1 = format!("{} {:<5} {}:{} > ",
+        now.now().format("%H:%M:%S"),
         level,
         record.file().unwrap_or("<unnamed>"),
         record.line().unwrap_or(0),
@@ -84,9 +85,9 @@ pub fn init_logging() {
         error!(target: "PANIC", "{}", panic_info);
     }));
 
-    // trace!("Awoo");
-    // debug!("Awoo");
-    // info!("Awoo");
-    // warn!("Awoo");
-    // error!("Awoo");
+    trace!("Awoo");
+    debug!("Awoo");
+    info!("Awoo");
+    warn!("Awoo");
+    error!("Awoo");
 }
