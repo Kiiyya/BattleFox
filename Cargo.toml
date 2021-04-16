@@ -7,6 +7,9 @@ edition = "2018"
 [workspace]
 members = ["battlefield_rcon"]
 
+[features]
+compress_logs = ["flexi_logger/compress"]
+
 [profile.release]
 lto = true
 # codegen-units = 1 # Reduce number of codegen units to increase optimizations.
@@ -37,7 +40,7 @@ multimap = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ron = "0.6"
-validator = { version = "0.12", features = ["derive"] }
+validator = { version = "0.13", features = ["derive"] }
 
 itertools = "0.10" # for sorting...
 rand = "0.8" # For randomly choosing maps from a pool.
