@@ -27,11 +27,11 @@ pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
-// pub mod minicache;
 pub mod players;
 mod stv;
 pub mod weaponforcer;
 pub mod humanlang;
+mod logging;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -88,21 +88,7 @@ struct MapManagerConfig {
 #[tokio::main]
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
-    flexi_logger::Logger::with_env_or_str("trace")
-        .print_message()
-        .log_to_file()
-        .format_for_files(flexi_logger::detailed_format)
-        .set_palette("196;208;-;245;241".to_string()) // https://jonasjacek.github.io/colors/
-        .format_for_stderr(flexi_logger::colored_opt_format)
-        .format_for_stdout(flexi_logger::colored_opt_format)
-        .duplicate_to_stderr(flexi_logger::Duplicate::All)
-        .directory("logs")
-        .start().unwrap();
-
-    // also log panics
-    std::panic::set_hook(Box::new(|panic_info| {
-        error!(target: "PANIC", "{}\n{:?}", panic_info, backtrace::Backtrace::new());
-    }));
+    logging::init_logging();
 
     let coninfo = get_rcon_coninfo()?;
     let players = Arc::new(Players::new());

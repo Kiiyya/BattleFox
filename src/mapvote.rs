@@ -824,7 +824,6 @@ impl Mapvote {
                         }
                     }
                 });
-
             }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
@@ -857,9 +856,9 @@ impl Mapvote {
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
-        tokio::time::sleep(self.config.endscreen_votetime - Duration::from_secs(7)).await;
+        tokio::time::sleep(self.config.endscreen_votetime - Duration::from_secs(7)).await; // FIXME: Replace with checked substraction.
         self.broadcast_status(bf4).await; // send everyone the voting options.
-        tokio::time::sleep(Duration::from_secs(7)).await;
+        tokio::time::sleep(Duration::from_secs(7)).await; // FIXME: ^
 
         let players = self.players.players(bf4).await;
 
