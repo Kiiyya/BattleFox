@@ -62,7 +62,7 @@ impl Map {
             Map::PearlMarket => "Pearl Market",
             Map::Oman => "Gulf of Oman",
             Map::Zavod => "Zavod 311",
-            Map::LancangDam => "Lancang Damn",
+            Map::LancangDam => "Lancang Dam",
             Map::FloodZone => "Flood Zone",
             Map::GolmudRailway => "Golmud",
             Map::ParacelStorm => "Paracel",
@@ -80,7 +80,7 @@ impl Map {
             Map::NanshaStrike => "Nansha",
             Map::WaveBreaker => "Wave Breaker",
             Map::OpMortar => "Op. Mortar",
-            Map::Propaganda => "Propapanda", // don't judge me.
+            Map::Propaganda => "Propaganda",
             Map::Lumphini => "Lumphini",
             Map::SunkenDragon => "Sunken Dragon",
             Map::Whiteout => "Whiteout",
