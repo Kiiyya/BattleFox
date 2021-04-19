@@ -183,26 +183,30 @@ impl Map {
     pub fn short_names(&self) -> std::slice::Iter<'static, &'static str> {
         match self {
             Map::Metro => {
-                static ALL: [&str; 4] = [
+                static ALL: [&str; 6] = [
                     "metro",
                     "operationmetro",
                     "operation_metro",
                     "operation-metro",
+                    "metr",
+                    "met"
                 ];
                 ALL.iter()
             }
             Map::Locker => {
-                static ALL: [&str; 5] = [
+                static ALL: [&str; 7] = [
                     "locker",
                     "lock",
                     "operationlocker",
                     "operation_locker",
                     "operation-locker",
+                    "loc",
+                    "lok"
                 ];
                 ALL.iter()
             }
             Map::PearlMarket => {
-                static ALL: [&str; 7] = [
+                static ALL: [&str; 8] = [
                     "pearl",
                     "pear",
                     "paerl",
@@ -210,11 +214,12 @@ impl Map {
                     "pearlmarket",
                     "pearl_market",
                     "pearl-market",
+                    "pea"
                 ];
                 ALL.iter()
             }
             Map::Oman => {
-                static ALL: [&str; 11] = [
+                static ALL: [&str; 13] = [
                     "oman",
                     "gulfofoman",
                     "gulf",
@@ -226,24 +231,26 @@ impl Map {
                     "oman-gulf",
                     "gulf_of_oman",
                     "gulf-of-oman",
+                    "omn",
+                    "oma"
                 ];
                 ALL.iter()
             }
             Map::Zavod => {
-                static ALL: [&str; 2] = ["zavod", "zav"];
+                static ALL: [&str; 3] = ["zavod", "zav", "zavo"];
                 ALL.iter()
             }
             Map::LancangDam => {
-                static ALL: [&str; 6] =
-                    ["lancang", "lanc", "langanc", "lancng", "lancangdam", "dam"];
+                static ALL: [&str; 7] =
+                    ["lancang", "lanc", "langanc", "lancng", "lancangdam", "dam", "lan"];
                 ALL.iter()
             }
             Map::FloodZone => {
-                static ALL: [&str; 3] = ["flood", "floodzone", "zone"];
+                static ALL: [&str; 5] = ["flood", "floodzone", "zone", "flo", "zon"];
                 ALL.iter()
             }
             Map::GolmudRailway => {
-                static ALL: [&str; 8] = [
+                static ALL: [&str; 11] = [
                     "golmud",
                     "golmod",
                     "golmund",
@@ -252,11 +259,14 @@ impl Map {
                     "golmud_railway",
                     "golmudrailway",
                     "golmud-railway",
+                    "golm",
+                    "gol",
+                    "rai"
                 ];
                 ALL.iter()
             }
             Map::ParacelStorm => {
-                static ALL: [&str; 11] = [
+                static ALL: [&str; 12] = [
                     "paracel",
                     "parcel",
                     "parc",
@@ -268,11 +278,12 @@ impl Map {
                     "paracel-storm",
                     "paracel_storm",
                     "parcel-storm",
+                    "par",
                 ];
                 ALL.iter()
             }
             Map::HainanResort => {
-                static ALL: [&str; 8] = [
+                static ALL: [&str; 10] = [
                     "hainan",
                     "hainen",
                     "heinen",
@@ -281,11 +292,13 @@ impl Map {
                     "hainanresort",
                     "hainan-resort",
                     "hainan_resort",
+                    "hai",
+                    "res",
                 ];
                 ALL.iter()
             }
             Map::Shanghai => {
-                static ALL: [&str; 7] = [
+                static ALL: [&str; 9] = [
                     "shang",
                     "shanghai",
                     "shangai",
@@ -293,11 +306,13 @@ impl Map {
                     "siege",
                     "siegeshanghai",
                     "siegeofshanghai",
+                    "sha",
+                    "sie,"
                 ];
                 ALL.iter()
             }
             Map::RogueTransmission => {
-                static ALL: [&str; 11] = [
+                static ALL: [&str; 14] = [
                     "rogue",
                     "rouge",
                     "rougue",
@@ -309,24 +324,27 @@ impl Map {
                     "rogue-transmission",
                     "rogue_trans",
                     "rogue-trans",
+                    "rog",
+                    "rou",
+                    "tra",
                 ];
                 ALL.iter()
             }
             Map::Dawnbreaker => {
-                static ALL: [&str; 4] = ["dawnbreaker", "dawn", "breaker", "dawnbreak"];
+                static ALL: [&str; 5] = ["dawnbreaker", "dawn", "breaker", "dawnbreak", "daw"];
                 ALL.iter()
             }
             Map::SilkRoad => {
-                static ALL: [&str; 4] = ["silk", "silkroad", "silk-road", "silk_road"];
+                static ALL: [&str; 5] = ["silk", "silkroad", "silk-road", "silk_road", "sil"];
                 ALL.iter()
             }
             Map::Altai => {
-                static ALL: [&str; 5] =
-                    ["altai", "altei", "altairange", "altai-range", "altai_range"];
+                static ALL: [&str; 6] =
+                    ["altai", "altei", "altairange", "altai-range", "altai_range", "alt"];
                 ALL.iter()
             }
             Map::GuilinPeaks => {
-                static ALL: [&str; 11] = [
+                static ALL: [&str; 12] = [
                     "guilin",
                     "guilen",
                     "guilinpeaks",
@@ -338,11 +356,12 @@ impl Map {
                     "guilean",
                     "guileen",
                     "guipeak",
+                    "gui",
                 ];
                 ALL.iter()
             }
             Map::DragonPass => {
-                static ALL: [&str; 7] = [
+                static ALL: [&str; 8] = [
                     "dragonpass",
                     "dragon-pass",
                     "dragon_pass",
@@ -350,11 +369,12 @@ impl Map {
                     "dragon_ass", // hehe
                     "dragon-ass",
                     "dpass",
+                    "drp",
                 ];
                 ALL.iter()
             }
             Map::Caspian => {
-                static ALL: [&str; 7] = [
+                static ALL: [&str; 8] = [
                     "caspian",
                     "caspianborder",
                     "caspian-border",
@@ -362,15 +382,16 @@ impl Map {
                     "caspien",
                     "caspain",
                     "casp",
+                    "cas",
                 ];
                 ALL.iter()
             }
             Map::Firestorm => {
-                static ALL: [&str; 3] = ["firestorm", "fireform", "fire"];
+                static ALL: [&str; 4] = ["firestorm", "fireform", "fire", "fir"];
                 ALL.iter()
             }
             Map::LostIslands => {
-                static ALL: [&str; 9] = [
+                static ALL: [&str; 11] = [
                     "lostislands",
                     "lost",
                     "losti",
@@ -380,20 +401,22 @@ impl Map {
                     "lostisland",
                     "lost-island",
                     "lost_island",
+                    "los",
+                    "isl",
                 ];
                 ALL.iter()
             }
             Map::NanshaStrike => {
-                static ALL: [&str; 4] =
-                    ["nansha", "nanshastrike", "nansha-strike", "nansha_strike"];
+                static ALL: [&str; 5] =
+                    ["nansha", "nanshastrike", "nansha-strike", "nansha_strike", "nan"];
                 ALL.iter()
             }
             Map::WaveBreaker => {
-                static ALL: [&str; 4] = ["wavebreaker", "wave", "wave_breaker", "wave-breaker"];
+                static ALL: [&str; 5] = ["wavebreaker", "wave", "wave_breaker", "wave-breaker", "wav"];
                 ALL.iter()
             }
             Map::OpMortar => {
-                static ALL: [&str; 8] = [
+                static ALL: [&str; 9] = [
                     "mortar",
                     "operationmortar",
                     "operation_mortar",
@@ -402,16 +425,17 @@ impl Map {
                     "opmortar",
                     "op-mortar",
                     "op_mortar",
+                    "mor",
                 ];
                 ALL.iter()
             }
             Map::Propaganda => {
-                static ALL: [&str; 5] =
-                    ["propa", "prop", "propaganda", "propapanda", "propagaynda"];
+                static ALL: [&str; 7] =
+                    ["propa", "prop", "propaganda", "propapanda", "propagaynda", "prp", "pro"];
                 ALL.iter()
             }
             Map::Lumphini => {
-                static ALL: [&str; 9] = [
+                static ALL: [&str; 10] = [
                     "lumphini",
                     "lump",
                     "garden",
@@ -420,12 +444,13 @@ impl Map {
                     "lumphini-garden",
                     "lumpini",
                     "lumfini",
-                    "lumpi"
+                    "lumpi",
+                    "lum",
                 ];
                 ALL.iter()
             }
             Map::SunkenDragon => {
-                static ALL: [&str; 7] = [
+                static ALL: [&str; 8] = [
                     "sunken",
                     "sunk",
                     "sunkendragon",
@@ -433,40 +458,44 @@ impl Map {
                     "sunken_dragon",
                     "sunken-dragon",
                     "sdragon",
+                    "sun",
                 ];
                 ALL.iter()
             }
             Map::Whiteout => {
-                static ALL: [&str; 5] = [
+                static ALL: [&str; 6] = [
                     "whiteout",
                     "white",
                     "operationwhiteout",
                     "operation-whiteout",
                     "operation_whiteout",
+                    "whi",
                 ];
                 ALL.iter()
             }
             Map::Hammerhead => {
-                static ALL: [&str; 4] = ["hammer", "hammerhead", "hammer_head", "hammer-head"];
+                static ALL: [&str; 5] = ["hammer", "hammerhead", "hammer_head", "hammer-head", "ham"];
                 ALL.iter()
             }
             Map::Hangar21 => {
-                static ALL: [&str; 5] = ["hangar", "hanger", "hangar21", "hangar-21", "hangar_21"];
+                static ALL: [&str; 6] = ["hangar", "hanger", "hangar21", "hangar-21", "hangar_21", "han"];
                 ALL.iter()
             }
             Map::Karelia => {
-                static ALL: [&str; 6] = [
+                static ALL: [&str; 8] = [
                     "karelia",
                     "giants",
                     "kare",
                     "karelie",
                     "giantsof",
                     "giantsofkarelia",
+                    "gia",
+                    "kar",
                 ];
                 ALL.iter()
             }
             Map::ZavodNight => {
-                static ALL: [&str; 10] = [
+                static ALL: [&str; 11] = [
                     "grave",
                     "graveyard",
                     "gravey",
@@ -477,13 +506,15 @@ impl Map {
                     "night",
                     "nightshift",
                     "nightzavod",
+                    "zni",
                 ];
                 ALL.iter()
             }
             Map::Outbreak => {
-                static ALL: [&str; 2] = [
+                static ALL: [&str; 3] = [
                     "outbreak",
                     "cmp",
+                    "out",
                 ];
                 ALL.iter()
             }
