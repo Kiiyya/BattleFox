@@ -256,15 +256,7 @@ impl Bf4Client {
                         format!("{} packet must have {} words", &packet.words[0], 3),
                     )));
                 }
-                let eaid = Eaid::from_rcon_format(&packet.words[2]).map_err(|_| {
-                    RconError::malformed_packet(
-                        packet.words.clone(),
-                        format!(
-                            "Failed to parse the following as an EAID: {}",
-                            packet.words[2]
-                        ),
-                    )
-                })?;
+                let eaid = Eaid::rcon_decode(&packet.words[2])?;
                 let bf4 = upgrade(bf4client)?;
                 bf4.player_has_guid(&packet.words[1], &eaid); // while we have the GUID, might as well notify the cache about it.
                 Ok(Event::Join {

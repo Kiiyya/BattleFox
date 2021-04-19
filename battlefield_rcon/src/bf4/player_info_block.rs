@@ -2,9 +2,10 @@ use crate::bf4::util::parse_int;
 use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
 use serde::{Deserialize, Serialize};
+use crate::bf4::RconDecoding;
 
 use super::{
-    ea_guid::{Eaid, EaidParseError},
+    ea_guid::Eaid,
     Squad, Team,
 };
 
@@ -93,12 +94,7 @@ pub fn parse_pib(words: &[AsciiString]) -> RconResult<Vec<PlayerInfo>> {
     for _ in 0..m_rows {
         let pi = PlayerInfo {
             player_name: words[offset].clone(),
-            eaid: Eaid::from_rcon_format(&words[offset + 1]).map_err(|_: EaidParseError| {
-                RconError::protocol_msg(format!(
-                    "Failed to parse PlayerInfoBlock: Invalid EA GUID: {}",
-                    words[offset + 1]
-                ))
-            })?,
+            eaid: Eaid::rcon_decode(&words[offset + 1])?,
             team: Team::rcon_decode(&words[offset + 2])?,
             squad: Squad::rcon_decode(&words[offset + 3])?,
             kills: parse_int(&words[offset + 4])?,

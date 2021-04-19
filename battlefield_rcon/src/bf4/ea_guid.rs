@@ -3,6 +3,10 @@ use std::{convert::TryInto, fmt::Display, str::FromStr};
 use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString};
 use serde::{Deserialize, Serialize, de::{Error, Visitor}};
 
+use crate::rcon::RconError;
+
+use super::{RconDecoding, RconEncoding};
+
 #[derive(Debug, Clone)]
 pub struct EaidParseError;
 
@@ -15,7 +19,7 @@ impl Serialize for Eaid {
     where
         S: serde::Serializer
     {
-        serializer.serialize_str(self.to_ascii().as_str())
+        serializer.serialize_str(self.rcon_encode().as_str())
     }
 }
 
@@ -42,7 +46,7 @@ impl <'de> Visitor<'de> for EaidVisitor {
     {
         match AsciiStr::from_ascii(v) {
             Ok(ascii) => {
-                match Eaid::from_rcon_format(ascii) {
+                match Eaid::rcon_decode(ascii) {
                     Ok(eaid) => Ok(eaid),
                     Err(_) => Err(E::custom(format!("Not a valid EA GUID: {}", v))),
                 }
@@ -58,14 +62,12 @@ impl <'de> Visitor<'de> for EaidVisitor {
     }
 }
 
-
-impl Eaid {
-    /// Input: "EA_FFFF..."
-    pub fn from_rcon_format(ascii: &AsciiStr) -> Result<Eaid, EaidParseError> {
+impl RconDecoding for Eaid {
+    fn rcon_decode(ascii: &AsciiStr) -> crate::rcon::RconResult<Self> {
         let str = ascii.as_str();
         if str.len() == 32 + 3 {
             if &str[0..3] != "EA_" {
-                Err(EaidParseError)
+                Err(RconError::protocol_msg(format!("Trying to decode \"{}\" into an EA GUID failed", ascii)))
             } else {
                 let guid_only = &ascii.as_slice()[3..]; // skip "EA_"
                 Ok(Eaid(guid_only.try_into().unwrap())) // we can use unwrap here because we tested the length
@@ -73,12 +75,14 @@ impl Eaid {
         } else if str.is_empty() {
             Ok(Eaid([AsciiChar::X; 32]))
         } else {
-            Err(EaidParseError)
+            Err(RconError::protocol_msg(format!("Trying to decode \"{}\" into an EA GUID failed", ascii)))
         }
     }
+}
 
+impl RconEncoding for Eaid {
     /// Returns stuff like "EA_FFFF...FFF". Always 32+3 length.
-    pub fn to_ascii(&self) -> AsciiString {
+    fn rcon_encode(&self) -> AsciiString {
         let mut ascii = AsciiString::from_str("EA_").unwrap();
         for &char in self.0.iter() {
             ascii.push(char);
