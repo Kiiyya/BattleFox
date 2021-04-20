@@ -827,7 +827,7 @@ impl Mapvote {
             }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
-                if !msg.is_empty() {
+                if !msg.is_empty() && (msg[0] == '/' || msg[0] == '!') {
                     let vis = if msg[0] == '/' {
                         Visibility::Player(player.name.clone())
                     } else {
@@ -965,6 +965,10 @@ pub fn parse_maps(str: &str) -> ParseMapsResult {
                 orig: words[i].to_owned(),
             };
         }
+    }
+
+    if res.is_empty() {
+        return ParseMapsResult::Nothing;
     }
 
     ParseMapsResult::Ok(res)
