@@ -48,6 +48,8 @@ struct Inner {
     pop_state: PopState<Vehicles>,
 
     nominations: HashMap<Guard<Player, YesVip>, HashSet<Map>>,
+
+    anim_override_override: HashMap<Player, bool>,
 }
 
 #[derive(Debug)]
@@ -434,6 +436,7 @@ impl Mapvote {
                 votes: HashMap::new(),
                 pop_state: popstate,
                 nominations: HashMap::new(),
+                anim_override_override: HashMap::new(),
             };
             init.set_up_new_vote(self.config.n_options);
             info!("Popstate initialized! New: {}", init.pop_state.name);
@@ -825,6 +828,23 @@ impl Mapvote {
                     }
                 });
             }
+            "!anim" | "/anim" => {
+                let yesno = if split.len() >= 2 {
+                    match split[1] {
+                        "yes" | "true" | "on" | "1" | "+" => true,
+                        "no" | "false" | "off" | "0" | "-" => false,
+                        _ => true,
+                    }
+                } else {
+                    true
+                };
+                let mut opt_inner = self.inner.lock().await;
+                if let Some(inner) = &mut *opt_inner {
+                    inner.anim_override_override.insert(player.clone(), yesno);
+                    drop(opt_inner);
+                    let _ = bf4.say(format!("Animation of vote result calculation at round end: {}", yesno), player).await;
+                }
+            }
             _ => {
                 // if no command matched, try parsing !metro pearl etc
                 if !msg.is_empty() && (msg[0] == '/' || msg[0] == '!') {
@@ -871,7 +891,7 @@ impl Mapvote {
                 let assignment = inner.to_assignment();
 
                 inner.set_up_new_vote(self.config.n_options);
-                Some((profile, assignment))
+                Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None
             }
@@ -881,7 +901,7 @@ impl Mapvote {
         dbg!(&maybe);
 
         // only do something if we have an Inner.
-        if let Some((profile, assignment)) = maybe {
+        if let Some((profile, assignment, anim_override_override)) = maybe {
             let mut tracer = AnimTracer::start(profile.clone(), assignment);
             if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
                 trace!("AnimTracer: {:?}", &tracer);
@@ -900,7 +920,12 @@ impl Mapvote {
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {
                     let bf4clone = bf4.clone();
-                    let animate = *self.config.animate_override.get(&player.name).unwrap_or(&self.config.animate);
+                    let animate = *anim_override_override
+                        .get(&player)
+                        .unwrap_or_else(|| self.config.animate_override
+                            .get(&player.name)
+                            .unwrap_or(&self.config.animate));
+
                     let winner = winner.clone();
                     jhs.push(tokio::spawn(async move {
                         trace!("Animate for {}: {}", &player.name, animate);
