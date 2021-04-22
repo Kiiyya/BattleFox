@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 #[allow(unused_variables)]
 pub trait Tracer<A: Eq + Hash> {
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, profile_after: &Profile<A>) {}
-    fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {}
+    fn consume(&mut self, a: &A, profile_after: &Profile<A>) {}
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {}
 
@@ -52,7 +52,7 @@ pub enum StvAction<A: Eq + Hash> {
         s: Rat,
         profile_afterwards: Profile<A>,
     },
-    StrikeOut {
+    Consume {
         alt: A,
         profile_afterwards: Profile<A>,
     },
@@ -91,7 +91,7 @@ impl<A: Eq + Hash> StvAction<A> {
                 howmuch: _,
                 profile_afterwards,
             } => Some(profile_afterwards),
-            StvAction::StrikeOut {
+            StvAction::Consume {
                 alt: _,
                 profile_afterwards,
             } => Some(profile_afterwards),
@@ -130,10 +130,10 @@ impl<A: Display + Debug + Eq + Hash> Display for StvAction<A> {
                 howmuch,
                 profile_afterwards: _,
             } => write!(f, "ToAll({}, {})", from, howmuch),
-            StvAction::StrikeOut {
+            StvAction::Consume {
                 alt,
                 profile_afterwards: _,
-            } => write!(f, "StrikeOut({})", alt),
+            } => write!(f, "Consume({})", alt),
             StvAction::RejectTiebreak {
                 tied,
                 chosen,
@@ -216,8 +216,8 @@ impl<A: Clone + Eq + Hash> Tracer<A> for DetailedTracer<A> {
         })
     }
 
-    fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {
-        self.trace.push(StvAction::StrikeOut {
+    fn consume(&mut self, a: &A, profile_after: &Profile<A>) {
+        self.trace.push(StvAction::Consume {
             alt: a.to_owned(),
             profile_afterwards: profile_after.to_owned(),
         })
@@ -269,9 +269,9 @@ impl <A: Eq + Hash, T1: Tracer<A>, T2: Tracer<A>> Tracer<A> for DuoTracer<A, T1,
         self.t2.elem_t(a, b, s, profile_after);
     }
 
-    fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {
-        self.t1.strike_out(a, profile_after);
-        self.t2.strike_out(a, profile_after);
+    fn consume(&mut self, a: &A, profile_after: &Profile<A>) {
+        self.t1.consume(a, profile_after);
+        self.t2.consume(a, profile_after);
     }
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {
@@ -327,7 +327,7 @@ impl <A: Eq + Hash + Clone> Distr<A> {
         }
     }
 
-    fn strike_out(&mut self, a: &A) {
+    fn consume(&mut self, a: &A) {
         self.distr.remove(a);
     }
 
@@ -368,8 +368,8 @@ impl<P: Eq + Hash, A: Eq + Hash + Clone> Tracer<A> for AssignmentTracker<P, A> {
         self.assignment.iter_mut().for_each(|(_, distr)| distr.elem_t(a, b, s));
     }
 
-    fn strike_out(&mut self, a: &A, _: &Profile<A>) {
-        self.assignment.iter_mut().for_each(|(_, distr)| distr.strike_out(a))
+    fn consume(&mut self, a: &A, _: &Profile<A>) {
+        self.assignment.iter_mut().for_each(|(_, distr)| distr.consume(a))
     }
 }
 
@@ -459,9 +459,9 @@ impl <P: Clone + Eq + Hash + Debug, A: Clone + Hash + Eq + Debug> Tracer<A> for 
         trace!("AnimTrace elem_t({:?}, {:?}): {:?}", a, b, self.assignment.get_state());
     }
 
-    fn strike_out(&mut self, a: &A, profile_after: &Profile<A>) {
-        self.stvtracer.strike_out(a, profile_after);
-        self.assignment.strike_out(a, profile_after);
+    fn consume(&mut self, a: &A, profile_after: &Profile<A>) {
+        self.stvtracer.consume(a, profile_after);
+        self.assignment.consume(a, profile_after);
     }
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {

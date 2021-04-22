@@ -120,18 +120,18 @@ impl<A> Ballot<A>
 where
     A: PartialEq + Clone + Eq + Hash,
 {
-    // /// Removes all candidates in `a` in the ballot.
-    // pub fn strike_out(&self, a: &HashSet<A>) -> Self {
-    //     Self {
-    //         weight: self.weight.clone(),
-    //         preferences: self
-    //             .preferences
-    //             .iter()
-    //             .filter(|&aa| !a.contains(aa))
-    //             .cloned()
-    //             .collect(),
-    //     }
-    // }
+    /// Removes all candidates in `a` in the ballot.
+    pub fn limit(&self, a: &HashSet<A>) -> Self {
+        Self {
+            weight: self.weight.clone(),
+            preferences: self
+                .preferences
+                .iter()
+                .filter(|&aa| !a.contains(aa))
+                .cloned()
+                .collect(),
+        }
+    }
 
     /// Removes all candidates in `a` in the ballot.
     pub fn strike_out_single(&self, a: &A) -> Self {
@@ -202,20 +202,14 @@ impl<A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
         if self.alts.is_empty() {
             write!(f, "{{ No alternatives! }}")?;
         } else {
-            // let maxlen = self.alts.iter()
-            //     .map(|alt| format!("{}", alt).len())
-            //     .max().unwrap(); // unwrap is safe because we checked for is_empty()
-            write!(f, "{{")?;
-
             let scores = self.scores();
             let mut tuples: Vec<(&A, &Rat)> = scores.iter().collect();
             tuples.sort_by(|a, b| b.1.cmp(a.1));
-            for score in tuples {
-                // print alt name with padding
-                // write!(f, "{:width$}", score.0, width = maxlen)?;
-                write!(f, "{} -> {}, ", score.0, score.1)?;
-            }
-            write!(f, "}}")?;
+            let strings = tuples.iter().map(|(x, y)| format!("{}: {}", x, y)).collect::<Vec<_>>();
+            write!(f, "{{{}}}", strings.join(", "))?;
+            // let maxlen = self.alts.iter()
+            //     .map(|alt| format!("{}", alt).len())
+            //     .max().unwrap(); // unwrap is safe because we checked for is_empty()
         }
         Ok(())
     }
@@ -318,23 +312,22 @@ where
         profile
     }
 
-    // /// `limit_to` basically.
-    // /// Removes candidate `a` from all ballots, and from `alts`
-    // pub fn strike_out(&self, eliminated: &HashSet<A>) -> Self {
-    //     Self {
-    //         alts: self.alts.difference(eliminated).cloned().collect(),
-    //         ballots: self
-    //             .ballots
-    //             .iter()
-    //             // .filter(|&b| b.)
-    //             .map(|b| b.strike_out(eliminated))
-    //             .collect(),
-    //     }
-    // }
-
-    /// `consume` basically.
+    /// `limit_to` basically.
     /// Removes candidate `a` from all ballots, and from `alts`
-    pub fn strike_out_single<T: Tracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
+    pub fn limit(&self, eliminated: &HashSet<A>) -> Self {
+        Self {
+            alts: self.alts.difference(eliminated).cloned().collect(),
+            ballots: self
+                .ballots
+                .iter()
+                // .filter(|&b| b.)
+                .map(|b| b.limit(eliminated))
+                .collect(),
+        }
+    }
+
+    /// Removes candidate `a` from all ballots, and from `alts`
+    pub fn consume<T: Tracer<A>>(&self, eliminated: &A, tracer: &mut T) -> Self {
         // let profile = self.strike_out(&[eliminated.clone()].iter().cloned().collect());
         let profile = Self {
             alts: self.alts.iter()
@@ -346,7 +339,7 @@ where
                 .map(|b| b.strike_out_single(eliminated))
                 .collect()
         };
-        tracer.strike_out(eliminated, &profile);
+        tracer.consume(eliminated, &profile);
         profile
     }
 
@@ -369,7 +362,7 @@ where
             let score = self.score(e);
             // transfer surplus
             profile = profile.t_to_all(e, &((&score - q) / &score), tracer);
-            profile = profile.strike_out_single(e, tracer);
+            profile = profile.consume(e, tracer);
         }
         if !result.e.is_empty() {
             tracer.electing(&result.e, &profile);
@@ -378,7 +371,7 @@ where
         for r in &result.r {
             // transfer everything
             profile = profile.t_to_all(r, &Rat::one(), tracer);
-            profile = profile.strike_out_single(r, tracer);
+            profile = profile.consume(r, tracer);
             tracer.eliminating(&r, &profile);
         }
 
@@ -532,7 +525,7 @@ where
     ) -> Option<(A, Option<A>)> {
         if let Some(winner) = self.vanilla_stv_1(tracer) {
             let runnerup = self
-                .strike_out_single(&winner, &mut NoTracer)
+                .consume(&winner, &mut NoTracer)
                 .vanilla_stv_1(&mut NoTracer);
             Some((winner, runnerup))
         } else {
@@ -543,13 +536,15 @@ where
 
 #[cfg(test)]
 pub mod test {
-    use std::fmt::{Debug, Display};
+    use std::fmt::{self, Debug, Display};
     use std::hash::Hash;
 
     use super::tracing::*;
     use super::Profile;
-    use num_rational::BigRational as Rat; // you could use just `Rational` instead I suppose, it might be marginally faster but might overflow.
+    use num_bigint::BigInt;
+    use num_rational::BigRational as Rat;
     use num_traits::One;
+
 
     #[macro_export]
     macro_rules! ballot {
@@ -579,6 +574,79 @@ pub mod test {
         }};
     }
 
+
+    fn droop(seats: usize, n_ballots: usize) -> Rat {
+        let seats = Rat::from_integer(BigInt::new(num_bigint::Sign::Plus, vec![seats as u32]));
+        let n_ballots = Rat::from_integer(BigInt::new(num_bigint::Sign::Plus, vec![n_ballots as u32]));
+
+        let x = n_ballots / (seats + Rat::one());
+        let x = x.floor();
+        let x = x + Rat::one();
+
+        return x;
+    }
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+    enum Alts { A, B, C1, C2 }
+    use Alts::*;
+
+    impl fmt::Display for Alts {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                A => write!(f, "A"),
+                B => write!(f, "B"),
+                C1 => write!(f, "C1"),
+                C2 => write!(f, "C2"),
+            }
+        }
+    }
+
+    #[test]
+    fn oh_god_oh_fuck() {
+        let profile = Profile {
+            alts: hashset![A, B, C1, C2],
+            ballots: vec![
+                ballot![1, A, B, C1, C2],
+                ballot![1, A, B, C1, C2],
+                ballot![1, A, B, C1, C2],
+                ballot![1, A, B, C1, C2],
+
+                ballot![1, B, A, C1, C2],
+                ballot![1, B, A, C1, C2],
+                ballot![1, B, A, C1, C2],
+
+                ballot![1, C1, C2, A, B],
+                ballot![1, C1, C2, A, B],
+                ballot![1, C1, C2, A, B],
+                ballot![1, C1, C2, A, B],
+                ballot![1, C1, C2, A, B],
+                ballot![1, C1, C2, A, B],
+
+                ballot![1, C2, C1, B, A],
+                ballot![1, C2, C1, B, A],
+                ballot![1, C2, C1, B, A],
+            ],
+        };
+        println!("profile: {}", profile);
+
+        let cr_profile = profile.limit(&hashset![C1]);
+        println!("cr_profile: {}", cr_profile);
+
+        let q = dbg!(droop(2, profile.ballots.len()));
+
+        let mut tracer = DetailedTracer::start(profile.clone());
+        let original_result =    profile.vanilla_stv(2, &q, &mut tracer);
+        print_trace2(&tracer);
+
+        println!("");
+
+        let mut cr_tracer = DetailedTracer::start(cr_profile.clone());
+        let cr_result       = cr_profile.vanilla_stv(2, &q, &mut cr_tracer);
+        print_trace(&cr_tracer);
+
+        assert_eq!(original_result.e, cr_result.e);
+    }
+
     fn print_trace<'log, A, T>(tracer: &'log T)
     where
         A: Display + Debug + Clone + Eq + Hash + 'static,
@@ -590,6 +658,34 @@ pub mod test {
             } else {
                 println!("{}", &action);
             }
+        });
+    }
+
+    fn print_trace2<'log, A, T>(tracer: &'log T)
+    where
+        A: Display + Debug + Clone + Eq + Hash + 'static,
+        T: LoggingTracer<'log, A, Item = StvAction<A>>,
+    {
+        tracer
+            .log_iter()
+            .filter(|action| {
+                match action {
+                    StvAction::Starting(_) => true,
+                    StvAction::ElemT { a, b, s, profile_afterwards } => false,
+                    StvAction::Consume { alt, profile_afterwards } => false,
+                    StvAction::ToAll { from, howmuch, profile_afterwards } => true,
+                    StvAction::Elected { elected, profile_afterwards } => true,
+                    StvAction::Eliminated { alt, profile_afterwards } => true,
+                    StvAction::RejectTiebreak { tied, chosen, score } => true,
+                    StvAction::Stv1WinnerTiebreak { tied, chosen } => true,
+                }
+            } )
+            .for_each(|action| {
+                if let Some(p) = action.get_profile_after() {
+                    println!("{} ==> {}", &action, p); // Change to "{} ==> {:?}" if you want all ballots listed, not just the scores.
+                } else {
+                    println!("{}", &action);
+                }
         });
     }
 
