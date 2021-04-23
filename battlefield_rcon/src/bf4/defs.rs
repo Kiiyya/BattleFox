@@ -92,6 +92,15 @@ pub enum GameMode {
     Other(AsciiString),
 }
 
+impl Display for GameMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GameMode::Rush => write!(f, "Rush"),
+            GameMode::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 impl RconDecoding for GameMode {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self> {
         Ok(match ascii.as_str() {

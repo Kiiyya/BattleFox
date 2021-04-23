@@ -56,3 +56,4 @@ flexi_logger = { version = "0.17", features = ["colors"] }
 # backtrace = "0.3"
 # yansi = "0.5"
 
+simple_logger = "1" # just for tests actually

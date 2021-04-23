@@ -308,7 +308,19 @@ pub struct Distr<A: Eq + Hash> {
     distr: HashMap<A, Rat>
 }
 
-impl <A: Eq + Hash + Clone> Distr<A> {
+impl <A: Eq + Hash> PartialEq for Distr<A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.distr.iter().all(|(alt, w)|
+            other.distr.get(alt).unwrap_or(&Zero::zero()) == w
+        )
+        &&
+        other.distr.iter().all(|(alt, w)|
+            self.distr.get(alt).unwrap_or(&Zero::zero()) == w
+        )
+    }
+}
+
+impl <A: Eq + Hash + Clone + Debug> Distr<A> {
     pub fn single(a: A, weight: Rat) -> Self {
         Self {
             distr: hashmap!{
@@ -325,10 +337,17 @@ impl <A: Eq + Hash + Clone> Distr<A> {
             *x *= Rat::one() - s;
             self.distr.insert(b.clone(), temp);
         }
+        self.trim();
+        // trace!("Distr::elem_t({:?}, {:?}, {:?}) ==> {}", a, b, s, 666);
+    }
+
+    fn trim(&mut self) {
+        self.distr.retain(|_, v| !v.is_zero());
     }
 
     fn consume(&mut self, a: &A) {
         self.distr.remove(a);
+        self.trim();
     }
 
     /// Assuming there exists at most one alternative with weight > 0:
@@ -363,7 +382,7 @@ impl <P: Eq + Hash, A: Eq + Hash> AssignmentTracker<P, A> {
     }
 }
 
-impl<P: Eq + Hash, A: Eq + Hash + Clone> Tracer<A> for AssignmentTracker<P, A> {
+impl<P: Eq + Hash, A: Eq + Hash + Clone + Debug> Tracer<A> for AssignmentTracker<P, A> {
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, _: &Profile<A>) {
         self.assignment.iter_mut().for_each(|(_, distr)| distr.elem_t(a, b, s));
     }
@@ -456,12 +475,13 @@ impl <P: Clone + Eq + Hash + Debug, A: Clone + Hash + Eq + Debug> Tracer<A> for 
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, profile_after: &Profile<A>) {
         self.stvtracer.elem_t(a, b, s, profile_after);
         self.assignment.elem_t(a, b, s, profile_after);
-        trace!("AnimTrace elem_t({:?}, {:?}): {:?}", a, b, self.assignment.get_state());
+        trace!("AnimTracer::elem_t({:?}, {:?}, {}) ==> {:#?}", a, b, s, self.get_state());
     }
 
     fn consume(&mut self, a: &A, profile_after: &Profile<A>) {
         self.stvtracer.consume(a, profile_after);
         self.assignment.consume(a, profile_after);
+        trace!("AnimTracer::consume({:?}) ==> {:#?}", a, self.get_state());
     }
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {
@@ -538,6 +558,27 @@ mod test {
 
         dbg!(&distr);
         assert_eq!(&"b", distr.get_single().unwrap().0);
+    }
+
+    #[test]
+    fn distr2() {
+        simple_logger::init();
+
+        let one = Rat::one();
+        let two = &one + &one;
+
+        let dummy_profile = Profile { alts: HashSet::new(), ballots: Vec::new()};
+
+        let mut at = AnimTracer::start(dummy_profile.clone(), hashmap!{
+            "kiiya" => Distr { distr: hashmap! {
+                "z_night" => two,
+            }}
+        });
+
+        at.elem_t(&"z_night", &"pearl", &Rat::zero(), &dummy_profile);
+        at.elem_t(&"z_night", &"firestorm", &Rat::one(), &dummy_profile);
+
+        assert!(false);
     }
 
     #[test]

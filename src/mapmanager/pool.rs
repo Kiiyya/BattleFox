@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// - map
 /// - game mode (Rush, Conquest, ...)
 /// - extra meta stuff (e.g. whether vehicles are enabled yes/no.)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MapInPool<E: Eq + Clone> {
     pub map: Map,
     pub mode: GameMode,
@@ -19,6 +19,12 @@ pub struct MapInPool<E: Eq + Clone> {
 impl<E: Eq + Clone> Display for MapInPool<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.map.Pretty())
+    }
+}
+
+impl <E: Eq + Clone + std::fmt::Debug> std::fmt::Debug for MapInPool<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}@{:?}", self.map.short(), self.mode, self.extra)
     }
 }
 

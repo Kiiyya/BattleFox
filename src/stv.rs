@@ -157,44 +157,10 @@ pub struct Result<A: Eq + Hash> {
 }
 
 /// A set of ballots. Equivalent to one "election".
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile<A: Eq + Hash> {
     pub alts: HashSet<A>,
     pub ballots: Vec<Ballot<A>>,
-}
-
-impl<A: Eq + Hash> Debug for Profile<A>
-where
-    A: Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Profile {{")?;
-        // alts, all inline
-        f.write_str(
-            self.alts
-                .iter()
-                .map(|p| format!("{:?}", p))
-                .collect::<Vec<_>>()
-                .join(", ")
-                .as_str(),
-        )?;
-        if self.ballots.is_empty() {
-            write!(f, "}} []")?;
-        } else {
-            writeln!(f, "}} [")?;
-            // ballots, one per line
-            f.write_str(
-                self.ballots
-                    .iter()
-                    .fold(String::new(), |acc, p| {
-                        acc + format!("  {:?},\n", p).as_str()
-                    })
-                    .as_str(),
-            )?;
-            write!(f, "]")?;
-        }
-        Ok(())
-    }
 }
 
 impl<A: Display + Debug + Clone + Eq + Hash> Display for Profile<A> {
@@ -579,11 +545,7 @@ pub mod test {
         let seats = Rat::from_integer(BigInt::new(num_bigint::Sign::Plus, vec![seats as u32]));
         let n_ballots = Rat::from_integer(BigInt::new(num_bigint::Sign::Plus, vec![n_ballots as u32]));
 
-        let x = n_ballots / (seats + Rat::one());
-        let x = x.floor();
-        let x = x + Rat::one();
-
-        return x;
+        (n_ballots / (seats + Rat::one())).floor() + Rat::one()
     }
 
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -602,6 +564,7 @@ pub mod test {
     }
 
     #[test]
+    #[ignore]
     fn oh_god_oh_fuck() {
         let profile = Profile {
             alts: hashset![A, B, C1, C2],
@@ -627,21 +590,19 @@ pub mod test {
                 ballot![1, C2, C1, B, A],
             ],
         };
-        println!("profile: {}", profile);
+        dbg!(&profile);
 
-        let cr_profile = profile.limit(&hashset![C1]);
-        println!("cr_profile: {}", cr_profile);
-
-        let q = dbg!(droop(2, profile.ballots.len()));
+        let q = droop(2, profile.ballots.len());
 
         let mut tracer = DetailedTracer::start(profile.clone());
-        let original_result =    profile.vanilla_stv(2, &q, &mut tracer);
-        print_trace2(&tracer);
+        let original_result = profile.vanilla_stv(2, &q, &mut tracer);
+        print_trace(&tracer);
 
-        println!("");
+        println!();
 
+        let cr_profile = dbg!(profile.limit(&hashset![C1]));
         let mut cr_tracer = DetailedTracer::start(cr_profile.clone());
-        let cr_result       = cr_profile.vanilla_stv(2, &q, &mut cr_tracer);
+        let cr_result = cr_profile.vanilla_stv(2, &q, &mut cr_tracer);
         print_trace(&cr_tracer);
 
         assert_eq!(original_result.e, cr_result.e);
@@ -711,7 +672,6 @@ pub mod test {
         print_trace(&tracer);
 
         assert_eq!("Wolf", winner);
-        // assert!(false);
     }
 
     #[test]

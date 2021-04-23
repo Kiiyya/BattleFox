@@ -496,6 +496,7 @@ impl Map {
             }
             Map::ZavodNight => {
                 static ALL: [&str; 11] = [
+                    "night",
                     "grave",
                     "graveyard",
                     "gravey",
@@ -503,7 +504,6 @@ impl Map {
                     "gyard",
                     "zavodgraveyard",
                     "zavodgrave",
-                    "night",
                     "nightshift",
                     "nightzavod",
                     "zni",

@@ -904,7 +904,7 @@ impl Mapvote {
         if let Some((profile, assignment, anim_override_override)) = maybe {
             let mut tracer = AnimTracer::start(profile.clone(), assignment);
             if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
-                trace!("AnimTracer: {:?}", &tracer);
+                trace!("AnimTracer: {:#?}", &tracer);
 
                 for ass in tracer.log_iter() {
                     debug!("Ass: {:?}", ass);
