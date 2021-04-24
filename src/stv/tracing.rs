@@ -562,7 +562,7 @@ mod test {
 
     #[test]
     fn distr2() {
-        simple_logger::init();
+        simple_logger::SimpleLogger::new().init().unwrap();
 
         let one = Rat::one();
         let two = &one + &one;
@@ -578,7 +578,7 @@ mod test {
         at.elem_t(&"z_night", &"pearl", &Rat::zero(), &dummy_profile);
         at.elem_t(&"z_night", &"firestorm", &Rat::one(), &dummy_profile);
 
-        assert!(false);
+        // assert!(false);
     }
 
     #[test]
