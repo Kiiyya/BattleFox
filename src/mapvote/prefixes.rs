@@ -2,6 +2,8 @@
 
 use std::{collections::{HashMap, HashSet}, fmt::Debug, hash::Hash};
 
+use multimap::MultiMap;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Node<V> {
     children: HashMap<char, Node<V>>,
@@ -104,7 +106,7 @@ enum Type<'a> { Set(&'a str), Blocked }
 /// Shortens each element in `set` so that it is still unique.
 /// # Panics
 /// When `blocked` contains an element of the set.
-pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minlen: usize, blocked: impl Iterator<Item = &'b str>, extend: bool) -> HashSet<&'a str> {
+pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minlen: usize, blocked: impl Iterator<Item = &'b str>, extend: bool) -> MultiMap<&'a str, &'a str> {
     let mut trie = Node::new();
     set.for_each(|s| {
         trie.insert(s, Type::Set(s));
@@ -117,7 +119,7 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minl
 
     let mut branches = Vec::new();
     trie.leaf_branches(0, &mut branches);
-    let mut ret = HashSet::new();
+    let mut ret = MultiMap::new();
     for (depth, branch) in branches {
         // depth is the shortest unique length of our prefix.
         let leaf = branch.get_leaf().unwrap(); // unwrap safe: postcondition of leaf_branches().
@@ -130,10 +132,10 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minl
                     for i in x..=str.len() {
                         let y = &str[0..i];
                         // println!("i={}, y={}", i, y);
-                        ret.insert(y);
+                        ret.insert(*str, y);
                     }
                 } else {
-                    ret.insert(&str[0..x]);
+                    ret.insert(*str, &str[0..x]);
                 }
             }
             Type::Blocked => {
@@ -148,6 +150,7 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minl
 #[cfg(test)]
 mod test {
     use super::{Node, shortest_unique_prefixes};
+    use multimap::MultiMap;
 
     #[test]
     fn re_add() {
@@ -230,11 +233,18 @@ mod test {
         let none : Vec<&str> = Vec::new();
         let x = shortest_unique_prefixes(src.iter().copied(), 0, none.iter().copied(), true);
 
-        let should = hashset! {
-            "pe", "pea", "pear", "pearl",
-            "pr", "pro", "prop",
-            "m", "me", "met",
-        };
+        let should = multimap!(
+            "pearl" => "pe",
+            "pearl" => "pea",
+            "pearl" => "pear",
+            "pearl" => "pearl",
+            "prop" => "pr",
+            "prop" => "pro",
+            "prop" => "prop",
+            "met" => "m",
+            "met" => "me",
+            "met" => "met"
+        );
 
         assert_eq!(should, x);
     }
@@ -245,11 +255,17 @@ mod test {
         let none : Vec<&str> = Vec::new();
         let x = shortest_unique_prefixes(src.iter().copied(), 2, none.iter().copied(), true);
 
-        let should = hashset! {
-            "pe", "pea", "pear", "pearl",
-            "pr", "pro", "prop",
-            "me", "met",
-        };
+        let should = multimap!(
+            "pearl" => "pe",
+            "pearl" => "pea",
+            "pearl" => "pear",
+            "pearl" => "pearl",
+            "prop" => "pr",
+            "prop" => "pro",
+            "prop" => "prop",
+            "met" => "me",
+            "met" => "met"
+        );
 
         assert_eq!(should, x);
     }
@@ -260,10 +276,14 @@ mod test {
         let none : Vec<&str> = Vec::new();
         let x = shortest_unique_prefixes(src.iter().copied(), 0, vec!["pe"].iter().copied(), true);
 
-        let should = hashset! {
-            "pea", "pear", "pearl",
-            "m", "me", "met",
-        };
+        let should = multimap!(
+            "pearl" => "pea",
+            "pearl" => "pear",
+            "pearl" => "pearl",
+            "met" => "m",
+            "met" => "me",
+            "met" => "met"
+        );
 
         assert_eq!(should, x);
     }
@@ -274,10 +294,10 @@ mod test {
         let none : Vec<&str> = Vec::new();
         let x = shortest_unique_prefixes(src.iter().copied(), 0, vec!["pe"].iter().copied(), false);
 
-        let should = hashset! {
-            "pea",
-            "m",
-        };
+        let should = multimap!(
+            "pearl" => "pea",
+            "met" => "m"
+        );
 
         assert_eq!(should, x);
     }
