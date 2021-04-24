@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display, hash::Hash};
+use std::{collections::HashSet, fmt::Display, hash::Hash, slice::Iter};
 
 use battlefield_rcon::bf4::{GameMode, Map};
 use rand::{prelude::SliceRandom, thread_rng};
@@ -88,6 +88,10 @@ impl From<Vec<(Map, GameMode)>> for MapPool<()> {
 impl<E: Eq + Clone> MapPool<E> {
     pub fn new() -> Self {
         Self { pool: Vec::new() }
+    }
+
+    pub fn iter<'a>(&'a self) -> Iter<'a, MapInPool<E>> {
+        self.pool.iter()
     }
 
     /// Checks whether map exists in this map pool.
