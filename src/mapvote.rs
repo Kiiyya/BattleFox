@@ -8,7 +8,7 @@ use crate::{guard::{
         CallbackResult, MapManager, PopState,
     }, players::Players, stv::{CheckBallotResult, Profile, tracing::{Assignment, DetailedTracer, Distr}}, vips::{MaybeVip, Vips, YesVip}};
 
-use self::config::MapVoteConfig;
+use self::{config::MapVoteConfig, prefixes::shortest_unique_prefixes};
 
 use super::stv::tracing::{NoTracer, StvAction, LoggingTracer, AnimTracer};
 use super::stv::Ballot;
@@ -17,6 +17,7 @@ use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility
 use either::Either::{Left, Right};
 use futures::{future::join_all, StreamExt};
 use itertools::Itertools;
+use multimap::MultiMap;
 use std::hash::Hash;
 use std::{
     any::Any,
@@ -40,9 +41,23 @@ pub mod config;
 mod animate;
 mod prefixes;
 
+/// Matcher for a map.
+#[derive(Debug, Clone)]
+enum Matcher<'a> {
+    /// E.g. "pearl".
+    Name(&'a str),
+    /// E.g. 1.
+    Number(usize),
+
+    StringSet(HashSet<&'a str>)
+}
+
 #[derive(Debug)]
 struct Inner {
     alternatives: MapPool<()>,
+
+    alt_matchers: MultiMap<MapInPool<()>, Matcher<'static>>,
+
     /// Invariant: All ballots have at least one option on them.
     votes: HashMap<Player, Ballot<MapInPool<()>>>,
 
@@ -106,7 +121,14 @@ impl Inner {
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
     fn fmt_options(&self, messages: &mut Vec<String>) {
-        let mut msg = format!("Vote with numbers or names:\n{}", 5);
+        let mut msg = "Vote with numbers or names:\n".to_string();
+        let opts = self.alternatives.iter().map(|mip| mip.map.short());
+        // let mm = shortest_unique_prefixes(opts, minlen, blocked.iter().copied(), true);
+        // trace!("fmt_options(.., minlen={}, blocked={:?}): mm = {:?}", minlen, blocked, mm);
+
+        for chunk in &self.alternatives.iter().chunks(3) {
+            msg += &format!("\t");
+        }
 
         // let x = self
         //     .alternatives
@@ -440,6 +462,7 @@ impl Mapvote {
                 pop_state: popstate,
                 nominations: HashMap::new(),
                 anim_override_override: HashMap::new(),
+                alt_matchers: MultiMap::new(),
             };
             init.set_up_new_vote(self.config.n_options);
             info!("Popstate initialized! New: {}", init.pop_state.name);
