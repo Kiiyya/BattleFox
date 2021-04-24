@@ -38,6 +38,7 @@ use num_traits::One;
 
 pub mod config;
 mod animate;
+mod prefixes;
 
 #[derive(Debug)]
 struct Inner {
@@ -104,14 +105,16 @@ impl Inner {
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
-    fn fmt_options(&self, lines: &mut Vec<String>) {
-        let x = self
-            .alternatives
-            .pool
-            .iter()
-            .map(|alt| alt.map.Pretty())
-            .join(", ");
-        lines.push(format!("Options: {}", x));
+    fn fmt_options(&self, messages: &mut Vec<String>) {
+        let mut msg = format!("Vote with numbers or names:\n{}", 5);
+
+        // let x = self
+        //     .alternatives
+        //     .pool
+        //     .iter()
+        //     .map(|alt| alt.map.Pretty())
+        //     .join(", ");
+        // lines.push(format!("Options: {}", x));
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.

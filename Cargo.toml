@@ -48,6 +48,8 @@ lerp = "0.4"
 
 # HashMap literals, very simple crate.
 maplit = "1"
+radix_trie = "0.2" # For shortest unique prefixes
+cached = "0.23" # For shortest unique prefixes
 
 # Stuff for logging
 log = "0.4"
