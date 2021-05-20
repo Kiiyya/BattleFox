@@ -72,14 +72,14 @@ pub fn init_logging() {
     let handle = flexi_logger::Logger::with_env_or_str("trace")
         .print_message()
         .log_to_file()
-        .rotate(
-            Criterion::Age(Age::Day),
-            Naming::Timestamps,
-            #[cfg(not(compress_logs))]
-            Cleanup::KeepLogFiles(10),
-            #[cfg(compress_logs)]
-            Cleanup::KeepLogAndCompressedFiles(10, 60),
-        )
+        // .rotate(
+        //     Criterion::Age(Age::Day),
+        //     Naming::Timestamps,
+        //     #[cfg(not(compress_logs))]
+        //     Cleanup::KeepLogFiles(10),
+        //     #[cfg(compress_logs)]
+        //     Cleanup::KeepLogAndCompressedFiles(10, 60),
+        // )
         .format_for_files(file_format)
         .set_palette("196;208;120;141;241".to_string()) // https://jonasjacek.github.io/colors/
         .format_for_stderr(colored_format)
