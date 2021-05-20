@@ -47,6 +47,17 @@ pub enum Squad {
     Juliet = 10,
     Kilo = 11,
     Lima = 12,
+    Mike = 13,
+    November = 14,
+    Oscar = 15,
+    Papa = 16,
+    Quebec = 17,
+    Romeo = 18,
+    Sierra = 19,
+    Tango = 20,
+    Uniform = 21,
+    Victor = 22,
+    Whiskey = 23,
 }
 
 impl Squad {
@@ -65,6 +76,17 @@ impl Squad {
             "10" => Squad::Juliet,
             "11" => Squad::Kilo,
             "12" => Squad::Lima,
+            "13" => Squad::Mike,
+            "14" => Squad::November,
+            "15" => Squad::Oscar,
+            "16" => Squad::Papa,
+            "17" => Squad::Quebec,
+            "18" => Squad::Romeo,
+            "19" => Squad::Sierra,
+            "20" => Squad::Tango,
+            "21" => Squad::Uniform,
+            "22" => Squad::Victor,
+            "23" => Squad::Whiskey,
             _ => {
                 return Err(RconError::protocol_msg(format!(
                     "Unknown squad Id {}",
