@@ -61,8 +61,8 @@ pub enum Squad {
 }
 
 impl Squad {
-    pub(crate) fn rcon_decode(words: &AsciiStr) -> RconResult<Self> {
-        Ok(match words.as_str() {
+    pub(crate) fn rcon_decode(word: &AsciiStr) -> RconResult<Self> {
+        Ok(match word.as_str() {
             "0" => Squad::NoSquad,
             "1" => Squad::Alpha,
             "2" => Squad::Bravo,
@@ -90,7 +90,7 @@ impl Squad {
             _ => {
                 return Err(RconError::protocol_msg(format!(
                     "Unknown squad Id {}",
-                    words[0]
+                    word
                 )))
             }
         })
