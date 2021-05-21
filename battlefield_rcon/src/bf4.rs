@@ -2,14 +2,16 @@
 use std::sync::{Arc, Mutex, Weak};
 
 use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
-use crate::rcon::{
-    ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult,
-};
+use crate::rcon::{ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::{parse_pib, PlayerInfo};
-use tokio::{net::ToSocketAddrs, sync::{broadcast, mpsc, oneshot}};
+use server_info::{parse_serverinfo, ServerInfo};
+use tokio::{
+    net::ToSocketAddrs,
+    sync::{broadcast, mpsc, oneshot},
+};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 pub mod defs;
@@ -18,6 +20,7 @@ pub mod error;
 pub mod map_list;
 pub(crate) mod player_cache;
 pub mod player_info_block;
+pub mod server_info;
 mod util;
 
 pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
@@ -27,6 +30,7 @@ pub use ea_guid::Eaid;
 cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
 cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
+cmd_err!(pub ServerInfoError, );
 cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
 cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull);
 cmd_err!(pub GameAdminError, Full, AlreadyInList);
@@ -411,9 +415,20 @@ impl Bf4Client {
                 Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
                     warn!("Too many events at once! Had to drop {} events", n);
                     None // filter out errors like this.
-                },
+                }
             }
         }))
+    }
+
+    pub async fn server_info(&self) -> Result<ServerInfo, ServerInfoError> {
+        let words = veca!["serverInfo"];
+        self.rcon
+            .query(
+                &words,
+                |ok| parse_serverinfo(&ok).map_err(|rconerr| rconerr.into()),
+                |_| None,
+            )
+            .await
     }
 
     pub async fn list_players(&self, vis: Visibility) -> Result<Vec<PlayerInfo>, ListPlayersError> {
@@ -780,7 +795,12 @@ impl Bf4Client {
 /// [ADMIN] {indent}ITEM10, ITEM11, ITEM12,
 /// ITEM13, ITEM14,
 /// ```
-pub fn wrap_msg_chars(init: impl Into<String>, items: &[String], sep: impl Into<String>, indent: impl Into<String>) -> Vec<String> {
+pub fn wrap_msg_chars(
+    init: impl Into<String>,
+    items: &[String],
+    sep: impl Into<String>,
+    indent: impl Into<String>,
+) -> Vec<String> {
     let sep = sep.into();
     let indent = indent.into();
     let mut messages = Vec::new();
