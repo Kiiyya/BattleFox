@@ -48,7 +48,7 @@ pub fn parse_serverinfo(words: &[AsciiString]) -> RconResult<ServerInfo> {
     let teams_count = parse_int(&words[7])? as usize;
     let offset = teams_count;
     let server_info = ServerInfo {
-        server_name: words[offset].clone(),
+        server_name: words[0].clone(),
         playercount: parse_int(&words[1])?,
         max_playercount: parse_int(&words[2])?,
         game_mode: words[3].clone(),
