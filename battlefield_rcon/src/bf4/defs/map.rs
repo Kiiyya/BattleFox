@@ -142,6 +142,9 @@ impl Map {
         ALL.iter()
     }
 
+    /// Gets a short string which will be rendered in BF4 as constant length.
+    /// Useful for e.g. indentations, or tables, etc.
+    /// The maximum ASCII character count is 11.
     pub fn map_constlen_tabbed(&self) -> &'static str {
         match self {
             Map::Zavod => "Zavod\t",

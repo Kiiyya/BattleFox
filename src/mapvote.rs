@@ -52,11 +52,16 @@ enum Matcher<'a> {
     StringSet(HashSet<&'a str>)
 }
 
+/// Allow players to vote with !3 but also with !pearl.
+/// This makes a statement about which 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+struct VoteNumber(usize);
+
 #[derive(Debug)]
 struct Inner {
-    alternatives: MapPool<()>,
+    alternatives: MapPool<VoteNumber>,
 
-    alt_matchers: MultiMap<MapInPool<()>, Matcher<'static>>,
+    alt_matchers: MultiMap<MapInPool<VoteNumber>, Matcher<'static>>,
 
     /// Invariant: All ballots have at least one option on them.
     votes: HashMap<Player, Ballot<MapInPool<()>>>,
@@ -120,14 +125,24 @@ impl Inner {
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
-    fn fmt_options(&self, messages: &mut Vec<String>) {
-        let mut msg = "Vote with numbers or names:\n".to_string();
+    fn fmt_options<'blocked>(&self, messages: &mut Vec<String>, minlen: usize, blocked: impl Iterator<Item = &'blocked str>) {
+        let mut msg : String = "Vote with numbers or names:\n".to_string();
         let opts = self.alternatives.iter().map(|mip| mip.map.short());
-        // let mm = shortest_unique_prefixes(opts, minlen, blocked.iter().copied(), true);
-        // trace!("fmt_options(.., minlen={}, blocked={:?}): mm = {:?}", minlen, blocked, mm);
+        let mm = shortest_unique_prefixes(opts, minlen, blocked, true);
+        trace!("fmt_options(.., minlen={}, blocked=...): mm = {:#?}", minlen, mm);
 
         for chunk in &self.alternatives.iter().chunks(3) {
-            msg += &format!("\t");
+            let mut derp = format!("\t");
+            for mip in chunk {
+                format!("");
+            }
+
+            msg += "\t";
+        }
+
+        if msg.len() > 127 {
+            warn!("fmt_options(), resulting message (msg = {:?}) has length {} > 127, and would not get rendered in bf4! Truncated it now. This is a bug, report it.", msg, msg.len());
+            msg.truncate(127);
         }
 
         // let x = self

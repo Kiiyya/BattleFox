@@ -413,13 +413,6 @@ where
         }
     }
 
-    /// performs a single iteration of vSTV.
-    pub fn vanilla_stv_step<T: Tracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
-        let result = self.elect_or_reject(q, tracer);
-        let profile = self.vanilla_T(q, &result, tracer);
-        (result, profile)
-    }
-
     pub fn vanilla_stv<T: Tracer<A>>(&self, seats: usize, q: &Rat, tracer: &mut T) -> Result<A> {
         if self.alts.len() <= seats {
             // if we only have `seats` candidates left, just elect everyone, even if they don't cross quota.
@@ -434,7 +427,8 @@ where
 
         // so now we have at least `seats + 1` alternatives left.
 
-        let (result, profile) = self.vanilla_stv_step(q, tracer);
+        let result = self.elect_or_reject(q, tracer);
+        let profile = self.vanilla_T(q, &result, tracer);
         assert_eq!(profile.alts, result.d);
         if result.d.is_empty() || result.e.len() >= seats {
             // if we either filled all seats, or exhausted candidates, we're done.

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// - game mode (Rush, Conquest, ...)
 /// - extra meta stuff (e.g. whether vehicles are enabled yes/no.)
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MapInPool<E: Eq + Clone> {
+pub struct MapInPool<E: Eq + Clone = ()> {
     pub map: Map,
     pub mode: GameMode,
     pub extra: E,
