@@ -3,6 +3,7 @@
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
+#[macro_use] extern crate derive_more;
 
 use ascii::IntoAsciiString;
 use dotenv::dotenv;
@@ -18,13 +19,14 @@ use battlefield_rcon::{
     bf4::Bf4Client,
     rcon::{self, RconConnectionInfo},
 };
-use mapmanager::{pool::Vehicles, MapManager, PopState};
+use mapmanager::{MapManager, PopState};
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},
     Mapvote,
 };
 
 pub mod guard;
+// pub mod commands;
 pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
@@ -79,7 +81,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
 /// Convenience thing for loading stuff from Json.
 #[derive(Debug, Serialize, Deserialize)]
 struct MapManagerConfig {
-    pop_states: Vec<PopState<Vehicles>>,
+    pop_states: Vec<PopState>,
 
     vehicle_threshold: usize,
     leniency: usize,
@@ -95,7 +97,8 @@ async fn main() -> rcon::RconResult<()> {
     let players = Arc::new(Players::new());
     let vips = Arc::new(Vips::new());
 
-    // set up parts
+    // let commands = Arc::new(Commands::new());
+
     let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
     let mapman = Arc::new(MapManager::new(
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
@@ -124,6 +127,9 @@ async fn main() -> rcon::RconResult<()> {
 
     // start parts.
     let mut jhs = Vec::new();
+
+    // let bf4clone = bf4.clone();
+    // jhs.push(tokio::spawn(async move { commands.run(bf4clone).await }));
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));

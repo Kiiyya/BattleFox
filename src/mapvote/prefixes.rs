@@ -1,4 +1,4 @@
-//! Helper for finding sh children: (), value: (), count: ()ortest unique prefixes of a set of strings.
+//! Helper for finding shortest unique prefixes of a set of strings.
 
 use std::{collections::{HashMap, HashSet}, fmt::Debug, hash::Hash};
 
@@ -100,48 +100,45 @@ impl <V: Debug> Node<V> {
     }
 }
 
-#[derive(Debug)]
-enum Type<'a> { Set(&'a str), Blocked }
-
-/// Shortens each element in `set` so that it is still unique.
-/// # Panics
-/// When `blocked` contains an element of the set.
-pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, minlen: usize, blocked: impl Iterator<Item = &'b str>, extend: bool) -> MultiMap<&'a str, &'a str> {
-    let mut trie = Node::new();
+/// Computes the minimum length of each item so that it is still unique.
+#[must_use]
+pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>) -> HashMap<&'a str, usize> {
+    let mut trie : Node<&'a str> = Node::new();
     set.for_each(|s| {
-        trie.insert(s, Type::Set(s));
+        trie.insert(s.as_ref(), s.as_ref());
     });
-    blocked.for_each(|s| {
-        if trie.insert(s, Type::Blocked).is_some() {
-            panic!("cannot block prefixes which are in the search set. collision: {}", s);
-        }
-    });
+    // blocked.for_each(|s| {
+    //     if trie.insert(s, Type::Blocked).is_some() {
+    //         panic!("cannot block prefixes which are in the search set. collision: {}", s);
+    //     }
+    // });
 
     let mut branches = Vec::new();
     trie.leaf_branches(0, &mut branches);
-    let mut ret = MultiMap::new();
+    let mut ret = HashMap::new();
     for (depth, branch) in branches {
         // depth is the shortest unique length of our prefix.
         let leaf = branch.get_leaf().unwrap(); // unwrap safe: postcondition of leaf_branches().
-        match leaf.get().unwrap() { // unwrap safe: leafs always contain a value.
-            Type::Set(str) => {
-                assert_eq!(str.len(), str.chars().count()); // TODO: This code assumes ASCII, bad.
-                let x = std::cmp::max(depth, minlen);
-                if extend {
-                    // add stuff like "p", "pe", "pea", "pearl".
-                    for i in x..=str.len() {
-                        let y = &str[0..i];
-                        // println!("i={}, y={}", i, y);
-                        ret.insert(*str, y);
-                    }
-                } else {
-                    ret.insert(*str, &str[0..x]);
-                }
-            }
-            Type::Blocked => {
-                // ignore
-            }
-        }
+        assert_eq!(leaf.count(), 1);
+        ret.insert(*leaf.get_leaf().unwrap().get().unwrap(), depth);
+        // match leaf.get().unwrap() { // unwrap safe: leafs always contain a value.
+        //     Type::Set(str) => {
+        //         assert_eq!(str.len(), str.chars().count()); // TODO: This code assumes ASCII, bad.
+        //         if extend {
+        //             // add stuff like "p", "pe", "pea", "pearl".
+        //             for i in depth..=str.len() {
+        //                 let y = &str[0..i];
+        //                 // println!("i={}, y={}", i, y);
+        //                 ret.insert(*str, y);
+        //             }
+        //         } else {
+        //             ret.insert(*str, &str[0..depth]);
+        //         }
+        //     }
+        //     Type::Blocked => {
+        //         // ignore
+        //     }
+        // }
     }
 
     ret
@@ -227,78 +224,71 @@ mod test {
         assert!(collect.contains(&(1, &e)));
     }
 
-    #[test]
-    fn shortest_prefixes() {
-        let src = vec!["pearl", "prop", "met"];
-        let none : Vec<&str> = Vec::new();
-        let x = shortest_unique_prefixes(src.iter().copied(), 0, none.iter().copied(), true);
+    // #[test]
+    // fn shortest_prefixes() {
+    //     let src = hashset!["pearl", "prop", "metro"];
+    //     let none : Vec<&str> = Vec::new();
+    //     let x = shortest_unique_prefixes(src.iter());
 
-        let should = multimap!(
-            "pearl" => "pe",
-            "pearl" => "pea",
-            "pearl" => "pear",
-            "pearl" => "pearl",
-            "prop" => "pr",
-            "prop" => "pro",
-            "prop" => "prop",
-            "met" => "m",
-            "met" => "me",
-            "met" => "met"
-        );
+    //     let should = hashmap!(
+    //         "pearl" => 2,
+    //         "prop" => 2,
+    //         "met" => 1,
+    //     );
 
-        assert_eq!(should, x);
-    }
+    //     assert_eq!(should, x);
+    // }
 
-    #[test]
-    fn shortest_prefixes2() {
-        let src = vec!["pearl", "prop", "met"];
-        let none : Vec<&str> = Vec::new();
-        let x = shortest_unique_prefixes(src.iter().copied(), 2, none.iter().copied(), true);
+    // #[test]
+    // fn shortest_prefixes2() {
+    //     let src = vec!["pearl", "prop", "met"];
+    //     let none : Vec<&str> = Vec::new();
+    //     let x = shortest_unique_prefixes(src.iter().copied(), true);
 
-        let should = multimap!(
-            "pearl" => "pe",
-            "pearl" => "pea",
-            "pearl" => "pear",
-            "pearl" => "pearl",
-            "prop" => "pr",
-            "prop" => "pro",
-            "prop" => "prop",
-            "met" => "me",
-            "met" => "met"
-        );
+    //     let should = multimap!(
+    //         "pearl" => "pe",
+    //         "pearl" => "pea",
+    //         "pearl" => "pear",
+    //         "pearl" => "pearl",
+    //         "prop" => "pr",
+    //         "prop" => "pro",
+    //         "prop" => "prop",
+    //         "met" => "me",
+    //         "met" => "met"
+    //     );
 
-        assert_eq!(should, x);
-    }
+    //     assert_eq!(should, x);
+    // }
 
-    #[test]
-    fn shortest_prefixes3() {
-        let src = vec!["pearl", "met"];
-        let none : Vec<&str> = Vec::new();
-        let x = shortest_unique_prefixes(src.iter().copied(), 0, vec!["pe"].iter().copied(), true);
+    // #[test]
+    // fn shortest_prefixes3() {
+    //     let src = vec!["pearl", "met"];
+    //     let none : Vec<&str> = Vec::new();
+    //     let x = shortest_unique_prefixes(src.iter().copied(), 0, vec!["pe"].iter().copied(), true);
 
-        let should = multimap!(
-            "pearl" => "pea",
-            "pearl" => "pear",
-            "pearl" => "pearl",
-            "met" => "m",
-            "met" => "me",
-            "met" => "met"
-        );
+    //     let should = multimap!(
+    //         "pearl" => "pea",
+    //         "pearl" => "pear",
+    //         "pearl" => "pearl",
+    //         "met" => "m",
+    //         "met" => "me",
+    //         "met" => "met"
+    //     );
 
-        assert_eq!(should, x);
-    }
+    //     assert_eq!(should, x);
+    // }
 
-    #[test]
-    fn shortest_prefixes_nonextend() {
-        let src = vec!["pearl", "met"];
-        let none : Vec<&str> = Vec::new();
-        let x = shortest_unique_prefixes(src.iter().copied(), 0, vec!["pe"].iter().copied(), false);
+    // #[test]
+    // fn shortest_prefixes_nonextend() {
+    //     let src = vec!["pearl", "met"];
+    //     let none : Vec<&str> = Vec::new();
+    //     let x = shortest_unique_prefixes(src.iter().copied(), false);
 
-        let should = multimap!(
-            "pearl" => "pea",
-            "met" => "m"
-        );
+    //     let should = multimap!(
+    //         "pearl" => "p",
+    //         "met" => "m"
+    //     );
 
-        assert_eq!(should, x);
-    }
+    //     assert_eq!(should, x);
+    // }
 }

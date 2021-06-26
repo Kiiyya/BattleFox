@@ -59,3 +59,11 @@ flexi_logger = { version = "0.17", features = ["colors"] }
 # yansi = "0.5"
 
 simple_logger = "1" # just for tests actually
+
+combine = "4.5" # Parser combinator for commands.
+
+quickcheck = "1"
+quickcheck_macros = "1"
+
+shrinkwraprs = "0.3" # to deal with newtypes better
+derive_more = "0.99" # general goodness
