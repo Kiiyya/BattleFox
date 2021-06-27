@@ -19,7 +19,8 @@ use futures::{future::join_all, StreamExt};
 use itertools::Itertools;
 use matching::AltMatcher;
 use multimap::MultiMap;
-use std::hash::Hash;
+use rand::{RngCore, thread_rng};
+use std::{cmp::min, hash::Hash};
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
@@ -121,7 +122,7 @@ impl Inner {
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
     fn fmt_options(&self) -> String {
-        let mut msg : String = "Vote with numbers or name prefix:\n".to_string();
+        let mut msg : String = "Vote with numbers or name PREfix:\n".to_string();
         let opts = self.alternatives.iter().map(|mip| mip.map.short());
         // let mm = shortest_unique_prefixes(opts, self.config.options_reserved_trie.iter().map(|s| s.as_ref()));
         // trace!("fmt_options(.., minlen={}, blocked=...): mm = {:#?}", minlen, mm);
@@ -138,7 +139,7 @@ impl Inner {
         }
 
         if msg.len() > 127 {
-            warn!("fmt_options(), resulting message (msg = {:?}) has length {} > 127, and would not get rendered in bf4! Truncated it now. This is a bug, report it.", msg, msg.len());
+            error!("fmt_options(), resulting message (msg = {:?}) has length {} > 127, and would not get rendered in bf4! Truncated it now. This is a bug, report it.", msg, msg.len());
             msg.truncate(127);
         }
 
@@ -153,34 +154,55 @@ impl Inner {
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
-    fn fmt_personal_status(&self, lines: &mut Vec<String>, perspective: &Player) {
+    fn fmt_personal_status(&self, messages: &mut Vec<String>, perspective: &Player) {
         if let Some(ballot) = self.votes.get(perspective) {
             if ballot.preferences.len() >= 2 {
                 // nice
-                lines.push(format!("Your ballot: {}", ballot));
+                messages.push(format!("Your ballot: {}", ballot));
                 // lines.push("You can still change your ballot.".to_string());
             } else {
                 let single = ballot.preferences.first().unwrap();
                 // person only voted for a single alternative, tell them how to do it better.
                 // first unwrap: safe, assumes ballots.length() >= 1. That is an invariant.
-                lines.push(format!("You only voted for a single map ({}), but you can specify multiple preferences here!",
+                messages.push(format!("You only voted for a single map ({}), but you can vote for multiple preferences :D!",
                     ballot.preferences.first().unwrap().map.Pretty()));
 
-                // construct a random example vote, but where the first vote is the same as the
-                // person had already voted.
-                let mut suggestion_tail_pool = self.popstate.pool.without(single.map).choose_random(2);
-                let mut suggestion_pref = vec![single.to_owned()];
-                // #[allow(clippy::redundant_clone)]
-                suggestion_pref.append(&mut suggestion_tail_pool.pool);
-                let suggestion_string = suggestion_pref.iter().map(|mip| mip.map.short()).join(" ");
+                // // construct a random example vote, but where the first vote is the same as the
+                // // person had already voted.
+                // let mut suggestion_tail_pool = self.popstate.pool.without(single.map).choose_random(2);
+                // let mut suggestion_pref = vec![single.to_owned()];
+                // // #[allow(clippy::redundant_clone)]
+                // suggestion_pref.append(&mut suggestion_tail_pool.pool);
+                // let suggestion_string = suggestion_pref.iter().map(|mip| mip.map.short()).join(" ");
 
-                lines.push(format!("Try it: !{}", suggestion_string));
+                // lines.push(format!("Try it: !{}", suggestion_string));
+                messages.push("Try it: !1 2 3".to_string());
             }
         } else {
             // person hasn't voted yet at all.
-            let suggestion = self.alternatives.choose_random(3);
-            let suggestion_str = suggestion.pool.iter().map(|mip| mip.map.short()).join(" ");
-            lines.push(format!("Vote like this: !{}", suggestion_str));
+            // Randomly suggest random currently available maps, and each in a randomly chosen
+            // style, for example `!3 pearl pr` or `!m pr 3` or `!1 2 propa` or ...
+            let mut rng = thread_rng();
+            let suggestions_pool = self.alternatives.choose_random(3);
+            let suggestions = suggestions_pool.pool.iter().map(|mip| match rng.next_u32() % 10 {
+                0 | 1 | 2 | 3 => { // 4/10 probability
+                    // number
+                    let mat = self.matchers.get(mip).unwrap(); // unwrap safe due to invariant that all alternatives have a corresponding matcher.
+                    mat.number.to_string()
+                },
+                4 | 5 | 6 | 7 => { // 4/10 probability
+                    // prefix
+                    let mat = self.matchers.get(mip).unwrap(); // unwrap safe due to invariant that all alternatives have a corresponding matcher.
+                    let n = min(mip.map.short().len(), mat.minlen);
+                    let prefix = mip.map.short()[..n].to_string();
+                    prefix
+                },
+                8 | 9 => { // 2/10 probability
+                    mip.map.short().to_string() // suggest `pearl`, `propa`, etc.
+                },
+                _ => unreachable!(),
+            }).join(" ");
+            messages.push(format!("For example: !{}", suggestions));
         }
     }
 
