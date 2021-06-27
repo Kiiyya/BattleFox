@@ -53,7 +53,7 @@ fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
 
 #[derive(Debug)]
 enum ConfigError {
-    Serde,
+    Serde(serde_yaml::Error),
     Io(std::io::Error),
 }
 
@@ -62,7 +62,7 @@ async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> 
     let mut file = tokio::fs::File::open(path).await.map_err(ConfigError::Io)?;
     let mut s = String::new();
     file.read_to_string(&mut s).await.map_err(ConfigError::Io)?;
-    let t: T = serde_yaml::from_str(&s).map_err(|_| ConfigError::Serde)?;
+    let t: T = serde_yaml::from_str(&s).map_err(ConfigError::Serde)?;
     Ok(t)
 }
 
@@ -71,7 +71,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
     let mut file = tokio::fs::File::create(path)
         .await
         .map_err(ConfigError::Io)?;
-    let s = serde_yaml::to_string(obj).map_err(|_| ConfigError::Serde)?;
+    let s = serde_yaml::to_string(obj).map_err(ConfigError::Serde)?;
     file.write_all(s.as_bytes())
         .await
         .map_err(ConfigError::Io)?;
