@@ -61,7 +61,7 @@ impl MapPool {
         Self { pool: Vec::new() }
     }
 
-    pub fn iter<'a>(&'a self) -> Iter<'a, MapInPool> {
+    pub fn iter(&self) -> Iter<MapInPool> {
         self.pool.iter()
     }
 

@@ -626,13 +626,13 @@ pub mod test {
             .filter(|action| {
                 match action {
                     StvAction::Starting(_) => true,
-                    StvAction::ElemT { a, b, s, profile_afterwards } => false,
-                    StvAction::Consume { alt, profile_afterwards } => false,
-                    StvAction::ToAll { from, howmuch, profile_afterwards } => true,
-                    StvAction::Elected { elected, profile_afterwards } => true,
-                    StvAction::Eliminated { alt, profile_afterwards } => true,
-                    StvAction::RejectTiebreak { tied, chosen, score } => true,
-                    StvAction::Stv1WinnerTiebreak { tied, chosen } => true,
+                    StvAction::ElemT { a: _, b: _, s: _, profile_afterwards: _ } => false,
+                    StvAction::Consume { alt: _, profile_afterwards: _ } => false,
+                    StvAction::ToAll { from: _, howmuch: _, profile_afterwards: _ } => true,
+                    StvAction::Elected { elected: _, profile_afterwards: _ } => true,
+                    StvAction::Eliminated { alt: _, profile_afterwards: _ } => true,
+                    StvAction::RejectTiebreak { tied: _, chosen: _, score: _ } => true,
+                    StvAction::Stv1WinnerTiebreak { tied: _, chosen: _ } => true,
                 }
             } )
             .for_each(|action| {

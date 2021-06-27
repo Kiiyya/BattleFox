@@ -90,14 +90,6 @@ impl <V: Debug> Node<V> {
                 .for_each(|n| n.leaf_branches(depth + 1, collect));
         }
     }
-
-    /// Go through **all** (even non-key) nodes.
-    fn traverse<'a>(&'a self, f: &mut impl FnMut(&'a Node<V>)) {
-        f(self);
-        for child in self.children.values() {
-            child.traverse(f);
-        }
-    }
 }
 
 /// Computes the minimum length of each item so that it is still unique.

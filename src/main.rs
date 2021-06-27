@@ -11,11 +11,11 @@ use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use weaponforcer::WeaponEnforcer;
-use std::{env::var, sync::Arc, time::Duration};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use std::{env::var, sync::Arc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vips::Vips;
 
-use battlefield_rcon::{bf4::{Bf4Client, Visibility}, rcon::{self, RconConnectionInfo}};
+use battlefield_rcon::{bf4::Bf4Client, rcon::{self, RconConnectionInfo}};
 use mapmanager::{MapManager, PopState};
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},

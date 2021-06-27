@@ -168,9 +168,10 @@ impl Inner {
 
                 // construct a random example vote, but where the first vote is the same as the
                 // person had already voted.
-                let suggestion_tail_pool = self.popstate.pool.without(single.map).choose_random(2);
+                let mut suggestion_tail_pool = self.popstate.pool.without(single.map).choose_random(2);
                 let mut suggestion_pref = vec![single.to_owned()];
-                suggestion_pref.append(&mut suggestion_tail_pool.pool.clone());
+                // #[allow(clippy::redundant_clone)]
+                suggestion_pref.append(&mut suggestion_tail_pool.pool);
                 let suggestion_string = suggestion_pref.iter().map(|mip| mip.map.short()).join(" ");
 
                 lines.push(format!("Try it: !{}", suggestion_string));
