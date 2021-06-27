@@ -131,23 +131,3 @@ fn reserve_next_number(taken : &mut BTreeSet<usize>) -> usize {
 	}
 	unreachable!()
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    // use quickcheck::{Arbitrary, Gen};
-
-	// impl Arbitrary for AltMatcher {
-	// 	fn arbitrary(g: &mut Gen) -> Self {
-	// 		g.
-	// 	}
-	// }
-	// #[quickcheck]
-	// fn matchers() {
-	// }
-
-	#[test]
-	fn matchers() {
-		todo!()
-	}
-}
