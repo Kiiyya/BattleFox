@@ -23,6 +23,5 @@ BFOX_RCON_PASSWORD=qw3RTy
 - Some Rust-Analyzer goodies:
   - https://rust-analyzer.github.io/manual.html#on-enter
   - https://rust-analyzer.github.io/manual.html#on-typing-assists
--
 
 🇪🇺
