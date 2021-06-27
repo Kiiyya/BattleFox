@@ -48,6 +48,8 @@ lerp = "0.4"
 
 # HashMap literals, very simple crate.
 maplit = "1"
+radix_trie = "0.2" # For shortest unique prefixes
+cached = "0.23" # For shortest unique prefixes
 
 # Stuff for logging
 log = "0.4"
@@ -57,3 +59,11 @@ flexi_logger = { version = "0.17", features = ["colors"] }
 # yansi = "0.5"
 
 simple_logger = "1" # just for tests actually
+
+combine = "4.5" # Parser combinator for commands.
+
+quickcheck = "1"
+quickcheck_macros = "1"
+
+shrinkwraprs = "0.3" # to deal with newtypes better
+derive_more = "0.99" # general goodness

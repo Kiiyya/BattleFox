@@ -12,6 +12,11 @@
 
     "animate": false,
     "animate_override": {
-        "Kiiyya": true
-    }
+        "Kiiyya": true,
+        "PocketWolfy": true
+    },
+
+    "options_minlen": 1,
+    "options_reserved_hidden": ["punish"],
+    "options_reserved_trie": ["p"]
 }

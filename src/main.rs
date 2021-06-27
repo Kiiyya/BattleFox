@@ -2,6 +2,8 @@
 
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate log;
+#[macro_use] extern crate multimap;
+#[macro_use] extern crate derive_more;
 
 use ascii::IntoAsciiString;
 use dotenv::dotenv;
@@ -13,17 +15,15 @@ use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vips::Vips;
 
-use battlefield_rcon::{
-    bf4::Bf4Client,
-    rcon::{self, RconConnectionInfo},
-};
-use mapmanager::{pool::Vehicles, MapManager, PopState};
+use battlefield_rcon::{bf4::Bf4Client, rcon::{self, RconConnectionInfo}};
+use mapmanager::{MapManager, PopState};
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},
     Mapvote,
 };
 
 pub mod guard;
+// pub mod commands;
 pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
@@ -78,7 +78,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
 /// Convenience thing for loading stuff from Json.
 #[derive(Debug, Serialize, Deserialize)]
 struct MapManagerConfig {
-    pop_states: Vec<PopState<Vehicles>>,
+    pop_states: Vec<PopState>,
 
     vehicle_threshold: usize,
     leniency: usize,
@@ -94,7 +94,8 @@ async fn main() -> rcon::RconResult<()> {
     let players = Arc::new(Players::new());
     let vips = Arc::new(Vips::new());
 
-    // set up parts
+    // let commands = Arc::new(Commands::new());
+
     let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
     let mapman = Arc::new(MapManager::new(
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
@@ -121,8 +122,29 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     info!("Connected!");
 
+    // for i in 0..10 {
+    //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();
+    //     sleep(Duration::from_millis(2000)).await;
+    // }
+
+    // for map in battlefield_rcon::bf4::Map::all() {
+    //     let mut msg = "\t".to_string();
+    //     for minlen in 0..3 {
+    //         msg += &format!("{}", map.tab4_prefixlen(minlen));
+    //         // let upper = map.short()[..minlen].to_ascii_uppercase();
+    //         // let lower = map.short()[minlen..].to_string();
+    //         // msg += &format!("[\t{}{}\t]  ", upper, lower); // TODO: trim last \t of last chunk item
+    //     }
+    //     msg += "|";
+    //     bf4.say(msg, battlefield_rcon::bf4::Visibility::All).await.unwrap();
+    //     sleep(Duration::from_millis(150)).await;
+    // }
+
     // start parts.
     let mut jhs = Vec::new();
+
+    // let bf4clone = bf4.clone();
+    // jhs.push(tokio::spawn(async move { commands.run(bf4clone).await }));
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));

@@ -5,16 +5,13 @@ use lerp::Lerp;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, convert::TryFrom, sync::Arc, time::Duration};
 
-use battlefield_rcon::{
-    bf4::{defs::Preset, Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility},
-    rcon::RconResult,
-};
+use battlefield_rcon::{bf4::{Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility, defs::Preset}, rcon::RconResult};
 use futures::{future::BoxFuture, StreamExt};
 use tokio::{sync::Mutex, time::sleep};
 
 use self::{
     config::HasZeroPopState,
-    pool::{MapInPool, MapPool, NRounds, Vehicles},
+    pool::{MapInPool, MapPool},
 };
 use crate::guard::Guard;
 
@@ -23,23 +20,23 @@ pub mod pool;
 
 /// One "population level", for example for seeding, or for a full server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PopState<E: Eq + Clone> {
+pub struct PopState {
     pub name: String,
-    pub pool: MapPool<E>,
+    pub pool: MapPool,
     /// At `min_players` or more players, activate this pool. Unless a pool with even higher `min_players` exists.
     pub min_players: usize,
 }
 
-impl<E: Eq + Clone> PopState<E> {
+impl PopState {
     /// - `Greater`: min players is now higher. Means we changed to a higher pop level.
     /// - etc.
-    pub fn change_direction(before: &PopState<E>, after: &PopState<E>) -> Ordering {
+    pub fn change_direction(before: &PopState, after: &PopState) -> Ordering {
         after.min_players.cmp(&before.min_players)
     }
 }
 
 /// Find the correct popstate, given a certain population.
-pub fn determine_popstate<E: Eq + Clone>(states: &[PopState<E>], pop: usize) -> &PopState<E> {
+pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
     if let Some(state) = states
         .iter()
         .filter(|&p| p.min_players <= pop) // if a pop state starts with more players anyway, might as well ignore it.
@@ -59,7 +56,7 @@ pub fn determine_popstate<E: Eq + Clone>(states: &[PopState<E>], pop: usize) -> 
 pub struct MapManager {
     inner: Mutex<Inner>,
 
-    pop_states: Vec<PopState<Vehicles>>,
+    pop_states: Vec<PopState>,
     vehicle_threshold: usize,
 
     /// Don't want to be overly sensitive to join/leave changes. Amortize it a bit before deciding
@@ -71,7 +68,7 @@ pub struct MapManager {
 /// The stuff behind the mutex
 struct Inner {
     /// contains the map pool too.
-    pop_state: PopState<Vehicles>,
+    pop_state: PopState,
 
     /// Current amount of players on the server.
     pop: Option<usize>,
@@ -81,7 +78,7 @@ struct Inner {
     #[allow(clippy::type_complexity)]
     pool_change_callbacks: Vec<
         Arc<
-            dyn Fn(Arc<Bf4Client>, PopState<Vehicles>) -> BoxFuture<'static, CallbackResult>
+            dyn Fn(Arc<Bf4Client>, PopState) -> BoxFuture<'static, CallbackResult>
                 + Send
                 + Sync,
         >,
@@ -95,7 +92,7 @@ pub enum CallbackResult {
 
 impl MapManager {
     pub fn new(
-        pop_states: Guard<Vec<PopState<Vehicles>>, HasZeroPopState>,
+        pop_states: Guard<Vec<PopState>, HasZeroPopState>,
         vehicle_threshold: usize,
         leniency: usize,
     ) -> Self {
@@ -122,7 +119,7 @@ impl MapManager {
     /// Used e.g. in mapvote.
     pub async fn register_pool_change_callback<F>(&self, f: F)
     where
-        F: Fn(Arc<Bf4Client>, PopState<Vehicles>) -> BoxFuture<'static, CallbackResult>
+        F: Fn(Arc<Bf4Client>, PopState) -> BoxFuture<'static, CallbackResult>
             + Send
             + Sync
             + 'static,
@@ -137,12 +134,17 @@ impl MapManager {
         self.inner.lock().await.pop_state.pool.contains_map(map)
     }
 
+    /// Get the current popstate
+    pub async fn popstate(&self) -> PopState {
+        self.inner.lock().await.pop_state.clone()
+    }
+
     /// Switches to the new map and game mode, but optionally disables vehicle spawns with
     /// the RCON trick. (Server will be custom for about 10 seconds).
     pub async fn switch_to(
         &self,
         bf4: &Arc<Bf4Client>,
-        mip: &MapInPool<()>,
+        mip: &MapInPool,
     ) -> Result<(), MapListError> {
         let pop = self.get_pop_count(bf4).await?;
         let vehicles = pop >= self.vehicle_threshold;
@@ -255,7 +257,7 @@ impl MapManager {
     /// Gets the current population state
     /// The amortized one. This is **not** necessarily equal to getting current population, and then
     /// `determine_popstate`!
-    pub async fn pop_state(&self) -> PopState<Vehicles> {
+    pub async fn pop_state(&self) -> PopState {
         let lock = self.inner.lock().await;
         lock.pop_state.clone()
     }
@@ -263,12 +265,12 @@ impl MapManager {
     /// Change pop state (locking inner), swap out RCON maplist, and call all handlers.
     pub async fn change_pop_state(
         &self,
-        newpop: PopState<Vehicles>,
+        newpop: PopState,
         bf4: &Arc<Bf4Client>,
     ) -> Result<(), MapListError> {
         // fill maps, set one round on each map (we ignore rounds, but RCON needs something).
         // In turn, RCON isn't aware of vehicles yes/no...
-        fill_rcon_maplist(bf4, &newpop.pool.map_to_nrounds(|_| 1)).await?;
+        // fill_rcon_maplist(bf4, &newpop.pool, 1).await?;
 
         let mut lock = self.inner.lock().await;
         lock.pop_state = newpop.clone();
@@ -356,11 +358,12 @@ impl std::fmt::Debug for MapManager {
 /// Clears and then fills the rcon maplist (as seen on battlelog and procon) with the specified map pool.
 pub async fn fill_rcon_maplist(
     bf4: &Arc<Bf4Client>,
-    pool: &MapPool<NRounds>,
+    pool: &MapPool,
+    nrounds: usize,
 ) -> Result<(), MapListError> {
     bf4.maplist_clear().await?;
     for (offset, mip) in pool.pool.iter().enumerate() {
-        bf4.maplist_add(&mip.map, &mip.mode, mip.extra.0 as i32, offset as i32)
+        bf4.maplist_add(&mip.map, &mip.mode, nrounds as i32, offset as i32)
             .await?;
     }
 
@@ -403,14 +406,13 @@ pub async fn switch_map_to(
 }
 
 /// Fetch the maplist in RCON and return it.
-pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool<NRounds>, MapListError> {
+pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool, MapListError> {
     let list = bf4.maplist_list().await?;
     let mut pool = MapPool::new();
     for mle in list {
         pool.pool.push(MapInPool {
             map: mle.map,
             mode: mle.game_mode,
-            extra: NRounds(mle.n_rounds),
         });
     }
 
