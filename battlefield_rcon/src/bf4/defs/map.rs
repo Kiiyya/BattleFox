@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{cmp::min, collections::HashMap, str::FromStr};
 
 use ascii::{AsciiStr, AsciiString};
 use serde::{Deserialize, Serialize};
@@ -183,6 +183,121 @@ impl Map {
         }
     }
 
+    // /// Given a prefix length, returns `map.short()` but with the first `prefixlen` letters
+    // /// capitalized, and tabs appended so that the visual length is always 3 tabs for all
+    // /// combinations of `map` and `prefixlen`.
+    // /// Or, well, I tested it ingame with prefixlengths 1, 2, 3. Other than that I give no
+    // /// guarantee.
+    // ///
+    // /// For example,
+    // /// `Map::Pearl.tabconstlen_prefixlen(3) = "PEArl\t\t"`.
+    // pub fn tab3_prefixlen(&self, prefixlen: usize) -> String {
+    //     let ntabs = match (self, prefixlen) {
+    //         (Map::Zavod, _) => 1,
+    //         (Map::LancangDam, _) => 1,
+    //         (Map::FloodZone, 0) => 2,
+    //         (Map::FloodZone, _) => 1,
+    //         (Map::GolmudRailway, _) => 1,
+    //         (Map::ParacelStorm, _) => 1,
+    //         (Map::Locker, _) => 1,
+    //         (Map::HainanResort, _) => 1,
+    //         (Map::Shanghai, _) => 1,
+    //         (Map::RogueTransmission, _) => 1,
+    //         (Map::Dawnbreaker, _) => 1,
+    //         (Map::SilkRoad, _) => 2,
+    //         (Map::Altai, n) if n >= 3 => 1,
+    //         (Map::Altai, _) => 2,
+    //         (Map::GuilinPeaks, _) => 1,
+    //         (Map::DragonPass, _) => 1,
+    //         (Map::Caspian, _) => 1,
+    //         (Map::Firestorm, _) => 1,
+    //         (Map::Metro, _) => 1,
+    //         (Map::Oman, _) => 1,
+    //         (Map::LostIslands, _) => 1,
+    //         (Map::NanshaStrike, _) => 1,
+    //         (Map::WaveBreaker, _) => 1,
+    //         (Map::OpMortar, _) => 1,
+    //         (Map::PearlMarket, n) if n >= 3 => 1,
+    //         (Map::PearlMarket, _) => 2,
+    //         (Map::Propaganda, _) => 1,
+    //         (Map::Lumphini, _) => 1,
+    //         (Map::SunkenDragon, _) => 1,
+    //         (Map::Whiteout, _) => 1,
+    //         (Map::Hammerhead, _) => 1,
+    //         (Map::Hangar21, _) => 1,
+    //         (Map::Karelia, _) => 1,
+    //         (Map::ZavodNight, _) => 1,
+    //         (Map::Outbreak, _) => 1,
+    //         (Map::DragonValley, _) => 1,
+    //     };
+
+    //     let mut upper = self.short()[..prefixlen].to_ascii_uppercase();
+    //     let lower = self.short()[prefixlen..].to_string();
+    //     upper += &lower;
+    //     upper += &"\t".repeat(ntabs);
+    //     upper
+    // }
+
+    /// Given a prefix length, returns `map.short()` but with the first `prefixlen` letters
+    /// capitalized, and tabs appended so that the visual length is 4 tabs for all
+    /// combinations of `map` and `prefixlen`.
+    /// Or, well, I tested it ingame with prefixlengths 0 to 6. Other than that I give no
+    /// guarantee.
+    ///
+    /// For example,
+    /// `Map::Pearl.tabconstlen_prefixlen(3) = "PEArl\t\t"`.
+    pub fn tab4_prefixlen(&self, prefixlen: usize) -> String {
+        let ntabs = match (self, prefixlen) {
+            (Map::Zavod, _) => 2,
+            (Map::LancangDam, _) => 2,
+            (Map::FloodZone, 0) => 3,
+            (Map::FloodZone, _) => 2,
+            (Map::GolmudRailway, _) => 2,
+            (Map::ParacelStorm, _) => 2,
+            (Map::Locker, _) => 2,
+            (Map::HainanResort, _) => 2,
+            (Map::Shanghai, _) => 2,
+            (Map::RogueTransmission, _) => 2,
+            (Map::Dawnbreaker, _) => 2,
+            (Map::SilkRoad, _) => 3,
+            (Map::Altai, n) if n >= 3 => 2,
+            (Map::Altai, _) => 3,
+            (Map::GuilinPeaks, _) => 2,
+            (Map::DragonPass, _) => 1,
+            (Map::Caspian, _) => 2,
+            (Map::Firestorm, n) if n >= 5 => 1,
+            (Map::Firestorm, _) => 2,
+            (Map::Metro, _) => 2,
+            (Map::Oman, _) => 2,
+            (Map::LostIslands, _) => 1,
+            (Map::NanshaStrike, _) => 2,
+            (Map::WaveBreaker, _) => 1,
+            (Map::OpMortar, _) => 2,
+            (Map::PearlMarket, n) if n >= 3 => 2,
+            (Map::PearlMarket, _) => 3,
+            (Map::Propaganda, _) => 2,
+            (Map::Lumphini, _) => 2,
+            (Map::SunkenDragon, _) => 2,
+            (Map::Whiteout, _) => 2,
+            (Map::Hammerhead, _) => 2,
+            (Map::Hangar21, _) => 2,
+            (Map::Karelia, _) => 2,
+            (Map::ZavodNight, 0) => 3,
+            (Map::ZavodNight, _) => 2,
+            (Map::Outbreak, n) if n >= 5 => 1,
+            (Map::Outbreak, _) => 2,
+            (Map::DragonValley, _) => 2,
+        };
+
+        let split = min(prefixlen, self.short().len()); // to prevent index out of bounds.
+        let mut upper = self.short()[..split].to_ascii_uppercase();
+        let lower = self.short()[split..].to_string();
+        upper += &lower;
+        upper += &"\t".repeat(ntabs);
+        upper
+    }
+
+
     pub fn short_names(&self) -> std::slice::Iter<'static, &'static str> {
         match self {
             Map::Metro => {
@@ -334,7 +449,7 @@ impl Map {
                 ALL.iter()
             }
             Map::Dawnbreaker => {
-                static ALL: [&str; 5] = ["dawnbreaker", "dawn", "breaker", "dawnbreak", "daw"];
+                static ALL: [&str; 5] = ["dawn", "dawnbreaker", "breaker", "dawnbreak", "daw"];
                 ALL.iter()
             }
             Map::SilkRoad => {
@@ -364,13 +479,11 @@ impl Map {
                 ALL.iter()
             }
             Map::DragonPass => {
-                static ALL: [&str; 8] = [
+                static ALL: [&str; 6] = [
                     "dragonpass",
+                    "drpass",
                     "dragon-pass",
                     "dragon_pass",
-                    "dragonass",
-                    "dragon_ass", // hehe
-                    "dragon-ass",
                     "dpass",
                     "drp",
                 ];

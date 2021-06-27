@@ -54,7 +54,7 @@ struct Inner {
     votes: HashMap<Player, Ballot<MapInPool>>,
 
     matchers: AltMatchers,
-    matchers_inv: AltMatchersInv,
+    matchmap: AltMatchersInv,
 
     /// The current popstate and the current pool.
     /// These maps can be nominated
@@ -63,6 +63,9 @@ struct Inner {
     nominations: HashMap<Guard<Player, YesVip>, HashSet<Map>>,
 
     anim_override_override: HashMap<Player, bool>,
+
+    // for convenience.
+    config: Arc<MapVoteConfig>,
 }
 
 #[derive(Debug)]
@@ -71,7 +74,7 @@ pub struct Mapvote {
     mapman: Arc<MapManager>,
     vips: Arc<Vips>,
     players: Arc<Players>,
-    config: MapVoteConfig,
+    config: Arc<MapVoteConfig>,
 }
 
 impl Inner {
@@ -113,20 +116,23 @@ impl Inner {
             map,
             mode: GameMode::Rush,
         });
+        self.update_matchers(true);
     }
 
     /// part of what gets printed when a person types in `!v`, but also on spammer, etc.
     fn fmt_options(&self) -> String {
-        let mut msg : String = "Vote with numbers or names:\n".to_string();
+        let mut msg : String = "Vote with numbers or name prefix:\n".to_string();
         let opts = self.alternatives.iter().map(|mip| mip.map.short());
         let mm = shortest_unique_prefixes(opts);
         // trace!("fmt_options(.., minlen={}, blocked=...): mm = {:#?}", minlen, mm);
 
-        for chunk in &self.matchers.iter().chunks(3) {
+        for chunk in &self.matchers.iter()
+            .sorted_by_key(|(mip, mat)| mat.number)
+            .chunks(2)
+        {
+            // msg += "\t";
             for (mip, matcher) in chunk {
-                let upper = mip.map.short()[..matcher.minlen].to_ascii_uppercase();
-                let lower = mip.map.short()[matcher.minlen..].to_string();
-                msg += &format!("{}\t{}{}\t", matcher.number, upper, lower); // TODO: trim last \t of last chunk item.
+                msg += &format!("\t{}\t{}", matcher.number, mip.map.tab4_prefixlen(matcher.minlen)); // TODO: trim last \t of last chunk item.
             }
             msg += "\n"; // TODO: trim last \n of last line.
         }
@@ -177,28 +183,37 @@ impl Inner {
         }
     }
 
-    fn set_up_new_vote(&mut self, n_options: usize, opts_minlen: usize, opts_blocked: &HashSet<String>) {
+    fn set_up_new_vote(&mut self, n_options: usize) {
         self.alternatives = self.popstate.pool.choose_random(n_options);
         self.votes.clear();
         self.nominations.clear();
-        let mut pool = self.popstate.pool.pool.iter().map(|mip| mip.map.short());
-        let mut options = self.alternatives.pool.iter().map(|mip| mip.map.short());
+        let pool = self.popstate.pool.pool.iter().map(|mip| mip.map.short()).join(", ");
+        let options = self.alternatives.pool.iter().map(|mip| mip.map.short()).join(", ");
 
         // No old matchers, since new election. Means numbers of previous options are not inherited.
         // E.g. if metro had number 3, and metro for some reason is an option again, it is not guaranteed
-        // to have number 3 again. (If you want to enable that, use `Some(self.matchers)`.)
-        self.matchers = matching::to_matchers(&self.alternatives.pool, &HashSet::<&str>::new(), None);
-        self.matchers_inv = matching::matchers_to_matchmap(&self.matchers);
-        matchmap_restrict(&mut self.matchers_inv, opts_minlen, opts_blocked);
+        // to have number 3 again. (If you want to enable that, set keep_numbers to true.)
+        self.update_matchers(false);
 
         debug!(
             "I've set up a new vote with pool {}: [{}], so options are [{}]. The alternative matchers are {:?} and the matchmap is {:?}",
             self.popstate.name,
-            pool.join(", "),
-            options.join(", "),
+            pool,
+            options,
             &self.matchers,
-            &self.matchers_inv,
+            &self.matchmap,
         );
+    }
+
+    /// **Call this every time alternatives are updated!**
+    /// Computes the alternative matchers and matchmap for a given set of alternatives.
+    /// These values are used to format the options in the mapvote spammer, and for parsing user
+    /// input.
+    fn update_matchers(&mut self, keep_numbers: bool) {
+        let old_matchers = if keep_numbers { Some(self.matchers.clone()) } else { None };
+        self.matchers = matching::to_matchers(&self.alternatives.pool, &HashSet::<&str>::new(), old_matchers.as_ref());
+        self.matchmap = matching::matchers_to_matchmap(&self.matchers);
+        matchmap_restrict(&mut self.matchmap, self.config.options_minlen, &self.config.options_reserved);
     }
 }
 
@@ -257,7 +272,7 @@ impl Mapvote {
             mapman: mapman.clone(),
             vips,
             players,
-            config,
+            config: Arc::new(config),
         });
 
 
@@ -346,6 +361,7 @@ impl Mapvote {
                 .alternatives
                 .pool
                 .append(&mut alternatives_additions.clone().pool);
+            inner.update_matchers(true); // needed for proper options formatting and user input parsing.
 
             // and then inform players
             if alternatives_removals.len() == 1 {
@@ -464,9 +480,10 @@ impl Mapvote {
                 anim_override_override: HashMap::new(),
                 popstate,
                 matchers: AltMatchers::new(),
-                matchers_inv: AltMatchersInv::new(),
+                matchmap: AltMatchersInv::new(),
+                config: self.config.clone(),
             };
-            init.set_up_new_vote(self.config.n_options, self.config.options_minlen, &self.config.options_reserved);
+            init.set_up_new_vote(self.config.n_options);
             info!("Popstate initialized! New: {}", init.popstate.name);
             *lock = Some(init);
         }
@@ -881,10 +898,11 @@ impl Mapvote {
                     } else {
                         vis
                     };
-                    if let Some(inner) = &*(self.inner.lock().await) {
+                    let inner_lock = self.inner.lock().await;
+                    if let Some(inner) = &*inner_lock {
                         // extract matchmap and then drop the lock immediately.
-                        let matchmap = inner.matchers_inv.clone();
-                        drop(self.inner.lock().await);
+                        let matchmap = inner.matchmap.clone();
+                        drop(inner_lock);
                         match parse_maps(&msg.as_str()[1..], &matchmap) {
                             ParseMapsResult::Ok(maps) => self.handle_maps(&bf4, player, maps, vis).await?,
                             ParseMapsResult::Nothing => {}, // silently ignore
@@ -923,7 +941,7 @@ impl Mapvote {
                 let profile = inner.to_profile();
                 let assignment = inner.to_assignment();
 
-                inner.set_up_new_vote(self.config.n_options, self.config.options_minlen, &self.config.options_reserved);
+                inner.set_up_new_vote(self.config.n_options);
                 Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None

@@ -11,14 +11,11 @@ use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use weaponforcer::WeaponEnforcer;
-use std::{env::var, sync::Arc};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::{env::var, sync::Arc, time::Duration};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
 use vips::Vips;
 
-use battlefield_rcon::{
-    bf4::Bf4Client,
-    rcon::{self, RconConnectionInfo},
-};
+use battlefield_rcon::{bf4::{Bf4Client, Visibility}, rcon::{self, RconConnectionInfo}};
 use mapmanager::{MapManager, PopState};
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},
@@ -124,6 +121,24 @@ async fn main() -> rcon::RconResult<()> {
     );
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     info!("Connected!");
+
+    // for i in 0..10 {
+    //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();
+    //     sleep(Duration::from_millis(2000)).await;
+    // }
+
+    // for map in battlefield_rcon::bf4::Map::all() {
+    //     let mut msg = "\t".to_string();
+    //     for minlen in 0..3 {
+    //         msg += &format!("{}", map.tab4_prefixlen(minlen));
+    //         // let upper = map.short()[..minlen].to_ascii_uppercase();
+    //         // let lower = map.short()[minlen..].to_string();
+    //         // msg += &format!("[\t{}{}\t]  ", upper, lower); // TODO: trim last \t of last chunk item
+    //     }
+    //     msg += "|";
+    //     bf4.say(msg, battlefield_rcon::bf4::Visibility::All).await.unwrap();
+    //     sleep(Duration::from_millis(150)).await;
+    // }
 
     // start parts.
     let mut jhs = Vec::new();
