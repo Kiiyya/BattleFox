@@ -9,7 +9,7 @@
 //! This computation can depend on a previous set of AltMatchers, so that numbers (1..6) are
 //! preserved between the maps which remain.
 
-use std::{collections::{BTreeSet, HashMap, HashSet}, hash::Hash};
+use std::{cmp::max, collections::{BTreeSet, HashMap, HashSet}, hash::Hash};
 use crate::mapmanager::pool::MapInPool;
 use super::prefixes::shortest_unique_prefixes;
 
@@ -43,12 +43,22 @@ pub type AltMatchers = HashMap<MapInPool, AltMatcher>;
 /// filling in new numbers for new alternatives.
 pub fn to_matchers(
 	alts: &(impl IntoIterator<Item = MapInPool, IntoIter = impl Iterator<Item = MapInPool>> + Clone),
-	// alts: &HashSet<impl AsRef<MapInPool> + Hash + Eq>,
-	blocked: &HashSet<impl AsRef<str>>,
+	minlen: usize,
+	reserved_trie: &HashSet<impl AsRef<str> /* + std::fmt::Debug */>,
 	old_matchers: Option<&AltMatchers>) -> AltMatchers
 {
+	// dbg!(reserved_trie);
 	// for every alternative, get the unique prefix lenghts.
-	let prefixes = shortest_unique_prefixes(alts.clone().into_iter().map(|mip| mip.map.short()));
+	let mut prefixes = shortest_unique_prefixes(
+		alts.clone().into_iter().map(|mip| mip.map.short()),
+		reserved_trie.iter().map(|asref| asref.as_ref()),
+	);
+
+	// apply minlen
+	prefixes.retain(|k, v| {
+		*v = max(minlen, *v);
+		true
+	});
 
 	// allocate numbers, but respect the old numbers
 	let mut taken_numbers = BTreeSet::new();
@@ -100,22 +110,37 @@ pub fn matchers_to_matchmap(matchers: &AltMatchers) -> AltMatchersInv {
 		ret.extend(mip.map.short_names().map(|x| (x.to_string(), mip.clone())));
 	}
 
-	dbg!(ret)
+	ret
 }
+
+// /// Makes sure (by removal) that all keys, prefixes, etc have the minimal length, and
+// /// aren't on the banlist.
+// /// Numbers are obviously not affected by minlen.
+// pub fn matchmap_restrict(matchmap: &mut AltMatchersInv, minlen: usize, reserved_hidden: &HashSet<String>) {
+// 	matchmap.retain(|k, v| {
+// 		match (reserved_hidden.contains(k), k.parse::<usize>().is_ok(), k.len() >= minlen) {
+// 			(true, true, _) => {
+// 				error!("The voting number \"!{}\" is blocked from the vote options! This is not a good idea. Context: blocked = {:?}", k, &reserved_hidden);
+// 				false // reject nevertheless
+// 			},
+// 			(true, false, _) => false, // reject blocked keys
+// 			(false, true, _) => true, // pass any numbers, irrespective minlen
+// 			(false, false, longenough) => longenough, // otherwise, reject when too short
+// 		}
+// 	});
+// }
 
 /// Makes sure (by removal) that all keys, prefixes, etc have the minimal length, and
 /// aren't on the banlist.
-/// Numbers are obviously not affected by minlen.
-pub fn matchmap_restrict(matchmap: &mut AltMatchersInv, minlen: usize, blocked: &HashSet<String>) {
+pub fn matchmap_restrict(matchmap: &mut AltMatchersInv, reserved_hidden: &HashSet<String>) {
 	matchmap.retain(|k, v| {
-		match (blocked.contains(k), k.parse::<usize>().is_ok(), k.len() >= minlen) {
-			(true, true, _) => {
-				warn!("The voting number \"!{}\" is blocked from the vote options! This is probably not a good idea. Context: blocked = {:?}", k, &blocked);
+		match (reserved_hidden.contains(k), k.parse::<usize>().is_ok()) {
+			(true, true) => {
+				error!("The voting number \"!{}\" is blocked from the vote options! This is not a good idea. Context: blocked = {:?}", k, &reserved_hidden);
 				false // reject nevertheless
 			},
-			(true, false, _) => false, // reject blocked keys
-			(false, true, _) => true, // pass any numbers, irrespective minlen
-			(false, false, longenough) => longenough, // otherwise, reject when too short
+			(true, false) => false, // reject blocked keys
+			(false, _) => true,
 		}
 	});
 }

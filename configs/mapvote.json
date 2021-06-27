@@ -17,6 +17,6 @@
     },
 
     "options_minlen": 1,
-    "options_reserved": ["p"]
-
+    "options_reserved_hidden": ["punish"],
+    "options_reserved_trie": ["p"]
 }

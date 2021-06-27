@@ -8,7 +8,7 @@ use crate::{guard::{
         CallbackResult, MapManager, PopState,
     }, mapvote::matching::matchmap_restrict, players::Players, stv::{CheckBallotResult, Profile, tracing::{Assignment, DetailedTracer, Distr}}, vips::{MaybeVip, Vips, YesVip}};
 
-use self::{config::MapVoteConfig, matching::{AltMatchers, AltMatchersInv}, prefixes::shortest_unique_prefixes};
+use self::{config::MapVoteConfig, matching::{AltMatchers, AltMatchersInv}};
 
 use super::stv::tracing::{NoTracer, StvAction, LoggingTracer, AnimTracer};
 use super::stv::Ballot;
@@ -123,7 +123,7 @@ impl Inner {
     fn fmt_options(&self) -> String {
         let mut msg : String = "Vote with numbers or name prefix:\n".to_string();
         let opts = self.alternatives.iter().map(|mip| mip.map.short());
-        let mm = shortest_unique_prefixes(opts);
+        // let mm = shortest_unique_prefixes(opts, self.config.options_reserved_trie.iter().map(|s| s.as_ref()));
         // trace!("fmt_options(.., minlen={}, blocked=...): mm = {:#?}", minlen, mm);
 
         for chunk in &self.matchers.iter()
@@ -212,9 +212,13 @@ impl Inner {
     /// input.
     fn update_matchers(&mut self, keep_numbers: bool) {
         let old_matchers = if keep_numbers { Some(self.matchers.clone()) } else { None };
-        self.matchers = matching::to_matchers(&self.alternatives.pool, &HashSet::<&str>::new(), old_matchers.as_ref());
+        self.matchers = matching::to_matchers(
+            &self.alternatives.pool,
+            self.config.options_minlen,
+            &self.config.options_reserved_trie,
+            old_matchers.as_ref());
         self.matchmap = matching::matchers_to_matchmap(&self.matchers);
-        matchmap_restrict(&mut self.matchmap, self.config.options_minlen, &self.config.options_reserved);
+        matching::matchmap_restrict(&mut self.matchmap,  &self.config.options_reserved_hidden);
     }
 }
 

@@ -1,6 +1,6 @@
 //! Helper for finding shortest unique prefixes of a set of strings.
 
-use std::{collections::{HashMap, HashSet}, fmt::Debug, hash::Hash};
+use std::{cmp::max, collections::{HashMap, HashSet}, fmt::Debug, hash::Hash, usize};
 
 use multimap::MultiMap;
 
@@ -92,18 +92,30 @@ impl <V: Debug> Node<V> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Type<'a> {
+    Normal(&'a str),
+    Reserved,
+}
+
 /// Computes the minimum length of each item so that it is still unique.
+/// Reserved strings act just like items in set, but are not part of the final result, so you can use
+/// reserved in order to exclude certain prefixes. E.g. reserving `p` will yield `pearl` to have
+/// a resulting minlen of 2, even in the absence of a string like `propaganda`.
 #[must_use]
-pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>) -> HashMap<&'a str, usize> {
-    let mut trie : Node<&'a str> = Node::new();
+pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, reserved: impl Iterator<Item = &'a str>) -> HashMap<&'a str, usize> {
+    let mut trie : Node<Type<'a>> = Node::new();
     set.for_each(|s| {
-        trie.insert(s.as_ref(), s.as_ref());
+        trie.insert(s.as_ref(), Type::Normal(s.as_ref()));
     });
-    // blocked.for_each(|s| {
-    //     if trie.insert(s, Type::Blocked).is_some() {
-    //         panic!("cannot block prefixes which are in the search set. collision: {}", s);
-    //     }
-    // });
+    reserved.for_each(|s| {
+        dbg!(s);
+        match trie.insert(s, Type::Reserved) {
+            Some(Type::Normal(oops)) => error!("Collision of normal and reserved strings when computing shortest unique prefixes: {}. You most likely want to remove the reserved string.", s),
+            Some(Type::Reserved) => (), // user has the same reserved string listed twice... ignore it.
+            None => (),
+        }
+    });
 
     let mut branches = Vec::new();
     trie.leaf_branches(0, &mut branches);
@@ -111,8 +123,19 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>) -> H
     for (depth, branch) in branches {
         // depth is the shortest unique length of our prefix.
         let leaf = branch.get_leaf().unwrap(); // unwrap safe: postcondition of leaf_branches().
-        assert_eq!(leaf.count(), 1);
-        ret.insert(*leaf.get_leaf().unwrap().get().unwrap(), depth);
+        assert_eq!(leaf.count(), 1); // we are, indeed, a leaf.
+        assert_eq!(*leaf.get().unwrap(), *leaf.get_leaf().unwrap().value.as_ref().unwrap());
+        match leaf.get().unwrap() { // unwrap safe: leaves always contain a value.
+            Type::Normal(s) => {
+                assert_eq!(s.len(), s.chars().count()); // aka: We assume ASCII
+                ret.insert(*s, depth);
+            },
+            Type::Reserved => {
+                // ignore
+            },
+        }
+        // ret.insert(*leaf.get_leaf().unwrap().get().unwrap(), depth);
+
         // match leaf.get().unwrap() { // unwrap safe: leafs always contain a value.
         //     Type::Set(str) => {
         //         assert_eq!(str.len(), str.chars().count()); // TODO: This code assumes ASCII, bad.
@@ -133,7 +156,7 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>) -> H
         // }
     }
 
-    ret
+    dbg!(ret)
 }
 
 #[cfg(test)]
