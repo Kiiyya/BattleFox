@@ -26,6 +26,8 @@ use mapvote::{
     Mapvote,
 };
 
+use crate::weaponforcer::WeaponEnforcerConfig;
+
 pub mod guard;
 // pub mod commands;
 pub mod mapmanager;
@@ -98,6 +100,9 @@ async fn main() -> rcon::RconResult<()> {
     let players = Arc::new(Players::new());
     let vips = Arc::new(Vips::new());
 
+    let weaponforcer_config : WeaponEnforcerConfig = load_config("configs/weaponforcer.yaml").await.unwrap();
+    let weaponforcer = WeaponEnforcer::new(weaponforcer_config);
+
     // let commands = Arc::new(Commands::new());
 
     let mapman_config: MapManagerConfig = load_config("configs/mapman.yaml").await.unwrap();
@@ -116,7 +121,6 @@ async fn main() -> rcon::RconResult<()> {
     )
     .await;
 
-    let weaponforcer = WeaponEnforcer::new();
 
     // connect
     info!(
