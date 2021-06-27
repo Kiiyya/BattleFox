@@ -15,3 +15,5 @@ options_reserved_hidden:
   - punish
 options_reserved_trie:
   - p
+  - f
+  - v
