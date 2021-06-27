@@ -4,6 +4,10 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
 #[macro_use] extern crate derive_more;
+#[macro_use] extern crate git_version;
+
+// const GIT_VERSION : &str = git_describe!();
+const GIT_VERSION : &str = git_version!();
 
 use ascii::IntoAsciiString;
 use dotenv::dotenv;

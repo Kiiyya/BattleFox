@@ -1,4 +1,4 @@
-use flexi_logger::{Age, Cleanup, Criterion, Level, Naming, style};
+use flexi_logger::{Level, style};
 
 fn reduced_colored_format(
     w: &mut dyn std::io::Write,

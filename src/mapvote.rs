@@ -44,7 +44,6 @@ mod animate;
 mod prefixes;
 mod matching;
 
-
 #[derive(Debug)]
 struct Inner {
     /// Current alternatives (= options) in the mapvote. Usually 4 to 6, which get spammed
@@ -874,6 +873,10 @@ impl Mapvote {
 
                 drop(lock);
                 let _ = bf4.say_lines(messages, player).await;
+            }
+            "/bfoxver" => {
+                // let ver = git_version!();
+                let _ = bf4.say(format!("BattleFox {}, built on ", crate::GIT_VERSION), player).await;
             }
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
