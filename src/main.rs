@@ -53,7 +53,7 @@ fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
 
 #[derive(Debug)]
 enum ConfigError {
-    Serde(serde_json::Error),
+    Serde,
     Io(std::io::Error),
 }
 
@@ -62,7 +62,7 @@ async fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> 
     let mut file = tokio::fs::File::open(path).await.map_err(ConfigError::Io)?;
     let mut s = String::new();
     file.read_to_string(&mut s).await.map_err(ConfigError::Io)?;
-    let t: T = serde_json::from_str(&s).map_err(ConfigError::Serde)?;
+    let t: T = serde_yaml::from_str(&s).map_err(|_| ConfigError::Serde)?;
     Ok(t)
 }
 
@@ -71,7 +71,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
     let mut file = tokio::fs::File::create(path)
         .await
         .map_err(ConfigError::Io)?;
-    let s = serde_json::to_string_pretty(obj).map_err(ConfigError::Serde)?;
+    let s = serde_yaml::to_string(obj).map_err(|_| ConfigError::Serde)?;
     file.write_all(s.as_bytes())
         .await
         .map_err(ConfigError::Io)?;
@@ -100,14 +100,14 @@ async fn main() -> rcon::RconResult<()> {
 
     // let commands = Arc::new(Commands::new());
 
-    let mapman_config: MapManagerConfig = load_config("configs/mapman.json").await.unwrap();
+    let mapman_config: MapManagerConfig = load_config("configs/mapman.yaml").await.unwrap();
     let mapman = Arc::new(MapManager::new(
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
     ));
 
-    let mapvote_config: MapVoteConfigJson = load_config("configs/mapvote.json").await.unwrap();
+    let mapvote_config: MapVoteConfigJson = load_config("configs/mapvote.yaml").await.unwrap();
     let mapvote = Mapvote::new(
         mapman.clone(),
         vips.clone(),
