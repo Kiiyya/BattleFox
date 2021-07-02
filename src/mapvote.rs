@@ -486,6 +486,7 @@ impl Mapvote {
                 }
             }
 
+            inner.popstate = popstate;
             drop(lock);
 
             // actually run the futures here, after we dropped the lock.
