@@ -531,7 +531,7 @@ impl Mapvote {
                     let bf4 = bf4.clone();
                     let mapvote = self.clone();
 
-                    if msg.as_str().starts_with("/haha next map") {
+                    if msg.as_str().starts_with("/haha next map") && player.name == "PocketWolfy" {
                         let mapman = self.mapman.clone();
                         tokio::spawn(async move {
                             mapvote.handle_round_over(&bf4).await;
@@ -873,7 +873,7 @@ impl Mapvote {
             }
             "/bfoxver" => {
                 // let ver = git_version!();
-                let _ = bf4.say(format!("BattleFox {}, built on ", crate::GIT_VERSION), player).await;
+                let _ = bf4.say(format!("BattleFox {}", crate::GIT_VERSION), player).await;
             }
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
