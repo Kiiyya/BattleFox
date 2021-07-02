@@ -313,7 +313,6 @@ impl Mapvote {
                     // try to upgrade to strong Arc<MapVote>. If that fails, it means the mapvote
                     // instance was dropped. In that case, RemoveMe.
                     if let Some(strong) = weak.upgrade() {
-                        trace!("popstate changed!");
                         tokio::spawn(async move {
                             strong.on_popstate_changed(bf4, popstate).await;
                         });
@@ -333,14 +332,12 @@ impl Mapvote {
     async fn on_popstate_changed(&self, bf4: Arc<Bf4Client>, popstate: PopState) {
         let mut lock = self.inner.lock().await;
         if let Some(inner) = &mut *lock {
-            info!("Popstate changed! New: {}", popstate.name);
-
             let mut futures = Vec::new();
             let direction = PopState::change_direction(&inner.popstate, &popstate);
             match direction {
                 Ordering::Less => {
                     debug!(
-                        "Mapman: PopState downgrade from {} to {}",
+                        "PopState downgrade from {} to {}",
                         inner.popstate.name, popstate.name
                     );
                 }
@@ -349,9 +346,8 @@ impl Mapvote {
                     return; // or maybe panic instead...?
                 }
                 Ordering::Greater => {
-                    // TODO: Notify every single VIP individually that they can nominate more now.
                     debug!(
-                        "Mapman: PopState upgrade from {} to {}",
+                        "PopState upgrade from {} to {}",
                         inner.popstate.name, popstate.name
                     );
                 }
