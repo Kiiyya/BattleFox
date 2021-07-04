@@ -475,13 +475,13 @@ impl <P: Clone + Eq + Hash + Debug, A: Clone + Hash + Eq + Debug> Tracer<A> for 
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat, profile_after: &Profile<A>) {
         self.stvtracer.elem_t(a, b, s, profile_after);
         self.assignment.elem_t(a, b, s, profile_after);
-        trace!("AnimTracer::elem_t({:?}, {:?}, {}) ==> {:#?}", a, b, s, self.get_state());
+        // trace!("AnimTracer::elem_t({:?}, {:?}, {}) ==> {:#?}", a, b, s, self.get_state());
     }
 
     fn consume(&mut self, a: &A, profile_after: &Profile<A>) {
         self.stvtracer.consume(a, profile_after);
         self.assignment.consume(a, profile_after);
-        trace!("AnimTracer::consume({:?}) ==> {:#?}", a, self.get_state());
+        // trace!("AnimTracer::consume({:?}) ==> {:#?}", a, self.get_state());
     }
 
     fn t_toall(&mut self, a: &A, s: &Rat, profile_after: &Profile<A>) {
@@ -597,5 +597,53 @@ mod test {
         };
 
         // let at = AnimTracer::start(profile, assignment)
+    }
+
+    /// https://github.com/Kiiyya/BattleFox/issues/18
+    #[test]
+    fn issue18_bad_personal_ballot_assignment() {
+        use battlefield_rcon::bf4::Map;
+        use Map::{Caspian as c, Propaganda as p, Shanghai as s, Locker as l};
+        let profile = Profile {
+            alts: hashset!{c, p, s, l},
+            ballots: vec![
+                ballot![1, s],
+                ballot![1, s],
+                ballot![1, c],
+                ballot![1, l],
+                ballot![1, p, s, c],
+                ballot![1, s, l],
+                ballot![1, l],
+                ballot![1, p],
+                ballot![1, s],
+                ballot![1, s],
+                ballot![1, l, p],
+                ballot![2, c, s, p, l],
+                ballot![1, l],
+                ballot![1, s, c, l, p],
+                ballot![1, l],
+            ]
+        };
+
+        // the issue is nondeterministic, so try a couple times.
+        for _ in 0..20 {
+            type Player = usize;
+            let assignment : HashMap<Player, _> = profile.ballots.iter()
+                .map(|ballot| Distr::single(ballot.preferences[0], ballot.weight.clone()))
+                .enumerate()
+                .collect();
+
+            let mut tracer = AnimTracer::start(profile.clone(), assignment);
+
+            let _ = profile.vanilla_stv_1(&mut tracer);
+
+            // dbg!(&tracer.assign_history);
+            match &tracer.assign_history[2] {
+                HistEntry::Elim { a: _, profile: _, assignment } => {
+                    assert_eq!(&s, assignment.get(&11).unwrap().get_single().unwrap().0, "\nAssignment history: {:#?}", &tracer.assign_history)
+                },
+                _ => panic!()
+            }
+        }
     }
 }
