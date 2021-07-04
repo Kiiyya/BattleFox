@@ -97,6 +97,8 @@ async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     logging::init_logging();
 
+    info!("This is BattleFox {}", GIT_VERSION);
+
     let coninfo = get_rcon_coninfo()?;
     let players = Arc::new(Players::new());
     let vips = Arc::new(Vips::new());
@@ -129,7 +131,7 @@ async fn main() -> rcon::RconResult<()> {
         coninfo.ip, coninfo.port
     );
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
-    info!("Connected!");
+    trace!("Connected!");
 
     // for i in 0..10 {
     //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();

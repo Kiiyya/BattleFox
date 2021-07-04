@@ -982,18 +982,18 @@ impl Mapvote {
         if let Some((profile, assignment, anim_override_override)) = maybe {
             let mut tracer = AnimTracer::start(profile.clone(), assignment);
             if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
-                trace!("AnimTracer: {:#?}", &tracer);
+                // trace!("AnimTracer: {:#?}", &tracer);
 
-                for ass in tracer.log_iter() {
-                    debug!("Ass: {:?}", ass);
-                }
+                // for ass in tracer.log_iter() {
+                //     debug!("Ass: {:?}", ass);
+                // }
 
                 let alts_start = profile.alts.iter()
                     .sorted_by(|a, b| Ord::cmp(&profile.score(b), &profile.score(a)))
                     .cloned()
                     .collect_vec();
                 let animation = animate::stv_anim_frames(&alts_start, players.keys(), &tracer);
-                trace!("Animations for all players: {:?}", animation);
+                // trace!("Animations for all players: {:?}", animation);
 
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {
@@ -1006,7 +1006,7 @@ impl Mapvote {
 
                     let winner = winner.clone();
                     jhs.push(tokio::spawn(async move {
-                        trace!("Animate for {}: {}", &player.name, animate);
+                        // trace!("Animate for {}: {}", &player.name, animate);
                         if animate {
                             for frame in frames {
                                 // let f1 = bf4clone.say(frame, &player);
@@ -1021,7 +1021,7 @@ impl Mapvote {
                     }));
                 }
                 join_all(jhs).await;
-                trace!("Done sending animation");
+                // trace!("Done sending animation");
 
                 tokio::time::sleep(self.config.endscreen_post_votetime).await;
 
