@@ -3,9 +3,9 @@
 use std::{collections::{HashMap, HashSet}, fmt::Display, marker::PhantomData, slice::Iter};
 use std::fmt::Debug;
 use std::hash::Hash;
-use super::{Profile, Rat};
+use super::{Ballot, Profile, Rat};
 use itertools::Itertools;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 use serde::{Serialize, Deserialize};
 
 /// Visitor-like pattern.
@@ -305,65 +305,50 @@ impl <A: Eq + Hash, T1: Tracer<A>, T2: Tracer<A>> Tracer<A> for DuoTracer<A, T1,
 /// 0 <= (sum of all branches) <= 1
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Distr<A: Eq + Hash> {
-    distr: HashMap<A, Rat>
+    profile: Profile<A>,
 }
 
-impl <A: Eq + Hash> PartialEq for Distr<A> {
+impl <A: Eq + Hash + Clone + Debug> PartialEq for Distr<A> {
     fn eq(&self, other: &Self) -> bool {
-        self.distr.iter().all(|(alt, w)|
-            other.distr.get(alt).unwrap_or(&Zero::zero()) == w
-        )
-        &&
-        other.distr.iter().all(|(alt, w)|
-            self.distr.get(alt).unwrap_or(&Zero::zero()) == w
-        )
+        self.scores() == other.scores()
     }
 }
 
 impl <A: Eq + Hash + Clone + Debug> Distr<A> {
-    pub fn single(a: A, weight: Rat) -> Self {
+    pub fn scores(&self) -> HashMap<A, Rat> {
+        self.profile.scores()
+    }
+
+    pub fn from_ballot(ballot: Ballot<A>) -> Self {
         Self {
-            distr: hashmap!{
-                a => weight
+            profile: Profile {
+                alts: ballot.preferences.iter().cloned().collect(),
+                ballots: vec![ballot],
             }
         }
     }
 
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat) {
-        if let Some(x) = self.distr.get_mut(a) {
-            // when s=0 ==> x = x * (1), so a no-op
-            // when s=1 ==> x = x * (1-1), so delete fully
-            let temp = (&*x) * s;
-            *x *= Rat::one() - s;
-            self.distr.insert(b.clone(), temp);
-        }
-        self.trim();
-        // trace!("Distr::elem_t({:?}, {:?}, {:?}) ==> {}", a, b, s, 666);
-    }
-
-    fn trim(&mut self) {
-        self.distr.retain(|_, v| !v.is_zero());
+        self.profile = self.profile.elem_t(a, b, s, &mut NoTracer);
     }
 
     fn consume(&mut self, a: &A) {
-        self.distr.remove(a);
-        self.trim();
+        self.profile = self.profile.consume(a, &mut NoTracer);
     }
 
     /// Assuming there exists at most one alternative with weight > 0:
-    /// - get that alternative, or
-    /// - return None, when all alternatives have 0 weight.
-    ///
-    /// # Panics
-    /// - When more than one alternative has more than 0 weight.
-    pub fn get_single(&self) -> Option<(&A, &Rat)> {
-        let pos_w = self.distr.iter().filter(|(_, w)| w > &&Rat::zero()).collect_vec();
-
-        if pos_w.len() > 1 {
-            panic!("Distr::get_single(): at most one alternative can have weight > 0. If you are calling get_single() on a trace resulting from more than one seat (or containing elem_t with s != 1), then... don't, because it makes no sense.")
+    /// - [Some] (Alternative)
+    /// - return [None], when all alternatives have 0 weight
+    /// - return [None] and log error when there's two alts with >0 weight.
+    pub fn get_single(&self) -> Option<(A, Rat)> {
+        let scores = self.scores();
+        let scores = scores.iter().filter(|(_, score)| score > &&Rat::zero()).collect_vec();
+        if scores.len() <= 1 {
+            scores.get(0).map(|(a, r)| ((*a).clone(), (*r).clone()))
+        } else {
+            error!("Distr::get_single({:?}): scores.len() >= 2", self);
+            None
         }
-
-        pos_w.get(0).copied()
     }
 }
 
@@ -542,43 +527,52 @@ mod test {
     use crate::hashset;
     use crate::ballot;
     use super::*;
+    use num_traits::One;
 
     #[test]
     fn distr() {
         let one = Rat::one();
         // let two = &one + &one;
 
-        let mut distr = Distr {
-            distr: hashmap!{
-                "a" => one.clone(),
-            },
-        };
+        let mut distr = Distr::from_ballot(Ballot {
+            weight: Rat::one(),
+            preferences: vec!["a", "b"]
+        });
 
+        distr.elem_t(&"a", &"c", &one);
+        assert_eq!("a", distr.get_single().unwrap().0);
         distr.elem_t(&"a", &"b", &one);
 
         dbg!(&distr);
-        assert_eq!(&"b", distr.get_single().unwrap().0);
+        assert_eq!("b", distr.get_single().unwrap().0);
     }
 
     #[test]
     fn distr2() {
-        simple_logger::SimpleLogger::new().init().unwrap();
+        // simple_logger::init();
 
         let one = Rat::one();
         let two = &one + &one;
 
         let dummy_profile = Profile { alts: HashSet::new(), ballots: Vec::new()};
 
-        let mut at = AnimTracer::start(dummy_profile.clone(), hashmap!{
-            "kiiya" => Distr { distr: hashmap! {
-                "z_night" => two,
-            }}
+        // let mut at = AnimTracer::start(dummy_profile.clone(), hashmap!{
+        //     "kiiya" => Distr { distr: hashmap! {
+        //         "z_night" => two,
+        //     }}
+        // });
+
+        let distr = Distr::from_ballot(Ballot {
+            weight: two,
+            preferences: vec!["z_night"]
+        });
+
+        let mut at = AnimTracer::start(dummy_profile.clone(), hashmap! {
+            "kiiya" => distr
         });
 
         at.elem_t(&"z_night", &"pearl", &Rat::zero(), &dummy_profile);
         at.elem_t(&"z_night", &"firestorm", &Rat::one(), &dummy_profile);
-
-        // assert!(false);
     }
 
     #[test]
@@ -629,7 +623,7 @@ mod test {
         for _ in 0..20 {
             type Player = usize;
             let assignment : HashMap<Player, _> = profile.ballots.iter()
-                .map(|ballot| Distr::single(ballot.preferences[0], ballot.weight.clone()))
+                .map(|ballot| Distr::from_ballot(ballot.clone()))
                 .enumerate()
                 .collect();
 
@@ -640,7 +634,7 @@ mod test {
             // dbg!(&tracer.assign_history);
             match &tracer.assign_history[2] {
                 HistEntry::Elim { a: _, profile: _, assignment } => {
-                    assert_eq!(&s, assignment.get(&11).unwrap().get_single().unwrap().0, "\nAssignment history: {:#?}", &tracer.assign_history)
+                    assert_eq!(s, assignment.get(&11).unwrap().get_single().unwrap().0, "\nAssignment history: {:#?}", &tracer.assign_history)
                 },
                 _ => panic!()
             }

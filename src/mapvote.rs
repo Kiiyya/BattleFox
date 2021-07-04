@@ -91,7 +91,7 @@ impl Inner {
     /// one preference
     pub fn to_assignment(&self) -> Assignment<Player, MapInPool> {
         self.votes.iter().map(|(player, ballot)| {
-            (player.clone(), Distr::single(ballot.preferences[0].clone(), ballot.weight.clone()))
+            (player.clone(), Distr::from_ballot(ballot.clone()))
         }).collect()
     }
 

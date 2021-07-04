@@ -127,10 +127,10 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool], players: impl Iterator<Item
     ret
 }
 
-fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool], bars: &HashMap<MapInPool, String>, your_vote: Option<(&MapInPool, &Rat)>) {
+fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool], bars: &HashMap<MapInPool, String>, your_vote: Option<(MapInPool, Rat)>) {
     for alt in alts_start {
         let mut line = String::new();
-        if let Some((vote, weight)) = your_vote {
+        if let Some((vote, weight)) = &your_vote {
             if vote == alt {
                 if weight == &(Rat::one() + Rat::one()) {
                     line += "You x2 ->\t";

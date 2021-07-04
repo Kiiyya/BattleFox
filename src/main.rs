@@ -1,5 +1,6 @@
 #![allow(clippy::new_without_default)]
 
+#[allow(unused_imports)] // we use maplin in tests
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
