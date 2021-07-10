@@ -314,7 +314,7 @@ impl Mapvote {
                     // instance was dropped. In that case, RemoveMe.
                     if let Some(strong) = weak.upgrade() {
                         tokio::spawn(async move {
-                            strong.on_popstate_changed(bf4, popstate).await;
+                            strong.on_popstate_changed(&bf4, popstate).await;
                         });
                         CallbackResult::KeepGoing
                     } else {
@@ -329,29 +329,14 @@ impl Mapvote {
         myself
     }
 
-    async fn on_popstate_changed(&self, bf4: Arc<Bf4Client>, popstate: PopState) {
+    async fn on_popstate_changed(&self, bf4: &Bf4Client, popstate: PopState) {
         let mut lock = self.inner.lock().await;
         if let Some(inner) = &mut *lock {
             let mut futures = Vec::new();
-            let direction = PopState::change_direction(&inner.popstate, &popstate);
-            match direction {
-                Ordering::Less => {
-                    debug!(
-                        "PopState downgrade from {} to {}",
-                        inner.popstate.name, popstate.name
-                    );
-                }
-                Ordering::Equal => {
-                    debug!("Uhhh, popstate didn't change direction? Wot.");
-                    return; // or maybe panic instead...?
-                }
-                Ordering::Greater => {
-                    debug!(
-                        "PopState upgrade from {} to {}",
-                        inner.popstate.name, popstate.name
-                    );
-                }
-            }
+            // let direction = PopState::change_direction(&inner.popstate, &popstate);
+            info!("Popstate changed from {} to {}.", &inner.popstate.name, &popstate.name);
+            trace!("Popstate before: {:?}", &inner.popstate);
+            trace!("Changing popstate to: {:?}", &popstate);
 
             let removals = dbg!(MapPool::removals(&inner.popstate.pool, &popstate.pool));
             let additions = dbg!(MapPool::additions(&inner.popstate.pool, &popstate.pool));
@@ -371,20 +356,27 @@ impl Mapvote {
                 MapPool::new()
             };
 
-            dbg!(&alternatives_removals);
-            dbg!(&alternatives_additions);
+            debug!("removals = {:#?}", removals);
+            debug!("additions = {:#?}", additions);
+            debug!("alternatives_removals = {:#?}", alternatives_removals);
+            debug!("alternatives_additions = {:#?}", alternatives_additions);
+
+            debug!("((before)) inner.alternatives = {:#?}", inner.alternatives);
 
             // actually remove and replace the alternatives.
             inner
                 .alternatives
                 .pool
                 .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode));
+            debug!("((after retain)) inner.alternatives = {:#?}", inner.alternatives);
             inner
                 .alternatives
                 .pool
                 .append(&mut alternatives_additions.clone().pool);
+            debug!("((after retain+append)) inner.alternatives = {:#?}", inner.alternatives);
             inner.update_matchers(true); // needed for proper options formatting and user input parsing.
 
+            trace!("For completeness, here's all the ballots before changing them: {:?}", inner.votes);
             // and then inform players
             if alternatives_removals.len() == 1 {
                 // special case so that the messages are nicer.
@@ -486,6 +478,9 @@ impl Mapvote {
                 }
             }
 
+            trace!("For completeness, here's all the ballots after changing them: {:?}", inner.votes);
+
+            trace!("Now actually changing inner.popstate to the new popstate");
             inner.popstate = popstate;
             drop(lock);
 
@@ -960,13 +955,12 @@ impl Mapvote {
 
         let players = self.players.players(bf4).await;
 
-        debug!("Voting ended");
-
         let maybe = {
             let mut lock = self.inner.lock().await;
             if let Some(inner) = &mut *lock {
                 let profile = inner.to_profile();
                 let assignment = inner.to_assignment();
+                info!("Voting ended. Votes: {:#?}", &inner.votes);
 
                 inner.set_up_new_vote(self.config.n_options);
                 Some((profile, assignment, inner.anim_override_override.clone()))
@@ -982,18 +976,12 @@ impl Mapvote {
         if let Some((profile, assignment, anim_override_override)) = maybe {
             let mut tracer = AnimTracer::start(profile.clone(), assignment);
             if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
-                // trace!("AnimTracer: {:#?}", &tracer);
-
-                // for ass in tracer.log_iter() {
-                //     debug!("Ass: {:?}", ass);
-                // }
 
                 let alts_start = profile.alts.iter()
                     .sorted_by(|a, b| Ord::cmp(&profile.score(b), &profile.score(a)))
                     .cloned()
                     .collect_vec();
                 let animation = animate::stv_anim_frames(&alts_start, players.keys(), &tracer);
-                // trace!("Animations for all players: {:?}", animation);
 
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {
@@ -1006,12 +994,8 @@ impl Mapvote {
 
                     let winner = winner.clone();
                     jhs.push(tokio::spawn(async move {
-                        // trace!("Animate for {}: {}", &player.name, animate);
                         if animate {
                             for frame in frames {
-                                // let f1 = bf4clone.say(frame, &player);
-                                // let f2 = tokio::time::sleep(Duration::from_secs(2));
-                                // join_all(vec![f1, f2]).await;
                                 let _ = bf4clone.say(frame, &player).await;
                                 tokio::time::sleep(Duration::from_secs(2)).await;
                             }
@@ -1021,7 +1005,6 @@ impl Mapvote {
                     }));
                 }
                 join_all(jhs).await;
-                // trace!("Done sending animation");
 
                 tokio::time::sleep(self.config.endscreen_post_votetime).await;
 
