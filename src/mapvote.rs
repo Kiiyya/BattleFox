@@ -340,35 +340,33 @@ impl Mapvote {
 
             let removals = dbg!(MapPool::removals(&inner.popstate.pool, &popstate.pool));
             let additions = dbg!(MapPool::additions(&inner.popstate.pool, &popstate.pool));
+            debug!("removals = {:#?}", removals);
+            debug!("additions = {:#?}", additions);
 
             // first, remove the current voting options fittingly and choose replacements.
             let alternatives_removals = inner
                 .alternatives // removals is old pop -> current pop, but what about our current options?
                 .intersect(&removals)
                 .to_mapset();
-            let alternatives_additions = if inner.alternatives.pool.len() < self.config.n_options {
-                popstate
-                    .pool
-                    // .without_many(&removed_alternatives)
-                    .without_many(&inner.alternatives.to_mapset())
-                    .choose_random(self.config.n_options - alternatives_removals.len())
-            } else {
-                MapPool::new()
-            };
-
-            debug!("removals = {:#?}", removals);
-            debug!("additions = {:#?}", additions);
             debug!("alternatives_removals = {:#?}", alternatives_removals);
-            debug!("alternatives_additions = {:#?}", alternatives_additions);
-
-            debug!("((before)) inner.alternatives = {:#?}", inner.alternatives);
 
             // actually remove and replace the alternatives.
+            debug!("((before)) inner.alternatives = {:#?}", inner.alternatives);
             inner
                 .alternatives
                 .pool
                 .retain(|mip| popstate.pool.contains_mapmode(mip.map, &mip.mode));
             debug!("((after retain)) inner.alternatives = {:#?}", inner.alternatives);
+
+            // randomly draw new maps to fill up the options.
+            let alternatives_additions = popstate
+                .pool
+                // to avoid duplicates in the options
+                .without_many(&inner.alternatives.to_mapset())
+                // saturating sub clamps the result to 0 if it would be negative.
+                .choose_random(self.config.n_options.saturating_sub(inner.alternatives.pool.len()));
+            debug!("alternatives_additions = {:#?}", alternatives_additions);
+
             inner
                 .alternatives
                 .pool
