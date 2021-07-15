@@ -333,7 +333,7 @@ impl Bf4Client {
         bf4client_rx: oneshot::Receiver<Weak<Bf4Client>>,
         mut packets: mpsc::UnboundedReceiver<RconResult<Packet>>,
     ) -> broadcast::Sender<Bf4Result<Event>> {
-        let (tx, _) = broadcast::channel::<Bf4Result<Event>>(128);
+        let (tx, _) = broadcast::channel::<Bf4Result<Event>>(1024);
         let tx2 = tx.clone();
         tokio::spawn(async move {
             // Just for initialization: bf4client constructor sends us an instance of itself.
@@ -405,7 +405,7 @@ impl Bf4Client {
     }
 
     /// This function differs from the raw version by unpacking potential broadcast errors,
-    /// which only occur when the backlog of unhandled events gets too big (128 currently).
+    /// which only occur when the backlog of unhandled events gets too big (1024 currently).
     /// In that case, those events are simply ignored and only a warning is emitted.
     /// If you want to handle the overflow error yourself, use `event_stream_raw`.
     pub async fn event_stream(&self) -> RconResult<impl Stream<Item = Bf4Result<Event>>> {

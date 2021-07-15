@@ -1,4 +1,4 @@
-use flexi_logger::{Age, Cleanup, Criterion, Level, Naming, style};
+use flexi_logger::{Level, style};
 
 fn reduced_colored_format(
     w: &mut dyn std::io::Write,
@@ -93,10 +93,4 @@ pub fn init_logging() {
         error!(target: "PANIC", "{}", panic_info);
         handle.shutdown();
     }));
-
-    trace!("Awoo");
-    debug!("Awoo");
-    info!("Awoo");
-    warn!("Awoo");
-    error!("Awoo");
 }

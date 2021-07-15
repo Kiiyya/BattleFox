@@ -19,7 +19,7 @@ fn usize_of_rat(rat: &Rat) -> usize {
     *digits.get(0).unwrap_or(&0) as usize
 }
 
-type Bars = HashMap<MapInPool<()>, String>;
+type Bars = HashMap<MapInPool, String>;
 
 /// Make sure `alts_all` is the alternatives we *started* with, not the current iteration's
 /// alternatives.
@@ -28,7 +28,7 @@ type Bars = HashMap<MapInPool<()>, String>;
 /// Locker  xx+
 /// Pearl   x
 /// ```
-fn render_bars_diff(alts_start: &[MapInPool<()>], previous: Option<&Profile<MapInPool<()>>>, profile: &Profile<MapInPool<()>>) -> Bars {
+fn render_bars_diff(alts_start: &[MapInPool], previous: Option<&Profile<MapInPool>>, profile: &Profile<MapInPool>) -> Bars {
     let mut ret = Bars::new();
     for alt in alts_start {
         if profile.alts.contains(alt) {
@@ -48,7 +48,7 @@ fn render_bars_diff(alts_start: &[MapInPool<()>], previous: Option<&Profile<MapI
     ret
 }
 
-fn render_bars_sequence(alts_start: &[MapInPool<()>], tracer: &AnimTracer<Player, MapInPool<()>>) -> Vec<Bars> {
+fn render_bars_sequence(alts_start: &[MapInPool], tracer: &AnimTracer<Player, MapInPool>) -> Vec<Bars> {
     let mut vec = Vec::new();
     let mut previous = None;
     for stage in tracer.log_iter() {
@@ -79,19 +79,17 @@ fn render_bars_sequence(alts_start: &[MapInPool<()>], tracer: &AnimTracer<Player
 /// # Panics
 /// - When an alternative in `alts_start` does not have an associated bar in `bars`.
 /// - When a `Distr::get_single()` panics.
-pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<Item = &'a Player>, tracer: &AnimTracer<Player, MapInPool<()>>) -> HashMap<Player, Vec<String>> {
-
+pub fn stv_anim_frames<'a>(alts_start: &[MapInPool], players: impl Iterator<Item = &'a Player>, tracer: &AnimTracer<Player, MapInPool>) -> HashMap<Player, Vec<String>> {
     let time = Instant::now();
     let mut ret = HashMap::new();
     let bars_seq = render_bars_sequence(alts_start, tracer);
 
     let players = players.collect_vec();
-    trace!("Players: {}", players.iter().map(|p| &p.name).join(", "));
+    // trace!("Players: {}", players.iter().map(|p| &p.name).join(", "));
 
     for player in players {
         let x = tracer
             .log_iter();
-            // .map(|hist| hist.get_assignment().get(player).unwrap().get_single());
 
         let mut player_frames = Vec::new();
 
@@ -122,15 +120,15 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool<()>], players: impl Iterator<
         ret.insert(player.clone(), player_frames);
     }
     let elapsed = time.elapsed();
-    trace!("Needed {}ms to generate animation", elapsed.as_millis());
+    trace!("Needed {} microseconds to generate animation", elapsed.as_micros());
 
     ret
 }
 
-fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool<()>], bars: &HashMap<MapInPool<()>, String>, your_vote: Option<(&MapInPool<()>, &Rat)>) {
+fn render_frame(lines: &mut Vec<String>, alts_start: &[MapInPool], bars: &HashMap<MapInPool, String>, your_vote: Option<(MapInPool, Rat)>) {
     for alt in alts_start {
         let mut line = String::new();
-        if let Some((vote, weight)) = your_vote {
+        if let Some((vote, weight)) = &your_vote {
             if vote == alt {
                 if weight == &(Rat::one() + Rat::one()) {
                     line += "You x2 ->\t";

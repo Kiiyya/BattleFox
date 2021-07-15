@@ -413,13 +413,6 @@ where
         }
     }
 
-    /// performs a single iteration of vSTV.
-    pub fn vanilla_stv_step<T: Tracer<A>>(&self, q: &Rat, tracer: &mut T) -> (Result<A>, Self) {
-        let result = self.elect_or_reject(q, tracer);
-        let profile = self.vanilla_T(q, &result, tracer);
-        (result, profile)
-    }
-
     pub fn vanilla_stv<T: Tracer<A>>(&self, seats: usize, q: &Rat, tracer: &mut T) -> Result<A> {
         if self.alts.len() <= seats {
             // if we only have `seats` candidates left, just elect everyone, even if they don't cross quota.
@@ -434,7 +427,8 @@ where
 
         // so now we have at least `seats + 1` alternatives left.
 
-        let (result, profile) = self.vanilla_stv_step(q, tracer);
+        let result = self.elect_or_reject(q, tracer);
+        let profile = self.vanilla_T(q, &result, tracer);
         assert_eq!(profile.alts, result.d);
         if result.d.is_empty() || result.e.len() >= seats {
             // if we either filled all seats, or exhausted candidates, we're done.
@@ -632,13 +626,13 @@ pub mod test {
             .filter(|action| {
                 match action {
                     StvAction::Starting(_) => true,
-                    StvAction::ElemT { a, b, s, profile_afterwards } => false,
-                    StvAction::Consume { alt, profile_afterwards } => false,
-                    StvAction::ToAll { from, howmuch, profile_afterwards } => true,
-                    StvAction::Elected { elected, profile_afterwards } => true,
-                    StvAction::Eliminated { alt, profile_afterwards } => true,
-                    StvAction::RejectTiebreak { tied, chosen, score } => true,
-                    StvAction::Stv1WinnerTiebreak { tied, chosen } => true,
+                    StvAction::ElemT { a: _, b: _, s: _, profile_afterwards: _ } => false,
+                    StvAction::Consume { alt: _, profile_afterwards: _ } => false,
+                    StvAction::ToAll { from: _, howmuch: _, profile_afterwards: _ } => true,
+                    StvAction::Elected { elected: _, profile_afterwards: _ } => true,
+                    StvAction::Eliminated { alt: _, profile_afterwards: _ } => true,
+                    StvAction::RejectTiebreak { tied: _, chosen: _, score: _ } => true,
+                    StvAction::Stv1WinnerTiebreak { tied: _, chosen: _ } => true,
                 }
             } )
             .for_each(|action| {
