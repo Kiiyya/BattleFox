@@ -1,9 +1,11 @@
 extern crate battlelog;
+#[macro_use] extern crate log;
 
 mod rabbitmq;
 
 use chrono::prelude::*;
 use dotenv::dotenv;
+use log::LevelFilter;
 use serenity::{
     async_trait,
     builder::{CreateEmbed, ExecuteWebhook},
@@ -17,6 +19,7 @@ use serenity::{
 };
 use lazy_static::lazy_static;
 use battlelog::battlelog::{search_user, SearchResult};
+use simplelog::{Config, SimpleLogger};
 use std::thread;
 use tokio::runtime::Runtime;
 
@@ -96,7 +99,7 @@ async fn report_player_webhook(reporter: String, reported: String, reason: Strin
                         println!("Reported Persona: {:#?}", reported_data);
 
                         let gravatar_url = reporter_data.user.gravatar_md5.clone().map_or(
-                            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(), 
+                            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
                              |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
                        );
 
@@ -109,7 +112,7 @@ async fn report_player_webhook(reporter: String, reported: String, reason: Strin
                         println!("Error fetching reported persona: {:?}", reported_error);
 
                         let gravatar_url = reporter_data.user.gravatar_md5.clone().map_or(
-                            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(), 
+                            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
                              |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
                        );
 
@@ -218,7 +221,7 @@ fn add_reported_to_embed(
         Some(user) => {
             let gravatar_url = user.user.gravatar_md5
                 .clone().map_or(
-            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(), 
+            "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
             |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
             );
 
@@ -311,6 +314,7 @@ fn add_reporter_to_embed(
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+    let _ = SimpleLogger::init(LevelFilter::Info, Config::default());
 
     tokio::spawn( async { rabbitmq::initialize_report_consumer().await; });
 
