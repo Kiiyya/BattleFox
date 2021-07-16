@@ -10,4 +10,5 @@ members = [
 	"battle_fox",
 	"discord_integration",
 	"battlelog",
+	"rabbit_publish_test"
 ]

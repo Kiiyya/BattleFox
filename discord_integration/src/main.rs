@@ -314,13 +314,9 @@ fn add_reporter_to_embed(
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-    let _ = SimpleLogger::init(LevelFilter::Info, Config::default());
+    let _ = SimpleLogger::init(LevelFilter::Warn, Config::default());
 
-    tokio::spawn( async { rabbitmq::initialize_report_consumer().await; });
-
-    // thread::spawn(|| {
-    //     let _ = Runtime::new().unwrap().block_on(rabbitmq::initialize_report_consumer());
-    // });
+    tokio::spawn( async { rabbitmq::initialize_report_consumer().await.unwrap(); });
 
     let mut client = Client::builder(DISCORD_TOKEN.clone())
         .event_handler(Handler)

@@ -21,22 +21,25 @@ pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
     ).await?;
 
     // Open a channel - None says let the library choose the channel ID.
-    // let consumer_channel = connection.create_channel().await?;
-    // let publisher_channel = connection.create_channel().await?;
-    let (consumer_channel, publisher_channel) = join(connection.create_channel(), connection.create_channel()).await; // run concurrently instead of sequentially :)
-    let consumer_channel = consumer_channel?;
-    let publisher_channel = publisher_channel?;
+    let channel = connection.create_channel().await?;
 
     // Declare the "bf4_reports" queue.
-    let queue = publisher_channel.queue_declare("bf4_reports", QueueDeclareOptions::default(), FieldTable::default()).await?;
+    let _queue = channel.queue_declare("bf4_reports", QueueDeclareOptions::default(), FieldTable::default()).await?;
 
     // Start a consumer.
-    let mut consumer = publisher_channel.basic_consume("hello", "my_consumer", BasicConsumeOptions::default(), FieldTable::default()).await?;
+    let mut consumer = channel.basic_consume("bf4_reports", "reports_consumer", BasicConsumeOptions::default(), FieldTable::default()).await?;
     let consumer_joinhandle = tokio::spawn(async move { // the `move` will move the consumer *into* the task.
         info!("Waiting for consume...");
         while let Some(delivery) = consumer.next().await {
             info!("Got something! Acking...");
             let (channel, delivery) = delivery.expect("error in consumer");
+
+            let body = String::from_utf8_lossy(&delivery.data);
+            let report = serde_json::from_str::<report::ReportModel>(&body).unwrap();
+            println!("Received [{:?}]", report);
+
+            report_webhook::report_player_webhook(report).await;
+
             delivery
                 .ack(BasicAckOptions::default()).await
                 .expect("ack failed");
@@ -45,18 +48,6 @@ pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
         debug!("Consumer loop ended gracefully");
     });
     // println!("Waiting for messages. Press Ctrl-C to exit.");
-
-    let publisher_joinhandle = tokio::spawn(async move {
-        // info!("Waiting for publish..");
-
-        let payload = b"Hello World";
-
-        let confirm = publisher_channel.basic_publish("", "hello", BasicPublishOptions::default(), payload.to_vec(), BasicProperties::default())
-            .await.unwrap()
-            .await.unwrap();
-
-        debug!("Publisher loop ended gracefully, got reply: {:#?}", confirm);
-    });
 
     // for (i, message) in consumer.receiver().iter().enumerate() {
     //     match message {
@@ -77,6 +68,7 @@ pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
     //     }
     // }
 
-    // consumer_joinhandle.await?; // wait for our consumer to quit.
+    consumer_joinhandle.await?; // wait for our consumer to quit.
+
     Ok(())
 }

@@ -1480,6 +1480,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rabbit_publish_test"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dotenv",
+ "lapin",
+ "lazy_static",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "radium"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
