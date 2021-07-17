@@ -1,8 +1,8 @@
-#[path = "models/report.rs"] mod report;
 #[path = "report_webhook.rs"] mod report_webhook;
 
-use futures::{StreamExt, future::join};
-use lapin::{BasicProperties, Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions}, types::FieldTable};
+use shared::report::ReportModel;
+use futures::{StreamExt};
+use lapin::{Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -32,10 +32,10 @@ pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
         info!("Waiting for consume...");
         while let Some(delivery) = consumer.next().await {
             info!("Got something! Acking...");
-            let (channel, delivery) = delivery.expect("error in consumer");
+            let (_channel, delivery) = delivery.expect("error in consumer");
 
             let body = String::from_utf8_lossy(&delivery.data);
-            let report = serde_json::from_str::<report::ReportModel>(&body).unwrap();
+            let report = serde_json::from_str::<ReportModel>(&body).unwrap();
             println!("Received [{:?}]", report);
 
             report_webhook::report_player_webhook(report).await;

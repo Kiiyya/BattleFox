@@ -15,7 +15,9 @@ use dotenv::dotenv;
 use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shared::rabbitmq::RabbitMq;
 use weaponforcer::WeaponEnforcer;
+use playerreport::PlayerReport;
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vips::Vips;
@@ -28,6 +30,7 @@ use mapvote::{
 };
 
 use crate::weaponforcer::WeaponEnforcerConfig;
+use crate::playerreport::PlayerReportConfig;
 
 pub mod guard;
 // pub mod commands;
@@ -37,6 +40,7 @@ pub mod vips;
 pub mod players;
 mod stv;
 pub mod weaponforcer;
+pub mod playerreport;
 pub mod humanlang;
 mod logging;
 
@@ -101,10 +105,17 @@ async fn main() -> rcon::RconResult<()> {
 
     let coninfo = get_rcon_coninfo()?;
     let players = Arc::new(Players::new());
+    let mut rabbitmq = RabbitMq::new(None);
+    if let Err(why) = rabbitmq.run().await {
+        println!("Error running rabbitmq publisher: {:?}", why);
+    }
     let vips = Arc::new(Vips::new());
 
     let weaponforcer_config : WeaponEnforcerConfig = load_config("configs/weaponforcer.yaml").await.unwrap();
     let weaponforcer = WeaponEnforcer::new(weaponforcer_config);
+
+    let playerreport_config : PlayerReportConfig = load_config("configs/playerreport.yaml").await.unwrap();
+    let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
 
     // let commands = Arc::new(Commands::new());
 
@@ -160,14 +171,17 @@ async fn main() -> rcon::RconResult<()> {
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));
 
-    let bf4clone = bf4.clone();
-    jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
+    // let bf4clone = bf4.clone();
+    // jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
+
+    // let bf4clone = bf4.clone();
+    // jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
+
+    // let bf4clone = bf4.clone();
+    // jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
 
     let bf4clone = bf4.clone();
-    jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
-
-    let bf4clone = bf4.clone();
-    jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
+    jhs.push(tokio::spawn(async move { playerreport.run(bf4clone).await }));
 
     // Wait for all our spawned tasks to finish.
     // This'll happen at shutdown, or never, when you CTRL-C.

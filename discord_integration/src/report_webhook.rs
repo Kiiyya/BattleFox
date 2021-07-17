@@ -1,22 +1,17 @@
 extern crate battlelog;
 
 use chrono::prelude::*;
-use dotenv::dotenv;
 use serenity::{
-    async_trait,
-    builder::{CreateEmbed, ExecuteWebhook},
-    http::{client::HttpBuilder, Http},
+    builder::{CreateEmbed},
+    http::{Http},
     model::{
-        channel::{Embed, Message},
-        gateway::Ready,
-        id::ChannelId,
+        channel::{Embed},
     },
-    prelude::*,
 };
 use lazy_static::lazy_static;
 use battlelog::battlelog::{search_user, SearchResult};
 
-use super::report::ReportModel;
+use shared::report::ReportModel;
 
 lazy_static! {
     // Discord webhook id where the reports will be sent
@@ -48,9 +43,18 @@ pub(crate) async fn report_player_webhook(report: ReportModel) {
         .execute(&http, false, |w| {
 
             let embed = Embed::fake(|e| {
-                e.field(
-                "Server",
-                format!("[{}](https://battlelog.battlefield.com/bf4/servers/show/pc/{}/)", server_name, server_guid), false);
+                match server_guid {
+                    Some(guid) => {
+                        e.field(
+                            "Server",
+                            format!("[{}](https://battlelog.battlefield.com/bf4/servers/show/pc/{}/)", server_name, guid), false);
+                    },
+                    None => {
+                        e.field(
+                            "Server",
+                            format!("{}", server_name), false);
+                    }
+                }
 
                 match (reporter_user, reported_user) {
                     (Ok(reporter_data), Ok(reported_data)) => {

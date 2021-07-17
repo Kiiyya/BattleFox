@@ -60,18 +60,18 @@ impl EventHandler for Handler {
     async fn ready(&self, _ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        let _report = report_player_webhook(
-            "PocketWolfy".to_string(),
-            "xfileFIN".to_string(),
-            // "PocketWolfy".to_string(),
-            // "abcdefg".to_string(),
-            //"abcdefg".to_string(),
-            //"xfileFIN".to_string(),
-            "He's a noob".to_string(),
-            "!! LSD !! HARDCORE RUSH | NO STUPID RULES | NO MORTAR/UCAV".to_string(),
-            "4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()
-        )
-        .await;
+        // let _report = report_player_webhook(
+        //     "PocketWolfy".to_string(),
+        //     "xfileFIN".to_string(),
+        //     // "PocketWolfy".to_string(),
+        //     // "abcdefg".to_string(),
+        //     //"abcdefg".to_string(),
+        //     //"xfileFIN".to_string(),
+        //     "He's a noob".to_string(),
+        //     "!! LSD !! HARDCORE RUSH | NO STUPID RULES | NO MORTAR/UCAV".to_string(),
+        //     "4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()
+        // )
+        // .await;
     }
 }
 
@@ -316,15 +316,21 @@ async fn main() {
     dotenv().ok();
     let _ = SimpleLogger::init(LevelFilter::Warn, Config::default());
 
-    tokio::spawn( async { rabbitmq::initialize_report_consumer().await.unwrap(); });
+    // Report processing
+    //tokio::spawn( async { rabbitmq::initialize_report_consumer().await.unwrap(); });
 
-    let mut client = Client::builder(DISCORD_TOKEN.clone())
-        .event_handler(Handler)
-        .application_id(*APPLICATION_ID)
-        .await
-        .expect("Err creating client");
-
-    if let Err(why) = client.start().await {
+    if let Err(why) = rabbitmq::initialize_report_consumer().await {
         println!("Client error: {:?}", why);
     }
+
+    // Discord client init
+    // let mut client = Client::builder(DISCORD_TOKEN.clone())
+    //     .event_handler(Handler)
+    //     .application_id(*APPLICATION_ID)
+    //     .await
+    //     .expect("Err creating client");
+
+    // if let Err(why) = client.start().await {
+    //     println!("Client error: {:?}", why);
+    // }
 }
