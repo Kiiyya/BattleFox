@@ -7,7 +7,7 @@ use anyhow;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    pub username: String,
+    pub username: Option<String>,
     pub gravatar_md5: Option<String>,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub user_id: u64,

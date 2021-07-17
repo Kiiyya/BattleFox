@@ -2,6 +2,7 @@
 use lapin::{BasicProperties, Connection, ConnectionProperties, options::{BasicPublishOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use shared::report::ReportModel;
 
 lazy_static! {
     // Configure the client with your Discord bot token in the environment.
@@ -9,15 +10,6 @@ lazy_static! {
     static ref RABBITMQ_PASSWORD: String = dotenv::var("RABBITMQ_PASSWORD").expect("Expected a RabbitMQ password in the environment");
     // The Application Id is usually the Bot User Id.
     static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").expect("Expected a RabbitMQ host in the environment");
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ReportModel {
-    reporter: String,
-    reported: String,
-    reason: String,
-    server_name: String,
-    server_guid: String,
 }
 
 // fn main() -> Result<()> {
@@ -63,7 +55,8 @@ async fn main() -> Result<(), anyhow::Error> {
         reported: "xfileFIN".to_string(),
         reason: "Just testing, you know...".to_string(),
         server_name: "Test server".to_string(),
-        server_guid: "4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()
+        server_guid: Some("4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()),
+        bfacp_link: Some("https://bfadmin.somebogussite.com".to_string())
     };
     //exchange.publish(Publish::new(serde_json::to_string(&report).unwrap().as_bytes(), "bf4_reports"))?;
 

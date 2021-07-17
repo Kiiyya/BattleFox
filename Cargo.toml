@@ -11,5 +11,6 @@ members = [
 	"discord_integration",
 	"battlelog",
 	"shared",
+	"database",
 	"rabbit_publish_test"
 ]

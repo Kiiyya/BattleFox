@@ -12,7 +12,8 @@ use crate::players::{PlayerInServer, Players};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlayerReportConfig {
     enabled: bool,
-    server_guid: Option<String>
+    server_guid: Option<String>,
+    bfacp_url: Option<String>
 }
 
 pub struct PlayerReport {
@@ -129,7 +130,8 @@ impl PlayerReport {
                             reported: name.to_string(),
                             reason: reason.to_string(),
                             server_name: server_name,
-                            server_guid: self.config.server_guid.clone()
+                            server_guid: self.config.server_guid.clone(),
+                            bfacp_link: self.config.bfacp_url.clone()
                         };
 
                         match self.rabbit.queue_report(report).await {

@@ -1,6 +1,7 @@
 extern crate battlelog;
 
 use chrono::prelude::*;
+use database::{establish_connection, get_battlelog_player_by_persona_id};
 use serenity::{
     builder::{CreateEmbed},
     http::{Http},
@@ -29,6 +30,7 @@ pub(crate) async fn report_player_webhook(report: ReportModel) {
     let reason = report.reason;
     let server_name = report.server_name;
     let server_guid = report.server_guid;
+    let bfacp_url = report.bfacp_link;
 
     let reporter_user = search_user(reporter.to_string()).await;
     let reported_user = search_user(reported.to_string()).await;
@@ -68,7 +70,7 @@ pub(crate) async fn report_player_webhook(report: ReportModel) {
 
                        w.avatar_url(gravatar_url);
 
-                       add_reported_to_embed(e, Some(reported_data));
+                       add_reported_to_embed(e, Some(reported_data), bfacp_url);
                     }
                     (Ok(reporter_data), Err(reported_error)) => {
                         println!("Reporter Persona: {:#?}", reporter_data);
@@ -81,13 +83,13 @@ pub(crate) async fn report_player_webhook(report: ReportModel) {
 
                        w.avatar_url(gravatar_url);
 
-                        add_reported_to_embed(e, None);
+                        add_reported_to_embed(e, None, None);
                     }
                     (Err(reporter_error), Ok(reported_data)) => {
                         println!("Error fetching reporter persona: {:?}", reporter_error);
                         println!("Reported Persona: {:#?}", reported_data);
 
-                        add_reported_to_embed(e, Some(reported_data));
+                        add_reported_to_embed(e, Some(reported_data), bfacp_url);
                     }
                     (Err(reporter_error), Err(reported_error)) => {
                         println!("Error fetching reporter persona: {:?}", reporter_error);
@@ -119,6 +121,7 @@ pub(crate) async fn report_player_webhook(report: ReportModel) {
 fn add_reported_to_embed(
     embed: &mut CreateEmbed,
     reported: Option<SearchResult>,
+    bfacp_link: Option<String>
 ) -> &mut CreateEmbed {
     match reported {
         Some(user) => {
@@ -128,7 +131,7 @@ fn add_reported_to_embed(
             |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
             );
 
-            return embed
+            embed
                 .thumbnail(gravatar_url)
                 .field(
                     "Links",
@@ -138,6 +141,32 @@ fn add_reported_to_embed(
                     ),
                     true,
                 );
+
+                match bfacp_link {
+                    Some(link) => {
+                        let connection = establish_connection();
+                        let adkats_player = get_battlelog_player_by_persona_id(&connection, &(user.persona_id as i64));
+            
+                        match adkats_player {
+                            Ok(player) => {
+                                embed
+                                    .field(
+                                        "Admin links",
+                                        format!(
+                                            "[BFACP]({0}/players/{1}/{2})",
+                                            link, player.player_id, user.persona_name
+                                        ),
+                                        false,
+                                    );
+                            },
+                            Err(err) => println!("Error fetching adkats_player: {}", err),
+                        }
+                    },
+                    _ => (),
+                }
+                
+
+            return embed;
         }
         None => {
             return embed.thumbnail(

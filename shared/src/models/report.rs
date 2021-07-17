@@ -7,4 +7,5 @@ pub struct ReportModel {
     pub reason: String,
     pub server_name: String,
     pub server_guid: Option<String>,
+    pub bfacp_link: Option<String>
 }
