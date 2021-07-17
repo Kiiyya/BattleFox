@@ -171,14 +171,14 @@ async fn main() -> rcon::RconResult<()> {
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));
 
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
 
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
 
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { playerreport.run(bf4clone).await }));
