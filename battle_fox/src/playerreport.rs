@@ -83,7 +83,7 @@ impl PlayerReport {
     async fn handle_chat_msg(
         self: Arc<Self>,
         bf4: Arc<Bf4Client>,
-        vis: Visibility,
+        _vis: Visibility,
         player: Player,
         mut msg: AsciiString
     ) -> RconResult<()> {
@@ -241,7 +241,7 @@ impl PlayerReport {
 
     fn players_contains(self: &Self, map: &mut HashMap<Player, PlayerInServer>, target: &str) {
         let target_lowercase = target.to_ascii_lowercase();
-        map.retain(|key, value| {
+        map.retain(|key, _value| {
             //println!("{} / {:?}", key, value);
     
             key.name.to_ascii_lowercase().to_string().contains(&target_lowercase)

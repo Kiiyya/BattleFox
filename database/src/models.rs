@@ -1,4 +1,3 @@
-use super::schema::adkats_battlelog_players;
 use serde::Serialize;
 
 #[derive(Queryable, Serialize)]

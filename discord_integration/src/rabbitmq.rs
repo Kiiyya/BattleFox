@@ -1,5 +1,3 @@
-#[path = "report_webhook.rs"] mod report_webhook;
-
 use shared::report::ReportModel;
 use futures::{StreamExt};
 use lapin::{Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions}, types::FieldTable};
@@ -40,9 +38,8 @@ pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<
             let report = serde_json::from_str::<ReportModel>(&body).unwrap();
             println!("Received [{:?}]", report);
 
+            // Post report to Discord
             client.post_report(report).await;
-
-            //report_webhook::report_player_webhook(report).await;
 
             delivery
                 .ack(BasicAckOptions::default()).await
@@ -51,26 +48,6 @@ pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<
         }
         debug!("Consumer loop ended gracefully");
     });
-    // println!("Waiting for messages. Press Ctrl-C to exit.");
-
-    // for (i, message) in consumer.receiver().iter().enumerate() {
-    //     match message {
-    //         ConsumerMessage::Delivery(delivery) => {
-    //             let body = String::from_utf8_lossy(&delivery.body);
-    //             let report = serde_json::from_str::<report::ReportModel>(&body).unwrap();
-    //             println!("({:>3}) Received [{:?}]", i, report);
-
-    //             report_webhook::report_player_webhook(report).await;
-
-    //             //let _ = Runtime::new().unwrap().block_on(report_webhook::report_player_webhook(report));
-    //             consumer.ack(delivery)?;
-    //         }
-    //         other => {
-    //             println!("Consumer ended: {:?}", other);
-    //             break;
-    //         }
-    //     }
-    // }
 
     consumer_joinhandle.await?; // wait for our consumer to quit.
 

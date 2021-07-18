@@ -1,7 +1,6 @@
 //use amiquip::{Connection, Exchange, Publish, Result};
 use lapin::{BasicProperties, Connection, ConnectionProperties, options::{BasicPublishOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
 use shared::report::ReportModel;
 
 lazy_static! {
