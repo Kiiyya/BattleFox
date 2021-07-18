@@ -13,7 +13,8 @@ use crate::players::{PlayerInServer, Players};
 pub struct PlayerReportConfig {
     enabled: bool,
     server_guid: Option<String>,
-    bfacp_url: Option<String>
+    bfacp_url: Option<String>,
+    command: Option<String>
 }
 
 pub struct PlayerReport {
@@ -99,69 +100,79 @@ impl PlayerReport {
             return Ok(())
         }
 
-        match split[0] {
-            "!report" | "/report" | "@report" | "#report" => {
-                if split.len() < 3 {
-                    let _ = bf4.say("Report player with: /report soldiername reason", player).await;
+        match split[0].chars().next().unwrap() {
+            '/' | '!' | '@' | '#' => (),
+            _ => return Ok(())
+        }
 
-                    return Ok(())
-                }
+        let cmd = split[0]
+            .trim_start_matches('/')
+            .trim_start_matches('!')
+            .trim_start_matches('@')
+            .trim_start_matches('#');
 
-                let target = split[1];
-                let reason = split[2..].join(" ");
+        let command = self.config.command.as_ref().unwrap_or(&"report".to_string()).to_lowercase();
 
-                info!("Reported player {}", target);
+        if cmd.eq(&command) {
+            if split.len() < 3 {
+                let _ = bf4.say(format!("Report player with: /{0} soldiername reason", command), player).await;
 
-                let playerreport = self.clone();
-                let mut players = self.players.players(&bf4).await;
+                return Ok(())
+            }
 
-                match playerreport.get_best_player_match(&mut players, target).await {
-                    Ok(Player { name, eaid }) => {
-                        info!("Match for {} / {}", name, eaid);
+            let target = split[1];
+            let reason = split[2..].join(" ");
 
-                        let server_name = match bf4.server_info().await {
-                            Ok(info) => info.server_name.to_string(),
-                            Err(_) => "Not found".to_string(),
-                        };
-                        info!("ServerName {:?}", server_name);
+            info!("Reported player {}", target);
 
-                        let report = ReportModel { 
-                            reporter: player.name.to_string(),
-                            reported: name.to_string(),
-                            reason: reason.to_string(),
-                            server_name: server_name,
-                            server_guid: self.config.server_guid.clone(),
-                            bfacp_link: self.config.bfacp_url.clone()
-                        };
+            let playerreport = self.clone();
+            let mut players = self.players.players(&bf4).await;
 
-                        match self.rabbit.queue_report(report).await {
-                            Ok(_) => {
-                                let _ = bf4.say(format!("Reported player {} for {}", name, reason), player).await;
-                            },
-                            Err(error) => {
-                                warn!("Error queueing a report: {}", error);
+            match playerreport.get_best_player_match(&mut players, target).await {
+                Ok(Player { name, eaid }) => {
+                    info!("Match for {} / {}", name, eaid);
 
-                                let _ = bf4.say(format!("Error reporting player {} for {}", name, reason), player).await;
-                            },
-                        }
-                    },
-                    Err(error) => {
-                        match error {
-                            MatchError::NoMatches => {
-                                warn!("No matches for {}", target);
+                    let server_name = match bf4.server_info().await {
+                        Ok(info) => info.server_name.to_string(),
+                        Err(_) => "Not found".to_string(),
+                    };
+                    info!("ServerName {:?}", server_name);
 
-                                let _ = bf4.say(format!("Reporting failed, couldn't find player with name {}", target), player).await;
-                            },
-                            MatchError::TooMany => {
-                                warn!("Too many matches for {}", target);
+                    let report = ReportModel { 
+                        reporter: player.name.to_string(),
+                        reported: name.to_string(),
+                        reason: reason.to_string(),
+                        server_name: server_name,
+                        server_guid: self.config.server_guid.clone(),
+                        bfacp_link: self.config.bfacp_url.clone()
+                    };
 
-                                let _ = bf4.say(format!("Reporting failed, found too many players with name {}", target), player).await;
-                            },
-                        }
-                    },
-                }
-            },
-            _ => { }
+                    match self.rabbit.queue_report(report).await {
+                        Ok(_) => {
+                            let _ = bf4.say(format!("Reported player {} for {}", name, reason), player).await;
+                        },
+                        Err(error) => {
+                            warn!("Error queueing a report: {}", error);
+
+                            let _ = bf4.say(format!("Error reporting player {} for {}", name, reason), player).await;
+                        },
+                    }
+                },
+                Err(error) => {
+                    match error {
+                        MatchError::NoMatches => {
+                            warn!("No matches for {}", target);
+
+                            let _ = bf4.say(format!("Reporting failed, couldn't find player with name {}", target), player).await;
+                        },
+                        MatchError::TooMany => {
+                            warn!("Too many matches for {}", target);
+
+                            let _ = bf4.say(format!("Reporting failed, found too many players with name {}", target), player).await;
+                        },
+                    }
+                },
+            }
         }
 
         Ok(())

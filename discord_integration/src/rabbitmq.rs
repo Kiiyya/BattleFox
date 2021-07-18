@@ -5,6 +5,8 @@ use futures::{StreamExt};
 use lapin::{Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;
 
+use crate::discordclient::DiscordClient;
+
 lazy_static! {
     // Configure the client with your Discord bot token in the environment.
     static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").expect("Expected a RabbitMQ username in the environment");
@@ -13,7 +15,7 @@ lazy_static! {
     static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").expect("Expected a RabbitMQ host in the environment");
 }
 
-pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
+pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<(), anyhow::Error> {
     // Open connection.
     let connection = Connection::connect(
         &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
@@ -38,7 +40,9 @@ pub(crate) async fn initialize_report_consumer() -> Result<(), anyhow::Error> {
             let report = serde_json::from_str::<ReportModel>(&body).unwrap();
             println!("Received [{:?}]", report);
 
-            report_webhook::report_player_webhook(report).await;
+            client.post_report(report).await;
+
+            //report_webhook::report_player_webhook(report).await;
 
             delivery
                 .ack(BasicAckOptions::default()).await

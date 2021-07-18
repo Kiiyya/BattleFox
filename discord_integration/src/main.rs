@@ -1,22 +1,15 @@
 extern crate battlelog;
 #[macro_use] extern crate log;
 
+mod discordclient;
 mod rabbitmq;
 
+use discordclient::DiscordClient;
 use chrono::prelude::*;
 use dotenv::dotenv;
 use log::LevelFilter;
-use serenity::{
-    async_trait,
-    builder::{CreateEmbed, ExecuteWebhook},
-    http::{client::HttpBuilder, Http},
-    model::{
-        channel::{Embed, Message},
-        gateway::Ready,
-        id::ChannelId,
-    },
-    prelude::*,
-};
+use serde_json::{Value, json};
+use serenity::{async_trait, builder::{CreateActionRow, CreateComponents, CreateEmbed, CreateMessage, ExecuteWebhook}, http::{self, Http, client::HttpBuilder}, model::{channel::{Embed, Message}, gateway::Ready, id::ChannelId, interactions::ButtonStyle, webhook::Webhook}, prelude::*, utils};
 use lazy_static::lazy_static;
 use battlelog::battlelog::{search_user, SearchResult};
 use simplelog::{Config, SimpleLogger};
@@ -59,6 +52,81 @@ impl EventHandler for Handler {
 
     async fn ready(&self, _ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+
+        // Ensure webhook has been created, or if not, create it
+        let mut webhooks = _ctx.http.get_channel_webhooks(*LOG_CHANNEL_ID).await.unwrap();
+        webhooks.retain(|x| x.name.as_ref().unwrap_or(&String::from("")).eq("battlefox_admin_reports"));
+
+        let mut webhook: Option<Webhook> = None;
+        if webhooks.len() <= 0 {
+            let map = json!({"name": "battlefox_admin_reports"});
+
+            match _ctx.http.create_webhook(*LOG_CHANNEL_ID, &map).await {
+                Ok(hook) => webhook = Some(hook),
+                _ => (),
+            }
+        }
+        else {
+            webhook = Some(webhooks.remove(0));
+        }
+
+
+        let mut components = CreateComponents::default();
+
+        // Main links
+        components.create_action_row(|r| {
+            r.create_button(|b| {
+                b.label("Battlelog").url("https://battlelog.battlefield.com/bf4/soldier/xfileFIN/stats/806262072/pc/").style(ButtonStyle::Link)
+            })
+            .create_button(|b| {
+                b.label("247fairplay").url("https://www.247fairplay.com/CheatDetector/xfileFIN").style(ButtonStyle::Link)
+            })
+            .create_button(|b| {
+                b.label("BF4CR").url("https://bf4cheatreport.com/?pid=806262072&uid=&cnt=200&startdate=").style(ButtonStyle::Link)
+            })
+            .create_button(|b| {
+                b.label("BF4DB").url("https://www.bf4db.com/player/806262072").style(ButtonStyle::Link)
+            });
+            r
+        });
+
+        // Admin links
+        components.create_action_row(|r| {
+            r.create_button(|b| {
+                b.label("BFACP").url("https://bfadmin.xfilefin-dev.ovh/players/2958/-JaHa-FIN").style(ButtonStyle::Link)
+            });
+            r
+        });
+        
+        let test = Embed::fake(|e| {
+            e.field(
+                "Server",
+                format!("[{}](https://battlelog.battlefield.com/bf4/servers/show/pc/{}/)", "Test server ssss", "4d0151b3-81ff-4268-b4e8-5e60d5bc8765"), false);
+            e
+        });
+
+        let value = json!({
+            "username": "xfileFIN",
+            "avatar_url": "https://www.gravatar.com/avatar/96db2c574ad6ec80927c8542f714f1f5?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png",
+            "content": "",
+            "embeds": [
+                test
+            ],
+            "components": components.0
+        });
+
+        println!("{}", value);
+
+        let map = value.as_object().unwrap();
+        
+        // Execute webhook
+        match webhook {
+            Some(webhook) => {
+                println!("{:#?}", webhook.url());
+                let _message = _ctx.http.execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map).await.unwrap();
+            },
+            _ => (),
+        }
 
         // let _report = report_player_webhook(
         //     "PocketWolfy".to_string(),
@@ -318,8 +386,12 @@ async fn main() {
 
     // Report processing
     //tokio::spawn( async { rabbitmq::initialize_report_consumer().await.unwrap(); });
+    let mut discord_client = DiscordClient::new(None);
+    if let Err(why) = discord_client.run().await {
+        println!("Error running discord client: {:?}", why);
+    }
 
-    if let Err(why) = rabbitmq::initialize_report_consumer().await {
+    if let Err(why) = rabbitmq::initialize_report_consumer(discord_client).await {
         println!("Client error: {:?}", why);
     }
 

@@ -54,7 +54,7 @@ async fn main() -> Result<(), anyhow::Error> {
         reporter: "PocketWolfy".to_string(),
         reported: "xfileFIN".to_string(),
         reason: "Just testing, you know...".to_string(),
-        server_name: "Test server".to_string(),
+        server_name: "Test server with a long server name to see if embed gets wider..!! ??".to_string(),
         server_guid: Some("4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()),
         bfacp_link: Some("https://bfadmin.somebogussite.com".to_string())
     };
