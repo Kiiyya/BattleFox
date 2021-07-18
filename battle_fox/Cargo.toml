@@ -15,6 +15,7 @@ ascii = { version = "1.0.0", features = ["serde"] }
 battlefield_rcon = { path = "../battlefield_rcon" }
 tokio = { version = "1.2", features = ["fs"] }
 tokio-stream = "0.1"
+openssl = { version = "0.10", features = ["vendored"] }
 
 dotenv = "0.15"
 

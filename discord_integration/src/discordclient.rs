@@ -4,11 +4,7 @@ use chrono::prelude::*;
 use database::{establish_connection, get_battlelog_player_by_persona_id};
 use lazy_static::lazy_static;
 use serde_json::{json, Value};
-use serenity::{
-    builder::CreateComponents,
-    http::{Http, HttpBuilder},
-    model::{channel::Embed, interactions::ButtonStyle, webhook::Webhook},
-};
+use serenity::{async_trait, builder::CreateComponents, client::{Context, EventHandler}, http::{Http, HttpBuilder}, model::{channel::{Embed}, interactions::{ButtonStyle, Interaction}, prelude::Ready, webhook::Webhook}};
 use shared::report::ReportModel;
 
 lazy_static! {
@@ -43,6 +39,19 @@ pub struct DiscordClient {
     http: Option<Http>,
 }
 
+struct Handler;
+
+#[async_trait]
+impl EventHandler for Handler {
+    async fn interaction_create(&self, _ctx: Context, interaction: Interaction) {
+        println!("New interaction received: {:#?}", interaction);
+    }
+
+    async fn ready(&self, _ctx: Context, ready: Ready) {
+        println!("{} is connected!", ready.user.name);
+    }
+}
+
 impl DiscordClient {
     pub fn new(http: Option<Http>) -> Self {
         Self { http }
@@ -55,6 +64,21 @@ impl DiscordClient {
             .expect("Error creating Http");
 
         *self = Self::new(Some(http));
+
+        // TODO: When there's support for button and select menu interactions, test if kill, kick, ban, mute would be possible from the report
+        // // Build our client.
+        // let mut client = Client::builder(DISCORD_TOKEN.clone())
+        //     .event_handler(Handler)
+        //     .application_id(*APPLICATION_ID)
+        //     .await
+        //     .expect("Error creating client");
+
+        // // Finally, start a single shard, and start listening to events.
+        // tokio::spawn( async move { 
+        //     if let Err(why) = client.start().await {
+        //         println!("Client error: {:?}", why);
+        //     }
+        // });
 
         Ok(())
     }
