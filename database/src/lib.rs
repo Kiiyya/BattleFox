@@ -20,7 +20,7 @@ pub fn establish_connection() -> Result<diesel::MysqlConnection, ConnectionError
         //.unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
 
-pub fn get_battlelog_player_by_persona_id(conn: &MysqlConnection, persona: &i64) -> Result<AdkatsBattlelogPlayer, diesel::result::Error> {
+pub fn get_battlelog_player_by_persona_id(conn: &MysqlConnection, persona: &u64) -> Result<AdkatsBattlelogPlayer, diesel::result::Error> {
     use schema::adkats_battlelog_players::dsl::{persona_id, adkats_battlelog_players};
 
     adkats_battlelog_players

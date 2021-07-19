@@ -1,10 +1,10 @@
 use anyhow::Error;
-use battlelog::battlelog::{search_user, SearchResult};
+use battlelog::{apicalls::{ingame_metadata, search_user, server_snapshot}, models::{IngameMetadataResponse, Player, SearchResult}};
 use chrono::prelude::*;
 use database::{establish_connection, get_battlelog_player_by_persona_id};
 use lazy_static::lazy_static;
 use serde_json::{json, Value};
-use serenity::{async_trait, builder::CreateComponents, client::{Context, EventHandler}, http::{Http, HttpBuilder}, model::{channel::{Embed}, interactions::{ButtonStyle, Interaction}, prelude::Ready, webhook::Webhook}};
+use serenity::{async_trait, builder::{CreateComponents}, client::{Context, EventHandler}, http::{Http, HttpBuilder}, model::{channel::{Embed}, interactions::{ButtonStyle, Interaction}, prelude::Ready, webhook::Webhook}};
 use shared::report::ReportModel;
 
 lazy_static! {
@@ -84,15 +84,17 @@ impl DiscordClient {
 
         let issuer = search_user(reporter.to_string()).await;
         let target = search_user(reported.to_string()).await;
+        let stats = get_stats(&report.server_guid, &target, &reported).await;
+        let ingame_metadata = get_ingame_metadata(&target).await;
 
         let http = match &self.http {
             Some(http) => http,
             _ => return,
         };
 
-        self.post_admin_report(http, &report, &issuer, &target)
+        self.post_admin_report(http, &report, &issuer, &target, &stats, &ingame_metadata)
             .await;
-        self.post_public_report(http, &report, &issuer, &target)
+        self.post_public_report(http, &report, &issuer, &target, &stats, &ingame_metadata)
             .await;
     }
 
@@ -132,12 +134,14 @@ impl DiscordClient {
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
         target: &Result<SearchResult, Error>,
+        stats: &Option<Player>,
+        ingame_metadata: &Option<IngameMetadataResponse>
     ) {
         let webhook = self
             .ensure_webhook(http, *ADMIN_REPORTS_CHANNEL_ID, "battlefox_admin_reports")
             .await;
 
-        let value = self.build_report_message(true, report, issuer, target);
+        let value = self.build_report_message(true, report, issuer, target, stats, ingame_metadata);
         let map = value.as_object().unwrap();
 
         // Execute webhook
@@ -159,6 +163,8 @@ impl DiscordClient {
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
         target: &Result<SearchResult, Error>,
+        stats: &Option<Player>,
+        ingame_metadata: &Option<IngameMetadataResponse>
     ) {
         if PUBLIC_REPORTS_CHANNEL_ID.eq(&0) {
             return;
@@ -168,7 +174,7 @@ impl DiscordClient {
             .ensure_webhook(http, *PUBLIC_REPORTS_CHANNEL_ID, "battlefox_public_reports")
             .await;
 
-        let value = self.build_report_message(false, report, issuer, target);
+        let value = self.build_report_message(false, report, issuer, target, stats, ingame_metadata);
         let map = value.as_object().unwrap();
 
         // Execute webhook
@@ -190,6 +196,8 @@ impl DiscordClient {
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
         target: &Result<SearchResult, Error>,
+        stats: &Option<Player>,
+        ingame_metadata: &Option<IngameMetadataResponse>
     ) -> Value {
         let reporter = &report.reporter;
         let reported = &report.reported;
@@ -216,18 +224,37 @@ impl DiscordClient {
                 }
             }
 
-            // Target thumbnail
-            e.thumbnail(match target {
-                Ok(user) => user.user.gravatar_md5.clone().map_or(
-                    "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
-                    |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
-                ),
-                _ => "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
+            // Try adding stats if they exist
+            match stats {
+                Some(player) => {
+                    e.field("Stats", format!("**Score**: {0}", player.score), true)
+                     .field("\n\u{200b}", format!("**K/D**: {0}/{1}", player.kills, player.deaths), true);
+
+                },
+                _ => ()
+            }
+
+            // Author (the person reported)
+            e.author(|a| {
+                a.name(format!("{} was reported", &reported))
+                .icon_url(match target {
+                    Ok(user) => user.user.gravatar_md5.clone().map_or(
+                        "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
+                        |md5| format!("https://www.gravatar.com/avatar/{}?d=https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png", md5)
+                    ),
+                    _ => "https://eaassets-a.akamaihd.net/battlelog/defaultavatars/default-avatar-36.png".to_string(),
+                })
             });
+
+            // Target emblem
+            ingame_metadata.as_ref()
+                .and_then(|data| data.get_emblem_url())
+                .and_then(|url| Some(e.thumbnail(url)));
 
             // Set title, color, last updated time and footer
             let last_updated_time: DateTime<Utc> = Utc::now();
-            e.title(format!("Reported {}", &reported))
+            e
+                //.title(format!("Reported {}", &reported))
                 .description(format!("```{}```", reason))
                 .colour(0x00ff00)
                 .footer(|f| {
@@ -271,7 +298,7 @@ impl DiscordClient {
                                 Ok(connection) => {
                                     let adkats_player = get_battlelog_player_by_persona_id(
                                         &connection,
-                                        &(user.persona_id as i64),
+                                        &(user.persona_id),
                                     );
         
                                     match adkats_player {
@@ -334,4 +361,44 @@ impl DiscordClient {
             "components": components.0
         })
     }
+}
+
+async fn get_stats(
+    server_guid: &Option<String>,
+    reported: &Result<SearchResult, anyhow::Error>,
+    target_name: &str
+) -> Option<Player> {
+    if server_guid.is_none() {
+        return None;
+    }
+
+    match server_snapshot(server_guid.as_ref().unwrap().to_string()).await {
+        Ok(data) => {
+            return match reported {
+                Ok(user) => data.snapshot.get_player_by_personaid(&user.persona_id),
+                Err(_error) => data.snapshot.get_player_by_name(target_name),
+            };
+        },
+        Err(error) => error!("Error fetching snapshot: {}", error),
+    }
+
+    None
+}
+
+async fn get_ingame_metadata(
+    reported: &Result<SearchResult, anyhow::Error>
+) -> Option<IngameMetadataResponse> {
+    match reported {
+        Ok(user) => {
+            match ingame_metadata(user.persona_id).await {
+                Ok(data) => {
+                    return Some(data);
+                },
+                Err(error) => error!("Error fetching ingame metadata: {}", error),
+            }
+        }
+        _ => ()
+    };
+
+    None
 }

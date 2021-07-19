@@ -1,63 +1,7 @@
-use http::{header::USER_AGENT, HeaderMap, HeaderValue};
-use serde::{Deserialize, Serialize};
-use serde_aux::prelude::*;
-use std::collections::HashMap;
+use http::{HeaderMap, HeaderValue, StatusCode, header::USER_AGENT};
 use anyhow;
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct User {
-    pub username: Option<String>,
-    pub gravatar_md5: Option<String>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub user_id: u64,
-    pub created_at: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Context {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub persona_id: u64,
-    pub user: User,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Game {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub persona_id: u64,
-    pub user: User,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchResult {
-    pub picture: String,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub user_id: u64,
-    pub user: User,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub persona_id: u64,
-    pub persona_name: String,
-    pub namespace: String,
-    pub games: HashMap<i32, String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StatsResponse {
-    pub template: String,
-    pub context: Context,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchResponse {
-    pub r#type: String,
-    pub message: String,
-    pub data: Vec<SearchResult>,
-}
+use crate::models::{IngameMetadataResponse, KeeperResponse, SearchResponse, SearchResult, StatsResponse};
 
 pub async fn search_user(soldier_name: String) -> Result<SearchResult, anyhow::Error> {
     let params = [("query", soldier_name.clone())];
@@ -103,6 +47,55 @@ pub async fn search_user(soldier_name: String) -> Result<SearchResult, anyhow::E
     }
 
     Err(anyhow::anyhow!("User not found"))
+}
+
+pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyhow::Error> {
+    let res = reqwest::Client::new()
+        .get(format!("https://keeper.battlelog.com/snapshot/{}", server_guid))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+
+    let data_str = res
+        .text()
+        .await?;
+    //println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let data: KeeperResponse = serde_json::from_str(&data_str)?;
+    //let data = res.json::<KeeperResponse>().await?;
+    //println!("KeeperResponse: {:#?}", data);
+
+    Ok(data)
+}
+
+pub async fn ingame_metadata(persona_id: u64) -> Result<IngameMetadataResponse, anyhow::Error> {
+    let res = reqwest::Client::new()
+        .get(format!("https://battlelog.battlefield.com/api/bf4/pc/persona/1/{}/ingame_metadata", persona_id))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+
+    let data_str = res
+        .text()
+        .await?;
+    //println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let data: IngameMetadataResponse = serde_json::from_str(&data_str)?;
+    //println!("IngameMetadataResponse: {:#?}", data);
+
+    Ok(data)
 }
 
 pub async fn get_user(persona_id: String) -> Result<StatsResponse, anyhow::Error> {
