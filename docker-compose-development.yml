@@ -9,3 +9,9 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=DefaultUser
       - RABBITMQ_DEFAULT_PASS=DefaulPassword
+    networks:
+      - network
+
+networks:
+  network:
+    driver: overlay

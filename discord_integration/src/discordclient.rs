@@ -15,18 +15,11 @@ lazy_static! {
         .expect("Expected an application id in the environment")
         .parse()
         .expect("application id is not a valid id");
-    // Discord channel id where the messages will be sent
-    static ref LOG_CHANNEL_ID: u64 = dotenv::var("LOG_CHANNEL_ID")
-        .expect("Expected an log channel id in the environment")
-        .parse()
-        .expect("log channel id is not a valid id");
-
     // Channel where admin reports will be sent
     static ref ADMIN_REPORTS_CHANNEL_ID: u64 = dotenv::var("ADMIN_REPORTS_CHANNEL_ID")
         .expect("Expected an admin reports channel id in the environment")
         .parse()
         .expect("admin reports id is not a valid id");
-
     // Channel where public reports will be sent
     #[derive(Debug)]
     static ref PUBLIC_REPORTS_CHANNEL_ID: u64 = dotenv::var("PUBLIC_REPORTS_CHANNEL_ID")
@@ -274,27 +267,31 @@ impl DiscordClient {
                 if is_admin {
                     match bfacp_url {
                         Some(link) => {
-                            let connection = establish_connection();
-                            let adkats_player = get_battlelog_player_by_persona_id(
-                                &connection,
-                                &(user.persona_id as i64),
-                            );
-
-                            match adkats_player {
-                                Ok(player) => {
-                                    components.create_action_row(|r| {
-                                        r.create_button(|b| {
-                                            b.label("BFACP")
-                                                .url(format!(
-                                                    "{0}/players/{1}/{2}",
-                                                    link, player.player_id, user.persona_name
-                                                ))
-                                                .style(ButtonStyle::Link)
-                                        });
-                                        r
-                                    });
-                                }
-                                Err(err) => println!("Error fetching adkats_player: {}", err),
+                            match establish_connection() {
+                                Ok(connection) => {
+                                    let adkats_player = get_battlelog_player_by_persona_id(
+                                        &connection,
+                                        &(user.persona_id as i64),
+                                    );
+        
+                                    match adkats_player {
+                                        Ok(player) => {
+                                            components.create_action_row(|r| {
+                                                r.create_button(|b| {
+                                                    b.label("BFACP")
+                                                        .url(format!(
+                                                            "{0}/players/{1}/{2}",
+                                                            link, player.player_id, user.persona_name
+                                                        ))
+                                                        .style(ButtonStyle::Link)
+                                                });
+                                                r
+                                            });
+                                        }
+                                        Err(err) => println!("Error fetching adkats_player: {}", err),
+                                    }
+                                },
+                                Err(error) => error!("Failed to connect to database: {}", error),
                             }
                         }
                         _ => (),

@@ -1,3 +1,8 @@
 /target
 .env*
 /logs
+Cargo.lock
+Cargo.toml
+docker-compose*
+.github
+.vscode

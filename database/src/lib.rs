@@ -12,12 +12,12 @@ use std::env;
 
 use self::models::{AdkatsBattlelogPlayer};
 
-pub fn establish_connection() -> MysqlConnection {
+pub fn establish_connection() -> Result<diesel::MysqlConnection, ConnectionError> {
     dotenv().ok();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     MysqlConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+        //.unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
 }
 
 pub fn get_battlelog_player_by_persona_id(conn: &MysqlConnection, persona: &i64) -> Result<AdkatsBattlelogPlayer, diesel::result::Error> {

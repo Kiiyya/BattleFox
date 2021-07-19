@@ -1,9 +1,6 @@
 # Build Stage
 FROM rust:latest AS builder
 WORKDIR /usr/src/
-RUN rustup target add x86_64-unknown-linux-musl
-RUN apt update && apt install -y musl-tools musl-dev
-RUN update-ca-certificates
 
 RUN USER=root cargo new battlefox
 WORKDIR /usr/src/battlefox
@@ -14,10 +11,12 @@ COPY ./shared ../shared
 RUN cargo build --release
 
 COPY ./discord_integration/src ./src
-RUN cargo install --target x86_64-unknown-linux-musl --path .
+RUN cargo install --path .
 
 # Bundle Stage
-FROM scratch
+FROM debian:buster-slim
+
+RUN apt update && apt install -y libmariadb-dev
 
 COPY --from=builder /usr/local/cargo/bin/discord_integration .
 USER 1000
