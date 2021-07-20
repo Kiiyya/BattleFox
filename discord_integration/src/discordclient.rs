@@ -1,5 +1,5 @@
 use anyhow::Error;
-use battlelog::{apicalls::{ingame_metadata, search_user, server_snapshot}, models::{IngameMetadataResponse, Player, SearchResult}};
+use battlelog::{ingame_metadata, search_user, server_snapshot, models::{IngameMetadataResponse, Player, SearchResult}};
 use chrono::prelude::*;
 use database::{establish_connection, get_battlelog_player_by_persona_id};
 use lazy_static::lazy_static;
@@ -8,19 +8,23 @@ use serenity::{async_trait, builder::{CreateComponents}, client::{Context, Event
 use shared::report::ReportModel;
 
 lazy_static! {
-    // Configure the client with your Discord bot token in the environment.
-    static ref DISCORD_TOKEN: String = dotenv::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    // The Application Id is usually the Bot User Id.
+    /// Configure the client with your Discord bot token in the environment.
+    static ref DISCORD_TOKEN: String = dotenv::var("DISCORD_TOKEN")
+        .expect("Expected a token in the environment");
+
+    /// The Application Id is usually the Bot User Id.
     static ref APPLICATION_ID: u64 = dotenv::var("APPLICATION_ID")
         .expect("Expected an application id in the environment")
         .parse()
         .expect("application id is not a valid id");
-    // Channel where admin reports will be sent
+
+    /// Channel where admin reports will be sent
     static ref ADMIN_REPORTS_CHANNEL_ID: u64 = dotenv::var("ADMIN_REPORTS_CHANNEL_ID")
         .expect("Expected an admin reports channel id in the environment")
         .parse()
         .expect("admin reports id is not a valid id");
-    // Channel where public reports will be sent
+
+    /// Channel where public reports will be sent
     #[derive(Debug)]
     static ref PUBLIC_REPORTS_CHANNEL_ID: u64 = dotenv::var("PUBLIC_REPORTS_CHANNEL_ID")
         .map(|var| var.parse::<u64>())
@@ -83,8 +87,8 @@ impl DiscordClient {
         let reported = report.reported.clone();
 
         let (issuer, target) = tokio::join!(
-            search_user(reporter.to_string()),
-            search_user(reported.to_string())
+            search_user(&reporter),
+            search_user(&reported)
         );
 
         let (stats, ingame_metadata) = tokio::join!(
