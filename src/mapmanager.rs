@@ -54,6 +54,7 @@ pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
 /////////////////////////////////////////////
 
 pub struct MapManager {
+    enabled: bool,
     inner: Mutex<Inner>,
 
     pop_states: Vec<PopState>,
@@ -95,8 +96,10 @@ impl MapManager {
         pop_states: Guard<Vec<PopState>, HasZeroPopState>,
         vehicle_threshold: usize,
         leniency: usize,
+        enabled: bool,
     ) -> Self {
         Self {
+            enabled,
             inner: Mutex::new(Inner {
                 // pool: MapPool::new(),
                 pop_state: pop_states
@@ -298,6 +301,11 @@ impl MapManager {
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        if !self.enabled {
+            debug!("Mapmanager is disabled");
+            return Ok(());
+        }
+
         // on start, get current player amounts (pop), then switch to that popstate initially.
         // In the constructor, popstate gets set to the base (0) case, but when we launch BattleFox,
         // it may not be on an empty server.

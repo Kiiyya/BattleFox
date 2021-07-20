@@ -507,6 +507,10 @@ impl Mapvote {
 
     /// Starts the main loop, listening for events, etc.
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        if !self.config.enabled {
+            debug!("Mapvote is disabled");
+            return Ok(());
+        }
         // nothing set up yet, we're waiting for the Inner to be initialized.
 
         let jh_spammer = {
