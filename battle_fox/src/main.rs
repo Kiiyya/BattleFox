@@ -89,6 +89,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
 /// Convenience thing for loading stuff from Json.
 #[derive(Debug, Serialize, Deserialize)]
 struct MapManagerConfig {
+    enabled: bool,
     pop_states: Vec<PopState>,
 
     vehicle_threshold: usize,
@@ -124,6 +125,7 @@ async fn main() -> rcon::RconResult<()> {
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
+        mapman_config.enabled,
     ));
 
     let mapvote_config: MapVoteConfigJson = load_config("configs/mapvote.yaml").await.unwrap();
