@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct MapVoteConfig {
+    pub enabled: bool,
     pub n_options: usize,
 
     /// Not even VIPs will be able to do more than this
@@ -30,6 +31,7 @@ pub struct MapVoteConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MapVoteConfigJson {
+    pub enabled: bool,
     pub n_options: usize,
 
     /// Not even VIPs will be able to do more than this
@@ -56,6 +58,7 @@ pub struct MapVoteConfigJson {
 impl MapVoteConfig {
     pub fn from_json(other: MapVoteConfigJson) -> Self {
         Self {
+            enabled: other.enabled,
             n_options: other.n_options,
             max_options: other.max_options,
             max_noms_per_vip: other.max_noms_per_vip,
