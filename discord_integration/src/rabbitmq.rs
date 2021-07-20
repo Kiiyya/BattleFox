@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use shared::report::ReportModel;
 use futures::{StreamExt};
 use lapin::{Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions}, types::FieldTable};
@@ -28,6 +30,7 @@ pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<
 
     // Start a consumer.
     let mut consumer = channel.basic_consume("bf4_reports", "reports_consumer", BasicConsumeOptions::default(), FieldTable::default()).await?;
+    let client = Arc::new(client);
     let consumer_joinhandle = tokio::spawn(async move { // the `move` will move the consumer *into* the task.
         info!("Waiting for consume...");
         while let Some(delivery) = consumer.next().await {
@@ -38,13 +41,16 @@ pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<
             let report = serde_json::from_str::<ReportModel>(&body).unwrap();
             println!("Received [{:?}]", report);
 
-            // Post report to Discord
-            client.post_report(report).await;
+            let client_clone = client.clone();
+            tokio::spawn(async move {
+                // Post report to Discord
+                client_clone.post_report(report).await;
 
-            delivery
-                .ack(BasicAckOptions::default()).await
-                .expect("ack failed");
-            info!("Acknowledged.");
+                delivery
+                    .ack(BasicAckOptions::default()).await
+                    .expect("ack failed");
+                info!("Acknowledged.");
+            });
         }
         debug!("Consumer loop ended gracefully");
     });

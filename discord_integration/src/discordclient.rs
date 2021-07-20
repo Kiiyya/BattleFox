@@ -82,10 +82,19 @@ impl DiscordClient {
         let reporter = report.reporter.clone();
         let reported = report.reported.clone();
 
-        let issuer = search_user(reporter.to_string()).await;
-        let target = search_user(reported.to_string()).await;
-        let stats = get_stats(&report.server_guid, &target, &reported).await;
-        let ingame_metadata = get_ingame_metadata(&target).await;
+        let (issuer, target) = tokio::join!(
+            search_user(reporter.to_string()),
+            search_user(reported.to_string())
+        );
+
+        let (stats, ingame_metadata) = tokio::join!(
+            get_stats(&report.server_guid, &target, &reported),
+            get_ingame_metadata(&target)
+        );
+        // let issuer = search_user(reporter.to_string()).await;
+        // let target = search_user(reported.to_string()).await;
+        // let stats = get_stats(&report.server_guid, &target, &reported).await;
+        // let ingame_metadata = get_ingame_metadata(&target).await;
 
         let http = match &self.http {
             Some(http) => http,
