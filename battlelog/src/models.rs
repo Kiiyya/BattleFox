@@ -84,6 +84,19 @@ pub struct Snapshot {
     pub team_info: HashMap<u8, TeamInfo>,
 }
 
+impl Snapshot {
+    pub fn get_player_by_personaid(&self, persona_id: u64) -> Option<&Player> {
+        self.team_info.values()
+            .find_map(|teaminfo| teaminfo.players.get(&persona_id))
+    }
+
+    pub fn get_player_by_name(&self, name: &str) -> Option<&Player> {
+        self.team_info.values()
+            .flat_map(|ti| ti.players.values())
+            .find(|p| p.name == name)
+    }
+}
+
 //#region Game modes
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

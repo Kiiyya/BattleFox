@@ -67,7 +67,7 @@ impl DiscordClient {
         //     .expect("Error creating client");
 
         // // Finally, start a single shard, and start listening to events.
-        // tokio::spawn( async move { 
+        // tokio::spawn( async move {
         //     if let Err(why) = client.start().await {
         //         println!("Client error: {:?}", why);
         //     }
@@ -123,7 +123,7 @@ impl DiscordClient {
         });
 
         let mut webhook: Option<Webhook> = None;
-        if webhooks.len() <= 0 {
+        if webhooks.is_empty() {
             let map = json!({ "name": webhook_name });
 
             match http.create_webhook(channel_id, &map).await {
@@ -309,7 +309,7 @@ impl DiscordClient {
                                         &connection,
                                         &(user.persona_id),
                                     );
-        
+
                                     match adkats_player {
                                         Ok(player) => {
                                             components.create_action_row(|r| {
@@ -384,8 +384,8 @@ async fn get_stats(
     match server_snapshot(server_guid.as_ref().unwrap().to_string()).await {
         Ok(data) => {
             return match reported {
-                Ok(user) => data.snapshot.get_player_by_personaid(&user.persona_id),
-                Err(_error) => data.snapshot.get_player_by_name(target_name),
+                Ok(user) => data.snapshot.get_player_by_personaid(user.persona_id).cloned(),
+                Err(_error) => data.snapshot.get_player_by_name(target_name).cloned(),
             };
         },
         Err(error) => error!("Error fetching snapshot: {}", error),

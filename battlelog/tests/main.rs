@@ -6,7 +6,7 @@ async fn get_snapshot() {
     let data = server_snapshot("4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()).await.unwrap();
     // println!("{:#?}", data);
 
-    let player_by_personaid = data.snapshot.get_player_by_personaid(&806262072);
+    let player_by_personaid = data.snapshot.get_player_by_personaid(806262072);
     if player_by_personaid.is_some() {
         println!("Found player by personaid: {:#?}", player_by_personaid.unwrap());
     }
