@@ -3,7 +3,7 @@ use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
 use serde::{Deserialize, Serialize};
 
-/// 
+///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ServerInfo {
     pub server_name: AsciiString,
@@ -84,7 +84,7 @@ fn parse_teamscores(words: &[AsciiString], teams_count: usize) -> TeamScores {
         offset += 1;
     }
 
-    return TeamScores {
+    TeamScores {
         number_of_entries: teams_count as i32,
         scores: teamscores,
         target_score: parse_int(&words[offset]).unwrap(),

@@ -44,7 +44,7 @@ pub mod playerreport;
 pub mod humanlang;
 mod logging;
 mod playermute;
-mod rabbitmq;
+// mod rabbitmq;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());

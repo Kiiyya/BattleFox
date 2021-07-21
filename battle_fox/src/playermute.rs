@@ -5,7 +5,7 @@ use battlefield_rcon::{bf4::{Bf4Client, Eaid, Event, CommmoRose}, rcon::RconResu
 use database::{delete_muted_player, establish_connection, get_muted_player, get_muted_players, replace_into_muted_player};
 use futures::StreamExt;
 use serde::{Serialize, Deserialize};
-use shared::{events::{PlayerMuted, PlayerUnmuted}, mute::MuteType};
+use shared::mute::MuteType;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,11 +24,9 @@ struct MutedPlayerInfo {
 
 impl PlayerMute {
     pub fn new(config: PlayerMuteConfig) -> Arc<Self> {
-        let myself = Arc::new(Self {
+        Arc::new(Self {
             config
-        });
-
-        myself
+        })
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
@@ -146,7 +144,7 @@ impl PlayerMute {
         Ok(())
     }
 
-    fn update_players(self: &Self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
+    fn update_players(&self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
         debug!("Updating muted players");
 
         match establish_connection() {
@@ -179,7 +177,7 @@ impl PlayerMute {
         }
     }
 
-    fn remove_round_mutes(self: &Self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
+    fn remove_round_mutes(&self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
         debug!("Removing round muted players");
 
         match establish_connection() {
@@ -199,7 +197,7 @@ impl PlayerMute {
         }
     }
 
-    fn add_kicked(self: &Self, eaid: &Eaid) {
+    fn add_kicked(&self, eaid: &Eaid) {
         debug!("Adding kick for {}", eaid.to_string());
 
         match establish_connection() {

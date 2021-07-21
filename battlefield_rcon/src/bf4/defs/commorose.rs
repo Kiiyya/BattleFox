@@ -1,6 +1,6 @@
 use crate::{rcon::RconError, rcon::RconResult};
 
-use ascii::{AsciiStr, AsciiString, IntoAsciiString};
+use ascii::AsciiStr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]

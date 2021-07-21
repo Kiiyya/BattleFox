@@ -30,13 +30,11 @@ enum MatchError {
 
 impl PlayerReport {
     pub fn new(players: Arc<Players>, rabbit: RabbitMq, config: PlayerReportConfig) -> Arc<Self> {
-        let myself = Arc::new(Self {
+        Arc::new(Self {
             players,
             rabbit,
             config
-        });
-
-        myself
+        })
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
@@ -138,11 +136,11 @@ impl PlayerReport {
                     };
                     info!("ServerName {:?}", server_name);
 
-                    let report = ReportModel { 
+                    let report = ReportModel {
                         reporter: player.name.to_string(),
                         reported: name.to_string(),
                         reason: reason.to_string(),
-                        server_name: server_name,
+                        server_name,
                         server_guid: self.config.server_guid.clone(),
                         bfacp_link: self.config.bfacp_url.clone()
                     };
@@ -178,12 +176,12 @@ impl PlayerReport {
         Ok(())
     }
 
-    async fn get_best_player_match(self: &Self, players: &mut HashMap<Player, PlayerInServer>, target: &str) -> Result<Player, MatchError> {
+    async fn get_best_player_match(&self, players: &mut HashMap<Player, PlayerInServer>, target: &str) -> Result<Player, MatchError> {
         self.players_contains(players, target); // Remove to allow errors in typing, for example 'I' as 'l'
 
         let players_start_with = self.players_starts_with(players, target);
 
-        if players_start_with.len() > 0 {
+        if !players_start_with.is_empty() {
             let matches = self.get_levenshtein(&players_start_with, target);
             // for (key, value) in matches.iter() {
             //     println!("distance, player: {} {:?}", key, value);
@@ -239,18 +237,18 @@ impl PlayerReport {
         }
     }
 
-    fn players_contains(self: &Self, map: &mut HashMap<Player, PlayerInServer>, target: &str) {
+    fn players_contains(&self, map: &mut HashMap<Player, PlayerInServer>, target: &str) {
         let target_lowercase = target.to_ascii_lowercase();
         map.retain(|key, _value| {
             //println!("{} / {:?}", key, value);
-    
+
             key.name.to_ascii_lowercase().to_string().contains(&target_lowercase)
         })
     }
 
-    fn players_starts_with(self: &Self, map: &HashMap<Player, PlayerInServer>, target: &str) -> HashMap<Player, PlayerInServer> {
+    fn players_starts_with(&self, map: &HashMap<Player, PlayerInServer>, target: &str) -> HashMap<Player, PlayerInServer> {
         let target_lowercase = target.to_ascii_lowercase();
-        map.into_iter().filter_map(|(key, value)| {
+        map.iter().filter_map(|(key, value)| {
             if key.name.to_ascii_lowercase().to_string().starts_with(&target_lowercase) {
                 Some((key.to_owned(), value.to_owned()))
             } else {
@@ -259,10 +257,13 @@ impl PlayerReport {
         }).collect()
     }
 
-    fn get_levenshtein(self: &Self, map: &HashMap<Player, PlayerInServer>, target: &str) -> BTreeMap<usize, Player> {
+    fn get_levenshtein(&self, map: &HashMap<Player, PlayerInServer>, target: &str) -> BTreeMap<usize, Player> {
         let target_lowercase = target.to_ascii_lowercase();
-        map.into_iter().filter_map(|(key, _value)| {
-            Some((levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()), key.to_owned()))
-        }).collect()
+        map.iter()
+            .map(|(key, _value)| (
+                levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()),
+                key.to_owned()
+            ))
+            .collect()
     }
 }
