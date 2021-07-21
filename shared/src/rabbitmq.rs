@@ -22,10 +22,18 @@ impl RabbitMq {
 
     pub async fn run(self: &mut Self) -> Result<(), anyhow::Error> {
         // Open connection
-        let connection = Connection::connect(
+        // let connection = Connection::connect(
+        //     &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
+        //     ConnectionProperties::default()
+        // ).await;
+
+        let connection = match Connection::connect(
             &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
             ConnectionProperties::default()
-        ).await.unwrap();
+        ).await {
+            Ok(file) => file,
+            Err(error) => return Err(anyhow::anyhow!("Problem connecting to RabbitMQ: {:?}", error)),
+        };
 
         // Open a channel - None says let the library choose the channel ID.
         let channel = connection.create_channel().await.unwrap();

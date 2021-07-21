@@ -13,6 +13,8 @@ use std::{
 };
 
 pub mod map;
+pub mod commorose;
+pub use commorose::{CommmoRose};
 pub use map::Map;
 pub mod vis;
 pub use vis::{Squad, Team, Visibility};
@@ -168,6 +170,12 @@ pub enum Event {
         squad: Squad,
     },
     PunkBusterMessage(String),
+    LevelLoaded {
+        level_name: Map,
+        game_mode: GameMode,
+        rounds_played: i32,
+        rounds_total: i32
+    },
 }
 
 #[derive(Debug)]

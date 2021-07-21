@@ -12,3 +12,4 @@ lapin = { version = "1.7.1", default-features = false, features = ["rustls"] }
 lazy_static = "1.4.0"
 dotenv = "0.15"
 anyhow = { version = "1.0" }
+chrono = "0.4.19"

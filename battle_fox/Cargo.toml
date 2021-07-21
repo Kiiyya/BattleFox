@@ -64,4 +64,9 @@ derive_more = "0.99" # general goodness
 git-version = "0.3"
 
 strsim = "0.10.0"
+
+lapin = { version = "1.7.1", default-features = false, features = ["rustls"] }
+lazy_static = "1.4.0"
+
 shared = { path = "../shared" }
+database = { path = "../database" }

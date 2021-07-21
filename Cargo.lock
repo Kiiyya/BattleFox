@@ -185,6 +185,7 @@ dependencies = [
  "battlefield_rcon",
  "cached",
  "combine",
+ "database",
  "derive_more",
  "dotenv",
  "either",
@@ -192,6 +193,8 @@ dependencies = [
  "futures",
  "git-version",
  "itertools 0.10.1",
+ "lapin",
+ "lazy_static",
  "lerp",
  "log",
  "maplit",
@@ -516,9 +519,11 @@ dependencies = [
 name = "database"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "diesel",
  "dotenv",
  "serde",
+ "shared",
 ]
 
 [[package]]
@@ -552,6 +557,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bba51ca66f57261fd17cadf8b73e4775cc307d0521d855de3f5de91a8f074e0e"
 dependencies = [
  "byteorder",
+ "chrono",
  "diesel_derives",
  "mysqlclient-sys",
  "url 1.7.2",
@@ -2050,6 +2056,7 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dotenv",
  "lapin",
  "lazy_static",

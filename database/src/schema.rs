@@ -7,3 +7,13 @@ table! {
         persona_banned -> Bool,
     }
 }
+
+table! {
+    bfox_muted_players (eaid) {
+        eaid -> Text,
+        #[sql_name = "type"]
+        type_ -> Integer,
+        end_date -> Nullable<Date>,
+        kicks -> Nullable<Integer>,
+    }
+}

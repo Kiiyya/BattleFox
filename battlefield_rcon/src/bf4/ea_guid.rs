@@ -91,6 +91,24 @@ impl RconEncoding for Eaid {
     }
 }
 
+impl Eaid {
+    pub fn new(ascii: &AsciiString) -> crate::rcon::RconResult<Self> {
+        let str = ascii.as_str();
+        if str.len() == 32 + 3 {
+            if &str[0..3] != "EA_" {
+                Err(RconError::protocol_msg(format!("Trying to decode \"{}\" into an EA GUID failed", ascii)))
+            } else {
+                let guid_only = &ascii.as_slice()[3..]; // skip "EA_"
+                Ok(Eaid(guid_only.try_into().unwrap())) // we can use unwrap here because we tested the length
+            }
+        } else if str.is_empty() {
+            Ok(Eaid([AsciiChar::X; 32]))
+        } else {
+            Err(RconError::protocol_msg(format!("Trying to decode \"{}\" into an EA GUID failed", ascii)))
+        }
+    }
+}
+
 impl Display for Eaid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "EA_{}", self.0.as_ascii_str().unwrap())

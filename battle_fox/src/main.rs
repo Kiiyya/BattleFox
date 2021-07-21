@@ -29,7 +29,7 @@ use mapvote::{
     Mapvote,
 };
 
-use crate::weaponforcer::WeaponEnforcerConfig;
+use crate::{playermute::{PlayerMute, PlayerMuteConfig}, weaponforcer::WeaponEnforcerConfig};
 use crate::playerreport::PlayerReportConfig;
 
 pub mod guard;
@@ -43,6 +43,8 @@ pub mod weaponforcer;
 pub mod playerreport;
 pub mod humanlang;
 mod logging;
+mod playermute;
+mod rabbitmq;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -108,7 +110,7 @@ async fn main() -> rcon::RconResult<()> {
     let players = Arc::new(Players::new());
     let mut rabbitmq = RabbitMq::new(None);
     if let Err(why) = rabbitmq.run().await {
-        println!("Error running rabbitmq publisher: {:?}", why);
+        error!("Error running rabbitmq publisher - Player Reports won't work: {:?}", why);
     }
     let vips = Arc::new(Vips::new());
 
@@ -117,6 +119,9 @@ async fn main() -> rcon::RconResult<()> {
 
     let playerreport_config : PlayerReportConfig = load_config("configs/playerreport.yaml").await.unwrap();
     let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
+
+    let playermute_config : PlayerMuteConfig = load_config("configs/playermute.yaml").await.unwrap();
+    let playermute = PlayerMute::new(playermute_config);
 
     // let commands = Arc::new(Commands::new());
 
@@ -184,6 +189,9 @@ async fn main() -> rcon::RconResult<()> {
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { playerreport.run(bf4clone).await }));
+
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { playermute.run(bf4clone).await }));
 
     // Wait for all our spawned tasks to finish.
     // This'll happen at shutdown, or never, when you CTRL-C.
