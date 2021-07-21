@@ -102,32 +102,27 @@ impl PlayerMute {
                 Ok(Event::Chat { vis: _, player, msg }) => {
                     debug!("{} > {}", player.name, msg);
 
-                    let bf4 = bf4.clone();
-                    let offenses = Arc::clone(&offenses);
-                    let playerreport = self.clone();
+                    if msg.as_str().starts_with('/') { continue; }
+                    if CommmoRose::decode(&msg).is_ok() { continue; }
 
-                    tokio::spawn(async move {
-                        let mut offenses = offenses
-                            .lock()
-                            .await;
+                    let mut lock = offenses.lock().await;
+                    if let Some(muted_player) = lock.get_mut(&player.eaid) {
+                        muted_player.infractions += 1;
+                        let infractions = muted_player.infractions;
+                        drop(lock);
 
-                        if CommmoRose::decode(&msg).is_err() { // Not a commo rose message
-                            if !msg.as_str().starts_with("/") && offenses.contains_key(&player.eaid) {
-                                let pinfo = offenses.get_mut(&player.eaid).unwrap();
-                                pinfo.infractions += 1;
-
-                                if pinfo.infractions >= 2 {
-                                    drop(offenses);
-                                    let _ = dbg!(bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await);
-                                    playerreport.add_kicked(&player.eaid);
-                                } else {
-                                    drop(offenses);
-                                    let _ = dbg!(bf4.kill(player.name.clone()).await);
-                                    let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
-                                }
+                        let bf4 = bf4.clone();
+                        let self_clone = self.clone();
+                        tokio::spawn(async move {
+                            if infractions >= 2 {
+                                let _ = dbg!(bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await);
+                                self_clone.add_kicked(&player.eaid); // FIXME: this makes several synchronous blocking SQL / Diesel calls!
+                            } else {
+                                let _ = dbg!(bf4.kill(player.name.clone()).await);
+                                let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
                             }
-                        }
-                    });
+                        });
+                    }
                 },
                 Ok(Event::RoundOver { winning_team }) => {
                     debug!("Player Mute - Round Over: {:#?}", winning_team);
