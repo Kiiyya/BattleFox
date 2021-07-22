@@ -20,14 +20,37 @@ pub struct Context {
     pub user: User,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Game {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub persona_id: u64,
-    pub user: User,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// #[serde(rename_all = "camelCase")]
+// pub struct Game {
+//     #[serde(deserialize_with = "deserialize_number_from_string")]
+//     pub persona_id: u64,
+//     pub user: User,
+// }
 
+/// # Example
+/// ```ron
+/// SearchResult {
+///     picture: "",
+///     user_id: 2955058489260500539,
+///     user: User {
+///         username: Some(
+///             "PocketWolfy",
+///         ),
+///         gravatar_md5: Some(
+///             "b97c726c98f9f615bd62088c9e4c5cb4",
+///         ),
+///         user_id: 2955058489260500539,
+///         created_at: 1393081344,
+///     },
+///     persona_id: 994520424,
+///     persona_name: "PocketWolfy",
+///     namespace: "cem_ea_id",
+///     games: {
+///         1: "2050",
+///     },
+/// }
+/// ```
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
@@ -64,6 +87,68 @@ pub struct KeeperResponse {
     pub snapshot: Snapshot,
 }
 
+/// # Example
+/// ```ron
+/// KeeperResponse {
+///     last_updated: 1626814,
+///     snapshot: Snapshot {
+///         status: "SUCCESS",
+///         game_id: 18014398528206305,
+///         game_mode: "RushLarge",
+///         map_variant: 0,
+///         current_map: "XP0/Levels/XP1_002_Oman/XP0_Oman",
+///         max_players: 64,
+///         waiting_players: 2,
+///         round_time: 348,
+///         default_round_time_multiplier: 100,
+///         rush: Some(
+///             Rush {
+///                 defenders: Defenders {
+///                     team: 2,
+///                     bases: 2,
+///                     bases_max: 3,
+///                     attacker: 0,
+///                 },
+///                 attackers: Attackers {
+///                     team: 1,
+///                     tickets: 163,
+///                     tickets_max: 300,
+///                     attacker: 1,
+///                 },
+///             },
+///         ),
+///         conquest: None,
+///         deathmatch: None,
+///         carrier_assault: None,
+///         team_info: {
+///             2: TeamInfo {
+///                 faction: 1,
+///                 players: {
+///                     994520424: Player {
+///                         name: "PocketWolfy",
+///                         tag: "Kiss",
+///                         rank: 140,
+///                         score: 213,
+///                         kills: 1,
+///                         deaths: 1,
+///                         squad: 6,
+///                         role: 1,
+///                     },
+///                     // ...
+///                 },
+///             },
+///             0: TeamInfo {
+///                 faction: 0,
+///                 players: { /* ... */ },
+///             },
+///             1: TeamInfo {
+///                 faction: 0,
+///                 players: { /* ... */ },
+///             },
+///         },
+///     },
+/// }
+/// ```
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -82,6 +167,19 @@ pub struct Snapshot {
     pub carrier_assault: Option<HashMap<u8, CarrierAssault>>,
     // TODO: Add rest of the game modes
     pub team_info: HashMap<u8, TeamInfo>,
+}
+
+impl Snapshot {
+    pub fn get_player_by_personaid(&self, persona_id: u64) -> Option<&Player> {
+        self.team_info.values()
+            .find_map(|teaminfo| teaminfo.players.get(&persona_id))
+    }
+
+    pub fn get_player_by_name(&self, name: &str) -> Option<&Player> {
+        self.team_info.values()
+            .flat_map(|ti| ti.players.values())
+            .find(|p| p.name == name)
+    }
 }
 
 //#region Game modes
@@ -161,4 +259,14 @@ pub struct IngameMetadataResponse {
     pub emblem_url: String,
     pub club_name: String,
     pub country_code: String,
+}
+
+impl IngameMetadataResponse {
+    pub fn get_emblem_url(&self) -> Option<String> {
+        if self.emblem_url.is_empty() {
+            return None;
+        }
+
+        Some(self.emblem_url.replace(".dds", ".png"))
+    }
 }
