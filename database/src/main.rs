@@ -21,8 +21,9 @@ fn main() {
                 type_: 1,
                 end_date: None,
                 kicks: Some(5),
+                reason: Some("Test".to_string())
             };
-            replace_into_muted_player(&con, player).unwrap();
+            replace_into_muted_player(&con, &player).unwrap();
 
             // Delete a muted player
             delete_muted_player(&con, "EA_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX".to_string()).unwrap();

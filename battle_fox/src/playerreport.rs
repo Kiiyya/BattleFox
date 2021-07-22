@@ -1,13 +1,12 @@
-use std::{collections::{BTreeMap, HashMap}, sync::Arc};
+use std::{collections::{HashMap}, sync::Arc};
 
 use ascii::AsciiString;
 use battlefield_rcon::{bf4::{Bf4Client, Event, Player, Visibility}, rcon::RconResult};
 use futures::StreamExt;
 use serde::{Serialize, Deserialize};
-use strsim::levenshtein;
 use shared::{rabbitmq::RabbitMq, report::ReportModel};
 
-use crate::players::{PlayerInServer, Players};
+use crate::players::{MatchError, Players};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlayerReportConfig {
@@ -23,20 +22,13 @@ pub struct PlayerReport {
     config: PlayerReportConfig
 }
 
-enum MatchError {
-    NoMatches,
-    TooMany,
-}
-
 impl PlayerReport {
     pub fn new(players: Arc<Players>, rabbit: RabbitMq, config: PlayerReportConfig) -> Arc<Self> {
-        let myself = Arc::new(Self {
+        Arc::new(Self {
             players,
             rabbit,
             config
-        });
-
-        myself
+        })
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
@@ -58,17 +50,6 @@ impl PlayerReport {
                     tokio::spawn(async move {
                         let _ = playerreport.handle_chat_msg(bf4, vis, player, msg).await;
                     });
-
-                    // if msg.as_str().starts_with("/haha next map") && player.name == "PocketWolfy" {
-                    //     let mapman = self.mapman.clone();
-                    //     tokio::spawn(async move {
-                    //         mapvote.handle_round_over(&bf4).await;
-                    //     });
-                    // } else {
-                    //     tokio::spawn(async move {
-                    //         let _ = mapvote.handle_chat_msg(bf4, vis, player, msg).await;
-                    //     });
-                    // }
                 },
                 Ok(Event::RoundOver { winning_team: _ }) => {
                     reports.clear();
@@ -124,11 +105,7 @@ impl PlayerReport {
             let reason = split[2..].join(" ");
 
             info!("Reported player {}", target);
-
-            let playerreport = self.clone();
-            let mut players = self.players.players(&bf4).await;
-
-            match playerreport.get_best_player_match(&mut players, target).await {
+            match self.players.get_best_player_match(target).await {
                 Ok(Player { name, eaid }) => {
                     info!("Match for {} / {}", name, eaid);
 
@@ -138,11 +115,11 @@ impl PlayerReport {
                     };
                     info!("ServerName {:?}", server_name);
 
-                    let report = ReportModel { 
+                    let report = ReportModel {
                         reporter: player.name.to_string(),
                         reported: name.to_string(),
                         reason: reason.to_string(),
-                        server_name: server_name,
+                        server_name,
                         server_guid: self.config.server_guid.clone(),
                         bfacp_link: self.config.bfacp_url.clone()
                     };
@@ -176,93 +153,5 @@ impl PlayerReport {
         }
 
         Ok(())
-    }
-
-    async fn get_best_player_match(self: &Self, players: &mut HashMap<Player, PlayerInServer>, target: &str) -> Result<Player, MatchError> {
-        self.players_contains(players, target); // Remove to allow errors in typing, for example 'I' as 'l'
-
-        let players_start_with = self.players_starts_with(players, target);
-
-        if players_start_with.len() > 0 {
-            let matches = self.get_levenshtein(&players_start_with, target);
-            // for (key, value) in matches.iter() {
-            //     println!("distance, player: {} {:?}", key, value);
-            // }
-
-            // let mut sorted: Vec<_> = matches.iter().collect();
-            // println!("Not ordered {:?}", sorted);
-
-            // sorted.sort_by_key(|a| a.0);
-            // println!("Ordered{:?}", sorted);
-
-            if matches.is_empty() {
-                Err(MatchError::NoMatches)
-            }
-            else if matches.len() == 1 {
-                Ok(matches.iter().next().unwrap().1.clone())
-            }
-            else {
-                Err(MatchError::TooMany)
-            }
-        }
-        else {
-            let matches = self.get_levenshtein(&players, target);
-            // for (key, value) in matches.iter() {
-            //     println!("distance, player: {} {:?}", key, value);
-            // }
-
-            // let mut sorted: Vec<_> = matches.iter().collect();
-            // println!("Not ordered {:?}", sorted);
-
-            // sorted.sort_by_key(|a| a.0);
-            // println!("Ordered{:?}", sorted);
-
-            if matches.is_empty() {
-                Err(MatchError::NoMatches)
-            }
-            else if matches.len() == 1 {
-                Ok(matches.iter().next().unwrap().1.clone())
-            }
-            else {
-                let mut iterator = matches.iter();
-
-                let first = iterator.next().unwrap();
-                let second = iterator.next().unwrap();
-
-                if second.0 - first.0 > 2 {
-                    Ok(first.1.clone())
-                }
-                else {
-                    Err(MatchError::TooMany)
-                }
-            }
-        }
-    }
-
-    fn players_contains(self: &Self, map: &mut HashMap<Player, PlayerInServer>, target: &str) {
-        let target_lowercase = target.to_ascii_lowercase();
-        map.retain(|key, _value| {
-            //println!("{} / {:?}", key, value);
-    
-            key.name.to_ascii_lowercase().to_string().contains(&target_lowercase)
-        })
-    }
-
-    fn players_starts_with(self: &Self, map: &HashMap<Player, PlayerInServer>, target: &str) -> HashMap<Player, PlayerInServer> {
-        let target_lowercase = target.to_ascii_lowercase();
-        map.into_iter().filter_map(|(key, value)| {
-            if key.name.to_ascii_lowercase().to_string().starts_with(&target_lowercase) {
-                Some((key.to_owned(), value.to_owned()))
-            } else {
-                None
-            }
-        }).collect()
-    }
-
-    fn get_levenshtein(self: &Self, map: &HashMap<Player, PlayerInServer>, target: &str) -> BTreeMap<usize, Player> {
-        let target_lowercase = target.to_ascii_lowercase();
-        map.into_iter().filter_map(|(key, _value)| {
-            Some((levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()), key.to_owned()))
-        }).collect()
     }
 }

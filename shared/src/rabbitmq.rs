@@ -16,11 +16,11 @@ pub struct RabbitMq {
 impl RabbitMq {
     pub fn new(channel: Option<Channel>) -> Self {
         Self {
-            channel: channel
+            channel
         }
     }
 
-    pub async fn run(self: &mut Self) -> Result<(), anyhow::Error> {
+    pub async fn run(&mut self,) -> Result<(), anyhow::Error> {
         // Open connection
         // let connection = Connection::connect(
         //     &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
@@ -48,7 +48,7 @@ impl RabbitMq {
         Ok(())
     }
 
-    pub async fn queue_report(self: &Self, report: ReportModel) -> Result<(), anyhow::Error> {
+    pub async fn queue_report(&self, report: ReportModel) -> Result<(), anyhow::Error> {
         // Publish a message to the "bf4_reports" queue.
         match &self.channel {
             Some(channel) => {
@@ -68,6 +68,6 @@ impl RabbitMq {
                 Ok(())
             },
             None => Err(anyhow::anyhow!("RabbitMq channel hasn't been created. Did you forget to call run?")),
-        } 
+        }
     }
 }

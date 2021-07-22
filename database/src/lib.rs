@@ -43,7 +43,7 @@ pub fn get_muted_players(conn: &MysqlConnection) -> Result<Vec<BfoxMutedPlayer>,
         .load(conn)
 }
 
-pub fn get_muted_player(conn: &MysqlConnection, id: &String) -> Result<BfoxMutedPlayer, diesel::result::Error> {
+pub fn get_muted_player(conn: &MysqlConnection, id: &str) -> Result<BfoxMutedPlayer, diesel::result::Error> {
     use schema::bfox_muted_players::dsl::{eaid, bfox_muted_players};
 
     bfox_muted_players
@@ -51,7 +51,7 @@ pub fn get_muted_player(conn: &MysqlConnection, id: &String) -> Result<BfoxMuted
         .first(conn)
 }
 
-pub fn replace_into_muted_player(conn: &MysqlConnection, player: BfoxMutedPlayer) -> Result<(), Box<dyn Error>> {
+pub fn replace_into_muted_player(conn: &MysqlConnection, player: &BfoxMutedPlayer) -> Result<(), Box<dyn Error>> {
     use schema::bfox_muted_players::dsl::*;
 
     // let primary_key = player.eaid.clone();
@@ -64,7 +64,7 @@ pub fn replace_into_muted_player(conn: &MysqlConnection, player: BfoxMutedPlayer
     // println!("Count: {}", exists);
 
     replace_into(bfox_muted_players)
-        .values(&player)
+        .values(&*player)
         .execute(conn)?;
 
     Ok(())

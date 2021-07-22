@@ -15,5 +15,6 @@ table! {
         type_ -> Integer,
         end_date -> Nullable<Date>,
         kicks -> Nullable<Integer>,
+        reason -> Nullable<Text>,
     }
 }

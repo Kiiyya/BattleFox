@@ -19,5 +19,6 @@ pub struct BfoxMutedPlayer {
     pub eaid: String,
     pub type_: i32,
     pub end_date: Option<NaiveDate>,
-    pub kicks: Option<i32>
+    pub kicks: Option<i32>,
+    pub reason: Option<String>
 }

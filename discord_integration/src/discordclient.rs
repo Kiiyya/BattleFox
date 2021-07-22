@@ -54,7 +54,7 @@ impl DiscordClient {
         Self { http }
     }
 
-    pub async fn run(self: &mut Self) -> Result<(), anyhow::Error> {
+    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         let http = HttpBuilder::new(DISCORD_TOKEN.clone())
             .application_id(*APPLICATION_ID)
             .await
@@ -80,7 +80,7 @@ impl DiscordClient {
         Ok(())
     }
 
-    pub async fn post_report(self: &Self, report: ReportModel) {
+    pub async fn post_report(&self, report: ReportModel) {
         println!("{:#?}", report);
 
         let reporter = report.reporter.clone();
@@ -112,7 +112,7 @@ impl DiscordClient {
     }
 
     async fn ensure_webhook(
-        self: &Self,
+        &self,
         http: &Http,
         channel_id: u64,
         webhook_name: &str,
@@ -130,19 +130,16 @@ impl DiscordClient {
         if webhooks.is_empty() {
             let map = json!({ "name": webhook_name });
 
-            match http.create_webhook(channel_id, &map).await {
-                Ok(hook) => webhook = Some(hook),
-                _ => (),
-            }
+            if let Ok(hook) = http.create_webhook(channel_id, &map).await { webhook = Some(hook) }
         } else {
             webhook = Some(webhooks.remove(0));
         }
 
-        return webhook;
+        webhook
     }
 
     async fn post_admin_report(
-        self: &Self,
+        &self,
         http: &Http,
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
@@ -158,20 +155,17 @@ impl DiscordClient {
         let map = value.as_object().unwrap();
 
         // Execute webhook
-        match webhook {
-            Some(webhook) => {
-                println!("{:#?}", webhook.url());
-                let _message = http
-                    .execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map)
-                    .await
-                    .unwrap();
-            }
-            _ => (),
+        if let Some(webhook) = webhook {
+            println!("{:#?}", webhook.url());
+            let _message = http
+                .execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map)
+                .await
+                .unwrap();
         }
     }
 
     async fn post_public_report(
-        self: &Self,
+        &self,
         http: &Http,
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
@@ -191,20 +185,17 @@ impl DiscordClient {
         let map = value.as_object().unwrap();
 
         // Execute webhook
-        match webhook {
-            Some(webhook) => {
-                println!("{:#?}", webhook.url());
-                let _message = http
-                    .execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map)
-                    .await
-                    .unwrap();
-            }
-            _ => (),
+        if let Some(webhook) = webhook {
+            println!("{:#?}", webhook.url());
+            let _message = http
+                .execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map)
+                .await
+                .unwrap();
         }
     }
 
     fn build_report_message(
-        self: &Self,
+        &self,
         is_admin: bool,
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
@@ -233,18 +224,14 @@ impl DiscordClient {
                     );
                 }
                 None => {
-                    e.field("Server", format!("{}", server_name), false);
+                    e.field("Server", server_name.to_string(), false);
                 }
             }
 
             // Try adding stats if they exist
-            match stats {
-                Some(player) => {
-                    e.field("Stats", format!("**Score**: {0}", player.score), true)
-                     .field("\n\u{200b}", format!("**K/D**: {0}/{1}", player.kills, player.deaths), true);
-
-                },
-                _ => ()
+            if let Some(player) = stats {
+                e.field("Stats", format!("**Score**: {0}", player.score), true)
+                 .field("\n\u{200b}", format!("**K/D**: {0}/{1}", player.kills, player.deaths), true);
             }
 
             // Author (the person reported)
@@ -261,8 +248,7 @@ impl DiscordClient {
 
             // Target emblem
             ingame_metadata.as_ref()
-                .and_then(|data| data.get_emblem_url())
-                .and_then(|url| Some(e.thumbnail(url)));
+                .and_then(|data| data.get_emblem_url()).map(|url| e.thumbnail(url));
 
             // Set title, color, last updated time and footer
             let last_updated_time: DateTime<Utc> = Utc::now();
@@ -305,36 +291,33 @@ impl DiscordClient {
 
                 // Admin links
                 if is_admin {
-                    match bfacp_url {
-                        Some(link) => {
-                            match establish_connection() {
-                                Ok(connection) => {
-                                    let adkats_player = get_battlelog_player_by_persona_id(
-                                        &connection,
-                                        &(user.persona_id),
-                                    );
+                    if let Some(link) = bfacp_url {
+                        match establish_connection() {
+                            Ok(connection) => {
+                                let adkats_player = get_battlelog_player_by_persona_id(
+                                    &connection,
+                                    &(user.persona_id),
+                                );
 
-                                    match adkats_player {
-                                        Ok(player) => {
-                                            components.create_action_row(|r| {
-                                                r.create_button(|b| {
-                                                    b.label("BFACP")
-                                                        .url(format!(
-                                                            "{0}/players/{1}/{2}",
-                                                            link, player.player_id, user.persona_name
-                                                        ))
-                                                        .style(ButtonStyle::Link)
-                                                });
-                                                r
+                                match adkats_player {
+                                    Ok(player) => {
+                                        components.create_action_row(|r| {
+                                            r.create_button(|b| {
+                                                b.label("BFACP")
+                                                    .url(format!(
+                                                        "{0}/players/{1}/{2}",
+                                                        link, player.player_id, user.persona_name
+                                                    ))
+                                                    .style(ButtonStyle::Link)
                                             });
-                                        }
-                                        Err(err) => println!("Error fetching adkats_player: {}", err),
+                                            r
+                                        });
                                     }
-                                },
-                                Err(error) => error!("Failed to connect to database: {}", error),
-                            }
+                                    Err(err) => println!("Error fetching adkats_player: {}", err),
+                                }
+                            },
+                            Err(error) => error!("Failed to connect to database: {}", error),
                         }
-                        _ => (),
                     }
                 }
             }
@@ -401,16 +384,13 @@ async fn get_stats(
 async fn get_ingame_metadata(
     reported: &Result<SearchResult, anyhow::Error>
 ) -> Option<IngameMetadataResponse> {
-    match reported {
-        Ok(user) => {
-            match ingame_metadata(user.persona_id).await {
-                Ok(data) => {
-                    return Some(data);
-                },
-                Err(error) => error!("Error fetching ingame metadata: {}", error),
-            }
+    if let Ok(user) = reported {
+        match ingame_metadata(user.persona_id).await {
+            Ok(data) => {
+                return Some(data);
+            },
+            Err(error) => error!("Error fetching ingame metadata: {}", error),
         }
-        _ => ()
     };
 
     None

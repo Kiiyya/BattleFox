@@ -44,7 +44,6 @@ pub mod playerreport;
 pub mod humanlang;
 mod logging;
 mod playermute;
-mod rabbitmq;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -121,7 +120,7 @@ async fn main() -> rcon::RconResult<()> {
     let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
 
     let playermute_config : PlayerMuteConfig = load_config("configs/playermute.yaml").await.unwrap();
-    let playermute = PlayerMute::new(playermute_config);
+    let playermute = PlayerMute::new(players.clone(), playermute_config);
 
     // let commands = Arc::new(Commands::new());
 
