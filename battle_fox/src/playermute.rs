@@ -25,6 +25,7 @@ pub struct PlayerMute {
 struct MutedPlayerInfo {
     infractions: usize,
     mute_type: MuteType,
+    #[allow(dead_code)]
     reason: Option<String>
 }
 
@@ -107,44 +108,37 @@ impl PlayerMute {
                 Ok(Event::Chat { vis: _, player, msg }) => {
                     trace!("{} > {}", player.name, msg);
 
-                    let bf4 = bf4.clone();
-                    let offenses = Arc::clone(&offenses);
-                    let playerreport = self.clone();
+                    if msg.as_str().starts_with('/') { continue; }
+                    if CommmoRose::decode(&msg).is_ok() { continue; }
 
-                    tokio::spawn(async move {
-                        let mut muted_players = offenses
-                            .lock()
-                            .await;
+                    let mut lock = offenses.lock().await;
+                    if let Some(muted_player) = lock.get_mut(&player.eaid) {
+                        muted_player.infractions += 1;
+                        let infractions = muted_player.infractions;
+                        drop(lock);
 
-                        if CommmoRose::decode(&msg).is_err() { // Not a commo rose message
-                            if !msg.as_str().starts_with('/') && muted_players.contains_key(&player.eaid) {
-                                let pinfo = muted_players.get_mut(&player.eaid).unwrap();
-                                pinfo.infractions += 1;
-
-                                if pinfo.infractions >= 2 {
-                                    drop(muted_players);
-                                    match bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await {
-                                        Ok(_) => {
-                                            playerreport.add_kicked(&player.eaid);
-                                        },
-                                        Err(error) => {
-                                            let _ = dbg!(error);
-                                        }
-                                    };
-                                } else {
-                                    drop(muted_players);
-                                    let _ = dbg!(bf4.kill(player.name.clone()).await);
-                                    let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
-                                }
-                            }
-                            else {
-                                drop(muted_players);
+                        let bf4 = bf4.clone();
+                        let offenses = Arc::clone(&offenses);
+                        let self_clone = self.clone();
+                        tokio::spawn(async move {
+                            if infractions >= 2 {
+                                match bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await {
+                                    Ok(_) => {
+                                        self_clone.add_kicked(&player.eaid).await;
+                                    },
+                                    Err(error) => {
+                                        let _ = dbg!(error);
+                                    }
+                                };
+                            } else {
+                                let _ = dbg!(bf4.kill(player.name.clone()).await);
+                                let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
                             }
 
                             // Mute/Unmute command handling
-                            let _ = playerreport.handle_chat_msg(bf4, player, msg, &offenses).await;
-                        }
-                    });
+                            let _ = self_clone.handle_chat_msg(bf4, player, msg, &offenses).await;
+                        });
+                    }
                 },
                 Ok(Event::RoundOver { winning_team }) => {
                     debug!("Player Mute - Round Over: {:#?}", winning_team);
@@ -370,22 +364,25 @@ impl PlayerMute {
         }
     }
 
-    fn add_kicked(&self, eaid: &Eaid) {
+    async fn add_kicked(&self, eaid: &Eaid) {
         debug!("Adding kick for {}", eaid.to_string());
 
-        match establish_connection() {
-            Ok(con) => {
-                if let Ok(mut player) = get_muted_player(&con, &eaid.to_string()) {
-                    player.kicks = Some(player.kicks.unwrap_or(0) + 1);
-
-                    match replace_into_muted_player(&con, &player) {
-                        Ok(_) => debug!("Added kick for {}", eaid.to_string()),
-                        Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
+        let eaid = *eaid;
+        tokio::task::spawn_blocking(move || {
+            match establish_connection() {
+                Ok(con) => {
+                    if let Ok(mut player) = get_muted_player(&con, &eaid.to_string()) {
+                        player.kicks = Some(player.kicks.unwrap_or(0) + 1);
+    
+                        match replace_into_muted_player(&con, &player) {
+                            Ok(_) => debug!("Added kick for {}", eaid.to_string()),
+                            Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
+                        }
                     }
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
-        }
+                },
+                Err(error) => error!("Failed to connect to database: {}", error),
+            }
+        });
     }
 
     fn try_get_muted_player(&self, eaid: &str) -> Option<BfoxMutedPlayer> {
