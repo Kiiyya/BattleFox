@@ -1,0 +1,17 @@
+version: '3.2'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "16672:15672"
+      - "6672:5672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=DefaultUser
+      - RABBITMQ_DEFAULT_PASS=DefaulPassword
+    networks:
+      - network
+
+networks:
+  network:
+    driver: overlay

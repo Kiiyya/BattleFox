@@ -1,16 +1,13 @@
 //! Keeps track all players currently on the server.
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::{BTreeMap, HashMap}, sync::Arc, time::{Duration, Instant}};
 
 use battlefield_rcon::{
     bf4::{Bf4Client, Event, Player, Squad, Team, Visibility},
     rcon::RconResult,
 };
 use futures::StreamExt;
+use strsim::levenshtein;
 use tokio::sync::Mutex;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -27,6 +24,12 @@ struct PlayerJoining {
     pub team: Option<Team>,
     pub squad: Option<Squad>,
     pub last_seen: Instant,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum MatchError {
+    NoMatches,
+    TooMany,
 }
 
 #[derive(Debug)]
@@ -127,6 +130,84 @@ impl Players {
         }
         inner.last_checked = Some(now);
         getter(&mut inner)
+    }
+
+    pub async fn get_best_player_match(&self, target: &str) -> Result<Player, MatchError> {
+        let inner = self.inner.lock().await;
+        // let mut current_players = inner.players.clone();
+
+        let target_lowercase = target.to_ascii_lowercase();
+        // Remove to allow errors in typing, for example 'I' as 'l'
+        let current_players = inner.players
+            .iter()
+            .filter(|(k, _v)| k.name.to_ascii_lowercase().to_string().contains(&target_lowercase))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        drop(inner);
+
+        //self.players_contains(&current_players, target); // Remove to allow errors in typing, for example 'I' as 'l'
+
+        let players_start_with = self.players_starts_with(&current_players, target);
+        if !players_start_with.is_empty() {
+            let matches = self.get_levenshtein(&players_start_with, target);
+            if matches.is_empty() {
+                Err(MatchError::NoMatches)
+            }
+            else if matches.len() == 1 {
+                Ok(matches.iter().next().unwrap().1.clone())
+            }
+            else {
+                Err(MatchError::TooMany)
+            }
+        }
+        else {
+            let matches = self.get_levenshtein(&current_players, target);
+            if matches.is_empty() {
+                Err(MatchError::NoMatches)
+            }
+            else if matches.len() == 1 {
+                Ok(matches.iter().next().unwrap().1.clone())
+            }
+            else {
+                let mut iterator = matches.iter();
+
+                let first = iterator.next().unwrap();
+                let second = iterator.next().unwrap();
+
+                if second.0 - first.0 > 2 {
+                    Ok(first.1.clone())
+                }
+                else {
+                    Err(MatchError::TooMany)
+                }
+            }
+        }
+    }
+
+    // fn players_contains(&self, map: &mut HashMap<Player, PlayerInServer>, target: &str) {
+    //     let target_lowercase = target.to_ascii_lowercase();
+    //     map.retain(|key, _value| {
+    //         key.name.to_ascii_lowercase().to_string().contains(&target_lowercase)
+    //     })
+    // }
+
+    fn players_starts_with(&self, map: &HashMap<Player, PlayerInServer>, target: &str) -> HashMap<Player, PlayerInServer> {
+        let target_lowercase = target.to_ascii_lowercase();
+        map.iter().filter_map(|(key, value)| {
+            if key.name.to_ascii_lowercase().to_string().starts_with(&target_lowercase) {
+                Some((key.to_owned(), value.to_owned()))
+            } else {
+                None
+            }
+        }).collect()
+    }
+
+    fn get_levenshtein(&self, map: &HashMap<Player, PlayerInServer>, target: &str) -> BTreeMap<usize, Player> {
+        let target_lowercase = target.to_ascii_lowercase();
+        map.iter().map(|(key, _value)| {
+            (levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()), key.to_owned())
+        }).collect()
     }
 
     pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
