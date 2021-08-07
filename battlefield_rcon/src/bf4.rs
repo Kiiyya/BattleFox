@@ -23,7 +23,7 @@ pub mod player_info_block;
 pub mod server_info;
 mod util;
 
-pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, Weapon};
+pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, CommmoRose, Weapon};
 pub use ea_guid::Eaid;
 
 // cmd_err!(pub PlayerKickError, PlayerNotFound, A);
@@ -323,6 +323,20 @@ impl Bf4Client {
             "punkBuster.onMessage" => {
                 assert_len(&packet, 2)?;
                 Ok(Event::PunkBusterMessage(packet.words[1].to_string()))
+            }
+            "server.onLevelLoaded" => {
+                if packet.words.len() != 5 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have {} words", &packet.words[0], 5),
+                    )));
+                }
+                Ok(Event::LevelLoaded {
+                    level_name: Map::rcon_decode(&packet.words[1])?,
+                    game_mode: GameMode::rcon_decode(&packet.words[2])?,
+                    rounds_played: packet.words[3].as_str().parse::<i32>().unwrap(), 
+                    rounds_total: packet.words[4].as_str().parse::<i32>().unwrap()
+                })
             }
             _ => Err(Bf4Error::UnknownEvent(packet.words)),
         }

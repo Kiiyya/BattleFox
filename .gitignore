@@ -1,3 +1,5 @@
 /target
 .env*
 /logs
+docker-compose-local.yml
+docker-compose-local2.yml

@@ -15,7 +15,9 @@ use dotenv::dotenv;
 use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shared::rabbitmq::RabbitMq;
 use weaponforcer::WeaponEnforcer;
+use playerreport::PlayerReport;
 use std::{env::var, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vips::Vips;
@@ -27,7 +29,8 @@ use mapvote::{
     Mapvote,
 };
 
-use crate::weaponforcer::WeaponEnforcerConfig;
+use crate::{playermute::{PlayerMute, PlayerMuteConfig}, weaponforcer::WeaponEnforcerConfig};
+use crate::playerreport::PlayerReportConfig;
 
 pub mod guard;
 // pub mod commands;
@@ -37,8 +40,10 @@ pub mod vips;
 pub mod players;
 mod stv;
 pub mod weaponforcer;
+pub mod playerreport;
 pub mod humanlang;
 mod logging;
+mod playermute;
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -85,6 +90,7 @@ async fn save_config<T: Serialize>(path: &str, obj: &T) -> Result<(), ConfigErro
 /// Convenience thing for loading stuff from Json.
 #[derive(Debug, Serialize, Deserialize)]
 struct MapManagerConfig {
+    enabled: bool,
     pop_states: Vec<PopState>,
 
     vehicle_threshold: usize,
@@ -101,10 +107,20 @@ async fn main() -> rcon::RconResult<()> {
 
     let coninfo = get_rcon_coninfo()?;
     let players = Arc::new(Players::new());
+    let mut rabbitmq = RabbitMq::new(None);
+    if let Err(why) = rabbitmq.run().await {
+        error!("Error running rabbitmq publisher - Player Reports won't work: {:?}", why);
+    }
     let vips = Arc::new(Vips::new());
 
     let weaponforcer_config : WeaponEnforcerConfig = load_config("configs/weaponforcer.yaml").await.unwrap();
     let weaponforcer = WeaponEnforcer::new(weaponforcer_config);
+
+    let playerreport_config : PlayerReportConfig = load_config("configs/playerreport.yaml").await.unwrap();
+    let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
+
+    let playermute_config : PlayerMuteConfig = load_config("configs/playermute.yaml").await.unwrap();
+    let playermute = PlayerMute::new(players.clone(), playermute_config);
 
     // let commands = Arc::new(Commands::new());
 
@@ -113,6 +129,7 @@ async fn main() -> rcon::RconResult<()> {
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
         mapman_config.vehicle_threshold,
         mapman_config.leniency,
+        mapman_config.enabled,
     ));
 
     let mapvote_config: MapVoteConfigJson = load_config("configs/mapvote.yaml").await.unwrap();
@@ -168,6 +185,12 @@ async fn main() -> rcon::RconResult<()> {
 
     let bf4clone = bf4.clone();
     jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
+
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { playerreport.run(bf4clone).await }));
+
+    let bf4clone = bf4.clone();
+    jhs.push(tokio::spawn(async move { playermute.run(bf4clone).await }));
 
     // Wait for all our spawned tasks to finish.
     // This'll happen at shutdown, or never, when you CTRL-C.

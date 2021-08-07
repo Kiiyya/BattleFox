@@ -106,7 +106,7 @@ enum Type<'a> {
 pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, reserved: impl Iterator<Item = &'a str>) -> HashMap<&'a str, usize> {
     let mut trie : Node<Type<'a>> = Node::new();
     set.for_each(|s| {
-        trie.insert(s.as_ref(), Type::Normal(s.as_ref()));
+        trie.insert(s.as_ref(), Type::Normal(s));
     });
     reserved.for_each(|s| {
         dbg!(s);
