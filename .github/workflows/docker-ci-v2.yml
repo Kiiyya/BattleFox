@@ -1,4 +1,4 @@
-name: docker-ci
+name: docker-ci-v2
 
 on:
   push:
