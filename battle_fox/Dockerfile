@@ -13,6 +13,7 @@ COPY ./battle_fox/Cargo.toml ./battle_fox/Cargo.lock ./
 RUN echo "openssl = { version = \"0.10\", features = [\"vendored\"] }" >> ./Cargo.toml
 COPY ./battlefield_rcon ../battlefield_rcon
 COPY ./shared ../shared
+COPY ./database ../database
 RUN cargo build --release
 
 COPY ./battle_fox/src ./src

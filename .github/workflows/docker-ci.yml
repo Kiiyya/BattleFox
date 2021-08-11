@@ -1,0 +1,112 @@
+name: docker-ci
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  RELEASE_VERSION: ${{ github.run_number }}
+  COMMIT_HASH: ${{ github.sha }}
+
+jobs:
+  checkwebhookurl:
+    name: check if WEBHOOK_URL is set in github secrets
+    runs-on: ubuntu-latest
+    outputs:
+      is_WEBHOOK_URL_set: ${{ steps.checksecret_job.outputs.is_WEBHOOK_URL_set }}
+    steps:
+      - name: Check whether unity activation requests should be done
+        id: checksecret_job
+        env:
+            WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+            echo "is_WEBHOOK_URL_set: ${{ env.WEBHOOK_URL != '' }}"
+            echo "::set-output name=is_WEBHOOK_URL_set::${{ env.WEBHOOK_URL != '' }}"
+
+  build_and_push:
+    needs: [checkwebhookurl]
+    name: Build docker images and push to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      - 
+        name: Set commit tag to env
+        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - 
+        name: Print release version
+        run: |
+          echo $COMMIT_TAG
+          echo ${{ env.COMMIT_TAG }}
+      # Creating builders
+      -
+        uses: docker/setup-buildx-action@v1
+        id: builder_battlefox
+      -
+        uses: docker/setup-buildx-action@v1
+        id: builder_bfoxdiscord
+      # Printing builders
+      -
+        name: Battlefox builder name
+        run: echo ${{ steps.builder_battlefox.outputs.name }}
+      -
+        name: BFoxDiscord builder name
+        run: echo ${{ steps.builder_bfoxdiscord.outputs.name }}
+      # Caching layers for faster building
+      -
+        name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      # Logging in to DockerHub
+      - 
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      # Building images and pushing them to DockerHub
+      - 
+        name: Build battlefox and push
+        id: battlefox_build
+        uses: docker/build-push-action@v2
+        with:
+          builder: ${{ steps.builder_battlefox.outputs.name }}
+          context: .
+          file: ./battle_fox/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+      - 
+        name: Build bfoxdiscord and push
+        id: bfoxdiscord_build
+        uses: docker/build-push-action@v2
+        with:
+          builder: ${{ steps.builder_battlefox.outputs.name }}
+          context: .
+          file: ./discord_integration/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/bfoxdiscord:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/bfoxdiscord:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+      # Printing image digests
+      - 
+        name: Image digest for battlefox
+        run: echo ${{ steps.battlefox_build.outputs.digest }}
+      - 
+        name: Image digest for bfoxdiscord
+        run: echo ${{ steps.bfoxdiscord_build.outputs.digest }}
+      # Invoking deployment hook
+      - if: needs.checkwebhookurl.outputs.is_WEBHOOK_URL_set == 'true'
+        name: Invoke deployment hook
+        uses: distributhor/workflow-webhook@v1
+        env:
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          data: '{ "commit_tag": "${{ env.COMMIT_TAG }}" }'
