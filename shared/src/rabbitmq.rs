@@ -4,9 +4,9 @@ use lazy_static::lazy_static;
 use crate::report::ReportModel;
 
 lazy_static! {
-    static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").expect("Expected a RabbitMQ username in the environment");
-    static ref RABBITMQ_PASSWORD: String = dotenv::var("RABBITMQ_PASSWORD").expect("Expected a RabbitMQ password in the environment");
-    static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").expect("Expected a RabbitMQ host in the environment");
+    static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").unwrap_or("DefaultUser".to_string());
+    static ref RABBITMQ_PASSWORD: String = dotenv::var("RABBITMQ_PASSWORD").unwrap_or("DefaultPassword".to_string());
+    static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").unwrap_or("rabbitmq".to_string());
 }
 
 pub struct RabbitMq {

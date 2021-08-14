@@ -104,7 +104,7 @@ impl Inner {
         }
     }
 
-    fn vip_nom(&mut self, vip: &Guard<Player, YesVip>, map: Map) {
+    fn vip_nom(&mut self, vip: &Guard<Player, YesVip>, map: Map, vehicles: Option<bool>) {
         if let Some(v) = self.nominations.get_mut(vip) {
             v.insert(map);
         } else {
@@ -115,7 +115,7 @@ impl Inner {
         self.alternatives.pool.push(MapInPool {
             map,
             mode: GameMode::Rush,
-            vehicles: None, // TODO: Add option for removing vehicles
+            vehicles: vehicles
         });
         self.update_matchers(true);
     }
@@ -134,7 +134,7 @@ impl Inner {
             // msg += "\t";
             for (mip, matcher) in chunk {
                 // TODO: Add [NV] for vehicle_threshold as well
-                msg += &format!("\t{}\t{}{}", matcher.number, mip.map.tab4_prefixlen(matcher.minlen), if mip.vehicles.unwrap_or(true) { "" } else { "[NV]" }); // TODO: trim last \t of last chunk item.
+                msg += &format!("\t{}\t{}", matcher.number, mip.map.tab4_prefixlen_wvehicles(matcher.minlen, mip.vehicles.unwrap_or(true))); // TODO: trim last \t of last chunk item.
             }
             msg += "\n"; // TODO: trim last \n of last line.
         }
@@ -742,6 +742,7 @@ impl Mapvote {
         bf4: Arc<Bf4Client>,
         player: Guard<Player, MaybeVip>,
         map: NomMapParseResult,
+        vehicles: Option<bool>
     ) {
         match player.cases() {
             Left(player) => {
@@ -762,7 +763,7 @@ impl Mapvote {
                                         if inner.vip_n_noms(&player) < self.config.max_noms_per_vip
                                         {
                                             // phew, that's a lot of ifs...
-                                            inner.vip_nom(&player, map);
+                                            inner.vip_nom(&player, map, vehicles);
 
                                             let announce = self.config.announce_nominator.unwrap_or(true);
                                             if announce {
@@ -892,6 +893,10 @@ impl Mapvote {
                     },
                     None => NomMapParseResult::Empty,
                 };
+
+                let vehicles = split.get(2)
+                    .and_then(|val| Some(!val.eq_ignore_ascii_case("inf")));
+                    
                 tokio::spawn({
                     let player = player.clone();
                     let bf4 = bf4.clone();
@@ -900,7 +905,7 @@ impl Mapvote {
                         let vip = myself
                             .vips
                             .get_player_use(&player, &bf4, |g| async {
-                                myself.handle_nomination(bf4.clone(), g, map).await;
+                                myself.handle_nomination(bf4.clone(), g, map, vehicles).await;
                             })
                             .await;
                         if let Ok(vip) = vip {

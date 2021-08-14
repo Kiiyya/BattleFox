@@ -1,3 +1,4 @@
 /target
 /logs
+/configs_test
 .env*

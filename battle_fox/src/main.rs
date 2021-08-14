@@ -10,7 +10,7 @@
 // const GIT_VERSION : &str = git_describe!();
 const GIT_VERSION : &str = git_version!();
 
-use ascii::IntoAsciiString;
+use ascii::{IntoAsciiString};
 use dotenv::dotenv;
 use guard::Guard;
 use players::Players;
@@ -19,10 +19,10 @@ use shared::rabbitmq::RabbitMq;
 use weaponforcer::WeaponEnforcer;
 use playerreport::PlayerReport;
 use std::{env::var, sync::Arc};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}};
 use vips::Vips;
 
-use battlefield_rcon::{bf4::Bf4Client, rcon::{self, RconConnectionInfo}};
+use battlefield_rcon::{bf4::{Bf4Client}, rcon::{self, RconConnectionInfo}};
 use mapmanager::{MapManager, PopState};
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},
@@ -105,6 +105,8 @@ async fn main() -> rcon::RconResult<()> {
 
     info!("This is BattleFox {}", GIT_VERSION);
 
+    let configs_path = dotenv::var("CONFIGS_PATH").unwrap_or("configs/".to_string());
+
     let coninfo = get_rcon_coninfo()?;
     let players = Arc::new(Players::new());
     let mut rabbitmq = RabbitMq::new(None);
@@ -113,18 +115,18 @@ async fn main() -> rcon::RconResult<()> {
     }
     let vips = Arc::new(Vips::new());
 
-    let weaponforcer_config : WeaponEnforcerConfig = load_config("configs/weaponforcer.yaml").await.unwrap();
+    let weaponforcer_config : WeaponEnforcerConfig = load_config(&format!("{}weaponforcer.yaml", configs_path)).await.unwrap();
     let weaponforcer = WeaponEnforcer::new(weaponforcer_config);
 
-    let playerreport_config : PlayerReportConfig = load_config("configs/playerreport.yaml").await.unwrap();
+    let playerreport_config : PlayerReportConfig = load_config(&format!("{}playerreport.yaml", configs_path)).await.unwrap();
     let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
 
-    let playermute_config : PlayerMuteConfig = load_config("configs/playermute.yaml").await.unwrap();
+    let playermute_config : PlayerMuteConfig = load_config(&format!("{}playermute.yaml", configs_path)).await.unwrap();
     let playermute = PlayerMute::new(players.clone(), playermute_config);
 
     // let commands = Arc::new(Commands::new());
 
-    let mapman_config: MapManagerConfig = load_config("configs/mapman.yaml").await.unwrap();
+    let mapman_config: MapManagerConfig = load_config(&format!("{}mapman.yaml", configs_path)).await.unwrap();
     let mapman = Arc::new(MapManager::new(
         Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
         mapman_config.vehicle_threshold,
@@ -132,7 +134,7 @@ async fn main() -> rcon::RconResult<()> {
         mapman_config.enabled,
     ));
 
-    let mapvote_config: MapVoteConfigJson = load_config("configs/mapvote.yaml").await.unwrap();
+    let mapvote_config: MapVoteConfigJson = load_config(&format!("{}mapvote.yaml", configs_path)).await.unwrap();
     let mapvote = Mapvote::new(
         mapman.clone(),
         vips.clone(),
@@ -150,22 +152,35 @@ async fn main() -> rcon::RconResult<()> {
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     trace!("Connected!");
 
-    // for i in 0..10 {
-    //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();
-    //     sleep(Duration::from_millis(2000)).await;
-    // }
+    // { // Testing stuff
+    //     let player = Player {
+    //         name: AsciiString::from_ascii("xfileFIN").unwrap(),
+    //         eaid: Eaid::new(&AsciiString::from_ascii("EA_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX").unwrap()).unwrap(),
+    //     };
+    //     // for i in 0..10 {
+    //     //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();
+    //     //     sleep(Duration::from_millis(2000)).await;
+    //     // }
 
-    // for map in battlefield_rcon::bf4::Map::all() {
-    //     let mut msg = "\t".to_string();
-    //     for minlen in 0..3 {
-    //         msg += &format!("{}", map.tab4_prefixlen(minlen));
-    //         // let upper = map.short()[..minlen].to_ascii_uppercase();
-    //         // let lower = map.short()[minlen..].to_string();
-    //         // msg += &format!("[\t{}{}\t]  ", upper, lower); // TODO: trim last \t of last chunk item
+    //     for map in battlefield_rcon::bf4::Map::all() {
+    //         let mut msg = "\t".to_string();
+    //         for minlen in 2..5 {
+    //             msg += &format!("{}", map.tab4_prefixlen_wvehicles(minlen, false));
+    //             // let upper = map.short()[..minlen].to_ascii_uppercase();
+    //             // let lower = map.short()[minlen..].to_string();
+    //             // msg += &format!("[\t{}{}\t]  ", upper, lower); // TODO: trim last \t of last chunk item
+    //         }
+    //         msg += "|";
+    //         bf4.say(msg, &player).await.unwrap();
+    //         sleep(Duration::from_millis(1500)).await;
     //     }
-    //     msg += "|";
-    //     bf4.say(msg, battlefield_rcon::bf4::Visibility::All).await.unwrap();
-    //     sleep(Duration::from_millis(150)).await;
+        
+    //     // bf4.say("Test", Player {
+    //     //     name: AsciiString::from_ascii("xfileFIN").unwrap(),
+    //     //     eaid: Eaid::new(&AsciiString::from_ascii("EA_FCB11161E04E98494AEB5A91A9329486").unwrap()).unwrap(),
+    //     // }).await.unwrap();
+
+    //     return Ok(());
     // }
 
     // start parts.
