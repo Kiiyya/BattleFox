@@ -8,10 +8,12 @@ use serde::{Deserialize, Serialize};
 /// Simple Triple of
 /// - map
 /// - game mode (Rush, Conquest, ...)
+/// - vehicles (None -> Adaptive based on vehicle_threshold, False -> No vehicles, True -> Vehicles)
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef)]
 pub struct MapInPool {
     pub map: Map,
     pub mode: GameMode,
+    pub vehicles: Option<bool>
 }
 
 impl Display for MapInPool {
@@ -45,12 +47,13 @@ impl From<Vec<MapInPool>> for MapPool {
         }
     }
 }
-impl From<Vec<(Map, GameMode)>> for MapPool {
-    fn from(pool: Vec<(Map, GameMode)>) -> Self {
+impl From<Vec<(Map, GameMode, Option<bool>)>> for MapPool {
+    fn from(pool: Vec<(Map, GameMode, Option<bool>)>) -> Self {
         Self {
-            pool: pool.iter().map(|(map, mode)| MapInPool {
+            pool: pool.iter().map(|(map, mode, vehicles)| MapInPool {
                 map: *map,
                 mode: mode.clone(),
+                vehicles: *vehicles
             }).collect()
         }
     }
@@ -215,6 +218,7 @@ mod tests {
             pool: vec![MapInPool {
                 map: Map::Metro,
                 mode: GameMode::Rush,
+                vehicles: None,
             }],
         };
 
@@ -223,10 +227,12 @@ mod tests {
                 MapInPool {
                     map: Map::Metro,
                     mode: GameMode::Rush,
+                    vehicles: None,
                 },
                 MapInPool {
                     map: Map::Locker,
                     mode: GameMode::Rush,
+                    vehicles: None,
                 },
             ],
         };
@@ -235,6 +241,7 @@ mod tests {
             pool: vec![MapInPool {
                 map: Map::Locker,
                 mode: GameMode::Rush,
+                vehicles: None,
             }],
         };
 
@@ -249,10 +256,12 @@ mod tests {
                 MapInPool {
                     map: Map::Metro,
                     mode: GameMode::Rush,
+                    vehicles: None,
                 },
                 MapInPool {
                     map: Map::Locker,
                     mode: GameMode::Rush,
+                    vehicles: None,
                 },
             ],
         };
@@ -261,6 +270,7 @@ mod tests {
             pool: vec![MapInPool {
                 map: Map::Metro,
                 mode: GameMode::Rush,
+                vehicles: None,
             }],
         };
 
@@ -268,6 +278,7 @@ mod tests {
             pool: vec![MapInPool {
                 map: Map::Locker,
                 mode: GameMode::Rush,
+                vehicles: None,
             }],
         };
 

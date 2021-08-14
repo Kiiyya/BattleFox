@@ -142,7 +142,7 @@ jobs:
   
   call_webhook:
     needs: [checkwebhookurl, build_and_push_battlefox, build_and_push_bfoxdiscord]
-    name: Build docker images and push to Docker Hub
+    name: Call webhook after images have been pushed (if configured)
     runs-on: ubuntu-latest
     steps:
       -
