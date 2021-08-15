@@ -24,7 +24,13 @@ impl Display for MapInPool {
 
 impl std::fmt::Debug for MapInPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.map.short(), self.mode)
+        write!(f, "{}@{}", self.map.short(), self.mode)?;
+        match self.vehicles {
+            Some(true) => { write!(f, "+veh")?; },
+            Some(false) => { write!(f, "-veh")?; },
+            None => (),
+        }
+        Ok(())
     }
 }
 

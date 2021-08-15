@@ -10,6 +10,8 @@
 //! preserved between the maps which remain.
 
 use std::{cmp::max, collections::{BTreeSet, HashMap, HashSet}, hash::Hash};
+use itertools::Itertools;
+
 use crate::mapmanager::pool::MapInPool;
 use super::prefixes::shortest_unique_prefixes;
 
@@ -31,7 +33,6 @@ pub struct AltMatcher {
     /// Minimal unique prefix length length.
     /// For example, for PearlMarket you have `pearl`, which with a `minlen` of 2 would result
     /// in `pe`, `pea`, `pear`, `pearl` matching, but not `p`.
-    /// Always at least 1.
     pub minlen: usize,
 }
 
@@ -39,14 +40,23 @@ pub type AltMatchers = HashMap<MapInPool, AltMatcher>;
 
 /// For a given set of alternatives, find [`AltMatcher`]s, i.e. a (mostly) random number usually
 /// between 1 and 6, and compute the minimal unique prefix length.
+///
 /// Optionally, proving the old matchers will reuse the same numbers for the same maps, only
 /// filling in new numbers for new alternatives.
+///
+/// If there is collisions with regards to vehicles or not, then the minlen is set to 0.
+/// This is because we want to print both `pearl` and `pearl[INF]` in all lowercase.
 pub fn to_matchers(
 	alts: &(impl IntoIterator<Item = MapInPool, IntoIter = impl Iterator<Item = MapInPool>> + Clone),
 	minlen: usize,
 	reserved_trie: &HashSet<impl AsRef<str> /* + std::fmt::Debug */>,
 	old_matchers: Option<&AltMatchers>) -> AltMatchers
 {
+	let collisions: HashSet<_> = alts.clone().into_iter()
+		.map(|mip: MapInPool| mip.map.short())
+		.duplicates()
+		.collect();
+
 	// dbg!(reserved_trie);
 	// for every alternative, get the unique prefix lenghts.
 	let mut prefixes = shortest_unique_prefixes(
@@ -57,6 +67,11 @@ pub fn to_matchers(
 	// apply minlen
 	prefixes.retain(|k, v| {
 		*v = max(minlen, *v);
+
+		// if there is a collision, we want to print both "pearl" and "pearl[INF]" in all lowercase.
+		if collisions.contains(k) {
+			*v = 0;
+		}
 		true
 	});
 
