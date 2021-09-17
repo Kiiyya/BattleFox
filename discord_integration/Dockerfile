@@ -4,7 +4,7 @@ WORKDIR /usr/src/
 
 RUN USER=root cargo new battlefox
 WORKDIR /usr/src/battlefox
-COPY ./discord_integration/Cargo.toml ./discord_integration/Cargo.lock ./
+COPY ./discord_integration/Cargo.toml ./
 COPY ./battlelog ../battlelog
 COPY ./database ../database
 COPY ./shared ../shared
