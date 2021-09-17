@@ -1,8 +1,13 @@
+# Let's keep this dockerignore file as a *supserset* of gitignore.
+
+# Exactly .gitignore
 /target
 .env*
 /logs
-Cargo.lock
-Cargo.toml
-docker-compose*
+docker-compose-*
+act.secrets
+mongodb_data
+
+# Additional stuff
 .github
 .vscode

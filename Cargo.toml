@@ -8,6 +8,7 @@ panic = 'abort'     # Abort on panic. Supposedly helps reduzing binary size.
 members = [
 	"battlefield_rcon",
 	"battle_fox",
+	"battlefox_web",
 	"discord_integration",
 	"battlelog",
 	"shared",

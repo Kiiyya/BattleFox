@@ -150,7 +150,12 @@ impl MapManager {
         mip: &MapInPool,
     ) -> Result<(), MapListError> {
         let pop = self.get_pop_count(bf4).await?;
-        let vehicles = pop >= self.vehicle_threshold;
+        let mut vehicles = pop >= self.vehicle_threshold;
+
+        if let Some(vehicles_enabled) = mip.vehicles {
+            trace!("Overriding vehicles enabled from {:?} to {:?}", vehicles, vehicles_enabled);
+            vehicles = vehicles_enabled;
+        };
 
         // let pop_state = {
         //     let lock = self.inner.lock().await;
@@ -421,6 +426,7 @@ pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool, MapListErro
         pool.pool.push(MapInPool {
             map: mle.map,
             mode: mle.game_mode,
+            vehicles: None, // TODO: Should this be somehow populated?
         });
     }
 

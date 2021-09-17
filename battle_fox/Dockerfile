@@ -9,10 +9,11 @@ COPY .git .
 
 RUN USER=root cargo new battlefox
 WORKDIR /usr/src/battlefox
-COPY ./battle_fox/Cargo.toml ./battle_fox/Cargo.lock ./
+COPY ./battle_fox/Cargo.toml ./
 RUN echo "openssl = { version = \"0.10\", features = [\"vendored\"] }" >> ./Cargo.toml
 COPY ./battlefield_rcon ../battlefield_rcon
 COPY ./shared ../shared
+COPY ./database ../database
 RUN cargo build --release
 
 COPY ./battle_fox/src ./src

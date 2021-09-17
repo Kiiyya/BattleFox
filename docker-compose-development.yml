@@ -3,6 +3,8 @@ version: '3.2'
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    container_name: rabbitmq-bfox-dev
+    restart: always
     ports:
       - "16672:15672"
       - "6672:5672"
@@ -10,8 +12,22 @@ services:
       - RABBITMQ_DEFAULT_USER=DefaultUser
       - RABBITMQ_DEFAULT_PASS=DefaulPassword
     networks:
-      - network
+      - bfox_dev
+
+  mongo:
+    image: mongo
+    container_name: mongodb-bfox-dev
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: verysecure
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongodb_data:/data/db
+    networks:
+      - bfox_dev
 
 networks:
-  network:
-    driver: overlay
+  bfox_dev:
+    # driver: overlay

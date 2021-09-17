@@ -115,6 +115,7 @@ impl Inner {
         self.alternatives.pool.push(MapInPool {
             map,
             mode: GameMode::Rush,
+            vehicles: None, // TODO: Add option for removing vehicles
         });
         self.update_matchers(true);
     }
@@ -132,7 +133,8 @@ impl Inner {
         {
             // msg += "\t";
             for (mip, matcher) in chunk {
-                msg += &format!("\t{}\t{}", matcher.number, mip.map.tab4_prefixlen(matcher.minlen)); // TODO: trim last \t of last chunk item.
+                // TODO: Add [NV] for vehicle_threshold as well
+                msg += &format!("\t{}\t{}{}", matcher.number, mip.map.tab4_prefixlen(matcher.minlen), if mip.vehicles.unwrap_or(true) { "" } else { "[NV]" }); // TODO: trim last \t of last chunk item.
             }
             msg += "\n"; // TODO: trim last \n of last line.
         }
@@ -604,20 +606,20 @@ impl Mapvote {
         if let Some(inner) = &mut *lock {
             let not_in_popstate = prefs
                 .iter()
-                .filter(|MapInPool { map, mode }| !inner.popstate.pool.contains_map(*map))
+                .filter(|MapInPool { map, mode, vehicles}| !inner.popstate.pool.contains_map(*map))
                 .cloned()
                 .collect::<Vec<_>>();
             // Remove maps which are forbidden by pop state.
-            prefs.retain(|MapInPool { map, mode }| inner.popstate.pool.contains_map(*map));
+            prefs.retain(|MapInPool { map, mode, vehicles}| inner.popstate.pool.contains_map(*map));
 
             let not_in_options = prefs
                 .iter()
-                .filter(|MapInPool { map, mode }| !inner.alternatives.contains_map(*map))
+                .filter(|MapInPool { map, mode, vehicles}| !inner.alternatives.contains_map(*map))
                 .cloned()
                 .collect::<Vec<_>>();
             // the maps are in the popstate, but aren't up to be chosen right now.
             // Nomination possible.
-            prefs.retain(|MapInPool { map, mode }| inner.alternatives.contains_map(*map));
+            prefs.retain(|MapInPool { map, mode, vehicles}| inner.alternatives.contains_map(*map));
 
             let weight = match player.clone().cases() {
                 Left(yesvip) => Rat::one() + Rat::one(), // 2
@@ -625,9 +627,10 @@ impl Mapvote {
             };
 
             // now, attempt to deduplicate (Ballot:from_iter(..) does that for us)
-            let alts = prefs.iter().map(|MapInPool { map, mode }| MapInPool {
+            let alts = prefs.iter().map(|MapInPool { map, mode, vehicles}| MapInPool {
                 map: *map,
                 mode: mode.clone(),
+                vehicles: *vehicles
             });
             let (ballot, soft_dups) = match Ballot::from_iter(weight, alts) {
                 CheckBallotResult::Ok { ballot, soft_dups } => (ballot, soft_dups),
@@ -760,10 +763,19 @@ impl Mapvote {
                                         {
                                             // phew, that's a lot of ifs...
                                             inner.vip_nom(&player, map);
-                                            futures.push(bf4.say_lines(vec![
-                                                format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
-                                                format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
-                                            ], Visibility::All));
+
+                                            let announce = self.config.announce_nominator.unwrap_or(true);
+                                            if announce {
+                                                futures.push(bf4.say_lines(vec![
+                                                    format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
+                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                ], Visibility::All));
+                                            }
+                                            else {
+                                                futures.push(bf4.say_lines(vec![
+                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                ], Visibility::All));
+                                            }
                                         } else {
                                             futures.push(bf4.say_lines(vec![
                                                 format!("Apologies, {}, you can't nominate more maps.", &*player),
