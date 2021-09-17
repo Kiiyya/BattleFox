@@ -18,7 +18,7 @@ simplelog = "0.10.0"
 lazy_static = "1.4.0"
 anyhow = { version = "1.0" }
 
-serenity = { version = "0.10.8", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "unstable_discord_api"] }
+serenity = { version = "0.10.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "unstable_discord_api"] }
 battlelog = { path = "../battlelog" }
 shared = { path = "../shared" }
 database = { path = "../database" }
