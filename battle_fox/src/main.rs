@@ -5,10 +5,15 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
 #[macro_use] extern crate derive_more;
-#[macro_use] extern crate git_version;
 
-// const GIT_VERSION : &str = git_describe!();
-const GIT_VERSION : &str = git_version!();
+// Instead of `cargo build`, set env vars:
+//     RUSTFLAGS='--cfg take_git_version_from_env'
+//     GIT_VERSION_HASH='823we8fgse8f7gasef7238r27wef'
+// And then `cargo build`.
+#[cfg(not(take_git_version_from_env))]
+const GIT_VERSION : &str = git_version::git_version!();
+#[cfg(take_git_version_from_env)]
+const GIT_VERSION : &str = env!("GIT_VERSION_HASH");
 
 use ascii::IntoAsciiString;
 use dotenv::dotenv;

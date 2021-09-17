@@ -8,7 +8,7 @@ on:
 
 env:
   RELEASE_VERSION: ${{ github.run_number }}
-  COMMIT_HASH: ${{ github.sha }}
+  GIT_VERSION_HASH: ${{ github.sha }}
 
 jobs:
   battlefox_web:
