@@ -250,20 +250,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "battlelog"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "http",
- "reqwest",
- "serde",
- "serde-aux",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "bfox_web"
+name = "battlefox_web"
 version = "0.1.0"
 dependencies = [
  "dotenv",
@@ -275,6 +262,19 @@ dependencies = [
  "rocket",
  "rocket_db_pools",
  "serde",
+]
+
+[[package]]
+name = "battlelog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "http",
+ "reqwest",
+ "serde",
+ "serde-aux",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

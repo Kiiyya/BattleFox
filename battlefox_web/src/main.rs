@@ -5,7 +5,7 @@ use rocket_db_pools::Database;
 use rocket::{figment::map, fs::FileServer, get, launch, response::Redirect, routes};
 
 #[derive(Debug, Database)]
-#[database("bfox_web")]
+#[database("battlefox_web")]
 pub struct Db(mongodb::Client);
 
 // #[get("/")]
@@ -22,7 +22,7 @@ fn rocket() -> _ {
 
     let figment = rocket::Config::figment()
         .merge(("address", "0.0.0.0"))
-        .merge(("databases.bfox_web", map!["url" => db_url]));
+        .merge(("databases.battlefox_web", map!["url" => db_url]));
 
     rocket::custom(figment)
         .attach(Db::init())
