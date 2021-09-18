@@ -11,7 +11,7 @@
 //     GIT_DESCRIBE='823we8fgse8f7gasef7238r27wef'
 // And then `cargo build`.
 #[cfg(not(take_git_version_from_env))]
-const GIT_DESCRIBE : &str = git_version::git_version!();
+const GIT_DESCRIBE : &str = git_version::git_version!(); // if Rust-Analyzer complains, disable the `unresolved-macro-call` diagnostic: https://github.com/rust-analyzer/rust-analyzer/issues/8477#issuecomment-817736916
 #[cfg(take_git_version_from_env)]
 const GIT_DESCRIBE : &str = env!("GIT_DESCRIBE");
 
