@@ -1,6 +1,6 @@
 [package]
-name = "discord_integration"
-version = "0.1.0"
+name = "battlefox_discord"
+version = "0.2.2"
 authors = ["Razer2015 <razer138@gmail.com>"]
 edition = "2018"
 

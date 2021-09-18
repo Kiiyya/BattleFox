@@ -4,14 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
-    # branches:
-    #   - '**'
-    # tags:
-    #   - 'v*.*.*'
+    branches:
+      - main
   # pull_request:
   #   branches:
   #     - 'master'
-  workflow_dispatch:
+  workflow_dispatch: # enable button on github to manually trigger this
 
 env:
   RELEASE_VERSION: ${{ github.run_number }}

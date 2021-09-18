@@ -250,8 +250,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "battlefox_discord"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "battlelog",
+ "chrono",
+ "database",
+ "dotenv",
+ "futures",
+ "lapin",
+ "lazy_static",
+ "log",
+ "serde",
+ "serde_json",
+ "serenity",
+ "shared",
+ "simplelog",
+ "tokio",
+]
+
+[[package]]
 name = "battlefox_web"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "dotenv",
  "itertools 0.10.1",
@@ -730,27 +751,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "discord_integration"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "battlelog",
- "chrono",
- "database",
- "dotenv",
- "futures",
- "lapin",
- "lazy_static",
- "log",
- "serde",
- "serde_json",
- "serenity",
- "shared",
- "simplelog",
- "tokio",
 ]
 
 [[package]]

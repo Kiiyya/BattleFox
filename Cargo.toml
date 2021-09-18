@@ -9,7 +9,7 @@ members = [
 	"battlefield_rcon",
 	"battlefox",
 	"battlefox_web",
-	"discord_integration",
+	"battlefox_discord",
 	"battlelog",
 	"shared",
 	"database",
