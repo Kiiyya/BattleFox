@@ -55,7 +55,7 @@ pub fn parse_serverinfo(words: &[AsciiString]) -> RconResult<ServerInfo> {
         map: words[4].clone(),
         rounds_played: parse_int(&words[5])?,
         rounds_total: parse_int(&words[6])?,
-        scores: parse_teamscores(&words, teams_count),
+        scores: parse_teamscores(words, teams_count),
         online_state: words[offset + 9].clone(),
         ranked: parse_bool(&words[offset + 10])?,
         punkbuster: parse_bool(&words[offset + 11])?,

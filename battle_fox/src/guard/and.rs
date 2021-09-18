@@ -8,6 +8,7 @@ use super::{Judgement, SimpleJudgement};
 pub struct And<A, B>(A, B);
 impl<A, B> And<A, B> {
     /// Constructs a a proof that both `A` and `B` hold.
+    #[allow(clippy::self_named_constructors)]
     pub fn and(p1: A, p2: B) -> And<A, B> {
         And(p1, p2)
     }

@@ -456,7 +456,7 @@ impl RconClient {
                         sequence += 1;
 
                         let bytes = packet.serialize();
-                        match tcp_write.write(&bytes.as_slice()).await {
+                        match tcp_write.write(bytes.as_slice()).await {
                             Ok(n) if n == bytes.len() => {},
                             Ok(_) /* otherwise */     => panic!("Failed to send packet in its entirety"), // TODO potentially better error handling.
                             Err(e) => {
@@ -480,7 +480,7 @@ impl RconClient {
                             sequence += 1;
 
                             let bytes = packet.serialize();
-                            match tcp_write.write(&bytes.as_slice()).await {
+                            match tcp_write.write(bytes.as_slice()).await {
                                 Ok(n) if n == bytes.len() => {},
                                 Ok(_) /* otherwise */     => panic!("Failed to send packet in its entirety"), // TODO potentially better error handling.
                                 Err(e) => {

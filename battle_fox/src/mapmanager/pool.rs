@@ -35,15 +35,9 @@ impl std::fmt::Debug for MapInPool {
 }
 
 /// Helper struct to make diffing map pools easier.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MapPool {
     pub pool: Vec<MapInPool>,
-}
-
-impl Default for MapPool {
-    fn default() -> Self {
-        Self { pool: Vec::new() }
-    }
 }
 
 impl From<Vec<MapInPool>> for MapPool {
@@ -96,7 +90,7 @@ impl MapPool {
         self.pool
             .iter()
             .enumerate()
-            .filter(|(_, mip)| mip.map == map && &mip.mode == mode && extra_matcher(&mip))
+            .filter(|(_, mip)| mip.map == map && &mip.mode == mode && extra_matcher(mip))
             .map(|(i, _)| i)
             .next()
     }

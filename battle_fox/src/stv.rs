@@ -316,7 +316,7 @@ where
     pub fn scores(&self) -> HashMap<A, Rat> {
         self.alts
             .iter()
-            .map(|alt| (alt.to_owned(), self.score(&alt)))
+            .map(|alt| (alt.to_owned(), self.score(alt)))
             .collect()
     }
 
@@ -338,7 +338,7 @@ where
             // transfer everything
             profile = profile.t_to_all(r, &Rat::one(), tracer);
             profile = profile.consume(r, tracer);
-            tracer.eliminating(&r, &profile);
+            tracer.eliminating(r, &profile);
         }
 
         profile

@@ -334,7 +334,7 @@ impl Bf4Client {
                 Ok(Event::LevelLoaded {
                     level_name: Map::rcon_decode(&packet.words[1])?,
                     game_mode: GameMode::rcon_decode(&packet.words[2])?,
-                    rounds_played: packet.words[3].as_str().parse::<i32>().unwrap(), 
+                    rounds_played: packet.words[3].as_str().parse::<i32>().unwrap(),
                     rounds_total: packet.words[4].as_str().parse::<i32>().unwrap()
                 })
             }
@@ -439,7 +439,7 @@ impl Bf4Client {
         self.rcon
             .query(
                 &words,
-                |ok| parse_serverinfo(&ok).map_err(|rconerr| rconerr.into()),
+                |ok| parse_serverinfo(ok).map_err(|rconerr| rconerr.into()),
                 |_| None,
             )
             .await
@@ -451,7 +451,7 @@ impl Bf4Client {
         self.rcon
             .query(
                 &words,
-                |ok| parse_pib(&ok).map_err(|rconerr| rconerr.into()),
+                |ok| parse_pib(ok).map_err(|rconerr| rconerr.into()),
                 |_| None,
             )
             .await
@@ -622,7 +622,7 @@ impl Bf4Client {
         self.rcon
             .query(
                 &veca!["maplist.list", "0"],
-                |ok| Ok(map_list::parse_map_list(&ok)?),
+                |ok| Ok(map_list::parse_map_list(ok)?),
                 |_| None,
             )
             .await

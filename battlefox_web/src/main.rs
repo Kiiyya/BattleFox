@@ -2,7 +2,7 @@ use std::env;
 
 use dotenv::dotenv;
 use rocket_db_pools::Database;
-use rocket::{figment::map, fs::FileServer, get, launch, response::Redirect, routes};
+use rocket::{figment::map, fs::FileServer, launch};
 
 #[derive(Debug, Database)]
 #[database("battlefox_web")]

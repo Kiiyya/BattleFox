@@ -560,7 +560,7 @@ impl Mapvote {
     }
 
     async fn broadcast_status(&self, bf4: &Bf4Client) {
-        let players = self.players.players(&bf4).await;
+        let players = self.players.players(bf4).await;
         let mut futures = Vec::new();
         let lock = self.inner.lock().await;
         if let Some(inner) = &*lock {
