@@ -148,7 +148,7 @@ mod tests {
         }
 
         // Uncomment to actually display the output of the println!() statements above:
-        panic!();
+        // panic!();
     }
 
     #[tokio::test]
@@ -160,6 +160,6 @@ mod tests {
 	#[tokio::test]
 	async fn search_user_test() {
 		dbg!(search_user("xfileFIN").await.unwrap());
-		panic!()
+		// panic!()
 	}
 }
