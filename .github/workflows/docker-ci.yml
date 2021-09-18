@@ -122,7 +122,7 @@ jobs:
         with:
           builder: ${{ steps.builder_battlefox.outputs.name }}
           context: .
-          file: ./battle_fox/Dockerfile
+          file: ./battlefox/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -182,7 +182,7 @@ jobs:
         with:
           builder: ${{ steps.builder_battlefox.outputs.name }}
           context: .
-          file: ./discord_integration/Dockerfile
+          file: ./battlefox_discord/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_discord:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox_discord:latest
           cache-from: type=local,src=/tmp/.buildx-cache
