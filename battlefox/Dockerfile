@@ -1,6 +1,5 @@
 # Build Stage
 FROM rust:latest AS builder
-# docker build --build-arg GIT_DESCRIBE=$(git describe)
 ARG GIT_DESCRIBE
 WORKDIR /usr/src/
 RUN rustup target add x86_64-unknown-linux-musl
@@ -11,7 +10,7 @@ RUN update-ca-certificates
 
 RUN USER=root cargo new battlefox
 WORKDIR /usr/src/battlefox
-COPY ./battle_fox/Cargo.toml ./
+COPY ./battlefox/Cargo.toml ./
 RUN echo "openssl = { version = \"0.10\", features = [\"vendored\"] }" >> ./Cargo.toml
 COPY ./battlefield_rcon ../battlefield_rcon
 COPY ./shared ../shared
@@ -19,12 +18,12 @@ COPY ./database ../database
 ENV RUSTFLAGS='--cfg take_git_version_from_env'
 RUN cargo build --release
 
-COPY ./battle_fox/src ./src
+COPY ./battlefox/src ./src
 RUN cargo install --target x86_64-unknown-linux-musl --path .
 
 # Bundle Stage
 FROM scratch
 
-COPY --from=builder /usr/local/cargo/bin/battle_fox .
+COPY --from=builder /usr/local/cargo/bin/battlefox .
 USER 1000
-CMD ["./battle_fox"]
+CMD ["./battlefox"]

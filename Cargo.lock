@@ -191,7 +191,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
-name = "battle_fox"
+name = "battlefield_rcon"
+version = "0.1.0"
+dependencies = [
+ "ascii",
+ "async-stream",
+ "async-trait",
+ "futures-core",
+ "lazy_static",
+ "log",
+ "md5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
+name = "battlefox"
 version = "0.2.2"
 dependencies = [
  "ascii",
@@ -230,23 +247,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "validator",
-]
-
-[[package]]
-name = "battlefield_rcon"
-version = "0.1.0"
-dependencies = [
- "ascii",
- "async-stream",
- "async-trait",
- "futures-core",
- "lazy_static",
- "log",
- "md5",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]

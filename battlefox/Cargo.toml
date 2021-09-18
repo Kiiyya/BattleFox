@@ -1,5 +1,5 @@
 [package]
-name = "battle_fox"
+name = "battlefox"
 version = "0.2.2"
 authors = ["Kiiya <snoewflaek@gmail.com>"]
 edition = "2018"
