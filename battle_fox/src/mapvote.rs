@@ -882,7 +882,7 @@ impl Mapvote {
             }
             "/bfoxver" => {
                 // let ver = git_version!();
-                let _ = bf4.say(format!("BattleFox {}", crate::GIT_VERSION), player).await;
+                let _ = bf4.say(format!("BattleFox {}", crate::GIT_DESCRIBE), player).await;
             }
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {

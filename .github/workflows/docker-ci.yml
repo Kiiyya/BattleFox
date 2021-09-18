@@ -4,27 +4,37 @@ on:
   push:
     tags:
       - "v*.*.*"
+    # branches:
+    #   - '**'
+    # tags:
+    #   - 'v*.*.*'
+  # pull_request:
+  #   branches:
+  #     - 'master'
   workflow_dispatch:
 
 env:
   RELEASE_VERSION: ${{ github.run_number }}
-  GIT_VERSION_HASH: ${{ github.sha }}
+  # GIT_VERSION_HASH: ${{ github.sha }}
 
 jobs:
   battlefox_web:
-    name: Build battlefox_web docker image and push to Docker Hub
+    name: "battlefox_web: build and push"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set commit tag to env
-        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-
-      - name: Print release version
+        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
+      - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
         run: |
-          echo $COMMIT_TAG
-          echo ${{ env.COMMIT_TAG }}
+          echo "GIT_DESCRIBE=$(git describe)" >> $GITHUB_ENV
+          echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        # env vars set via `X=Y >> $GITHUB_ENV` don't materialise until next action.
+      - name: Echo GIT_DESCRIBE and COMMIT_TAG env vars
+        run: |
+          echo GIT_DESCRIBE = ${{ env.GIT_DESCRIBE }}
+          echo COMMIT_TAG = ${{ env.COMMIT_TAG }}
 
       # Creating builder (fancier docker build)
       - uses: docker/setup-buildx-action@v1
@@ -56,7 +66,7 @@ jobs:
           context: .
           file: ./battlefox_web/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_web:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox_web:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_web:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox_web:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -71,13 +81,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set commit tag to env
-        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-
-      - name: Print release version
+        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
+      - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
         run: |
-          echo $COMMIT_TAG
-          echo ${{ env.COMMIT_TAG }}
+          echo "GIT_DESCRIBE=$(git describe)" >> $GITHUB_ENV
+          echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        # env vars set via `X=Y >> $GITHUB_ENV` don't materialise until next action.
+      - name: Echo GIT_DESCRIBE and COMMIT_TAG env vars
+        run: |
+          echo GIT_DESCRIBE = ${{ env.GIT_DESCRIBE }}
+          echo COMMIT_TAG = ${{ env.COMMIT_TAG }}
 
       # Creating builder (fancier docker build)
       - uses: docker/setup-buildx-action@v1
@@ -109,9 +122,10 @@ jobs:
           context: .
           file: ./battle_fox/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+          build-args: GIT_DESCRIBE=${{ env.GIT_DESCRIBE }}
 
       # Printing image digests
       - name: Image digest for battlefox
@@ -123,12 +137,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Set commit tag to env
-        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      - name: Print release version
+
+        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
+      - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
         run: |
-          echo $COMMIT_TAG
-          echo ${{ env.COMMIT_TAG }}
+          echo "GIT_DESCRIBE=$(git describe)" >> $GITHUB_ENV
+          echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        # env vars set via `X=Y >> $GITHUB_ENV` don't materialise until next action.
+      - name: Echo GIT_DESCRIBE and COMMIT_TAG env vars
+        run: |
+          echo GIT_DESCRIBE = ${{ env.GIT_DESCRIBE }}
+          echo COMMIT_TAG = ${{ env.COMMIT_TAG }}
 
       # Creating builder
       - uses: docker/setup-buildx-action@v1
@@ -161,7 +180,7 @@ jobs:
           context: .
           file: ./discord_integration/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_discord:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox_discord:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_discord:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox_discord:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 

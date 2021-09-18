@@ -1,5 +1,7 @@
 # Build Stage
 FROM rust:latest AS builder
+# docker build --build-arg GIT_DESCRIBE=$(git describe)
+ARG GIT_DESCRIBE
 WORKDIR /usr/src/
 RUN rustup target add x86_64-unknown-linux-musl
 RUN apt update && apt install -y musl-tools musl-dev
@@ -15,7 +17,6 @@ COPY ./battlefield_rcon ../battlefield_rcon
 COPY ./shared ../shared
 COPY ./database ../database
 ENV RUSTFLAGS='--cfg take_git_version_from_env'
-# ENV GIT_VERSION_HASH='' This is set by the github action CI (hopefully lol)
 RUN cargo build --release
 
 COPY ./battle_fox/src ./src
