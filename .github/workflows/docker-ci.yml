@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # need to fetch all history (0 means all) for `git describe` to work.
 
         # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
       - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
@@ -80,6 +82,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
         # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
       - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
@@ -137,6 +141,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
         # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
       - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
