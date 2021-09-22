@@ -74,6 +74,13 @@ jobs:
       - name: Image digest for battlefox
         run: echo ${{ steps.battlefox_web_build.outputs.digest }}
 
+      - name: Invoke deployment hook
+        uses: distributhor/workflow-webhook@v2
+        env:
+          webhook_url: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB }}
+          webhook_secret: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB_SECRET }}
+          data: '{ "docker_image_tag": "${{ env.GIT_DESCRIBE }}" }'
+
   battlefox:
     name: Build battlefox docker image and push to Docker Hub
     runs-on: ubuntu-latest

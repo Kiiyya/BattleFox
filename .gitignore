@@ -1,6 +1,6 @@
-/target
-.env*
-/logs
+**/target
+**/.env*
+**/logs
 docker-compose-*
 act.secrets
 mongodb_data
