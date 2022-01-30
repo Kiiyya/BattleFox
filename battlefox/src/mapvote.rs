@@ -1001,7 +1001,7 @@ impl Mapvote {
         tokio::time::sleep(Duration::from_secs(7)).await; // FIXME: ^
 
         let players = self.players.players(bf4).await;
-        let bogus_player = Player { name: "Bogus Player".into_ascii_string().unwrap(), eaid: Eaid::new_invalid() };
+        // let bogus_player = Player { name: "Bogus Player".into_ascii_string().unwrap(), eaid: Eaid::new_invalid() };
 
         let maybe = {
             let mut lock = self.inner.lock().await;
@@ -1010,9 +1010,7 @@ impl Mapvote {
                 let profile = inner.to_profile();
 
                 // get each player's votes, so we can simulate how the votes go later.
-                // Also add a bogus player, which is a non-voting fake player, only for logging.
-                let mut assignment = inner.to_assignment();
-                assignment.insert(bogus_player.clone(), Distr::new_empty());
+                let assignment = inner.to_assignment();
 
                 inner.set_up_new_vote(self.config.n_options);
                 Some((profile, assignment, inner.anim_override_override.clone()))
@@ -1037,11 +1035,9 @@ impl Mapvote {
                     .collect_vec();
                 let animation = animate::stv_anim_frames(&alts_start, players.keys(), &tracer);
 
-                // just for logging.
-                if let Some(bogus_animation) = animation.get(&bogus_player) {
-                    info!("Animation of how the winner was determined:\n{}", bogus_animation.join("\n"));
-                } else {
-                    warn!("No bogus Player in tracer, thus can't show animation :(");
+                // just for logging: Pick random first animation and show that.
+                if let Some((player, anim)) = animation.iter().next() {
+                    info!("Animation for {}:\n{}", player.name, anim.join("\n"));
                 }
 
                 let mut jhs = Vec::new();
