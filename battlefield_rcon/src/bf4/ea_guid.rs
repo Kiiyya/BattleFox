@@ -107,6 +107,11 @@ impl Eaid {
             Err(RconError::protocol_msg(format!("Trying to decode \"{}\" into an EA GUID failed", ascii)))
         }
     }
+
+    /// This function shouldn't really exist...
+    pub fn new_invalid() -> Self {
+        Eaid([AsciiChar::X; 32])
+    }
 }
 
 impl Display for Eaid {

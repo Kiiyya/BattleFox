@@ -12,7 +12,8 @@ use self::{config::MapVoteConfig, matching::{AltMatchers, AltMatchersInv}};
 
 use super::stv::tracing::{NoTracer, StvAction, LoggingTracer, AnimTracer};
 use super::stv::Ballot;
-use ascii::{AsciiString, IntoAsciiString};
+use ascii::{AsciiString, IntoAsciiString, AsciiChar};
+use battlefield_rcon::bf4::Eaid;
 use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}, wrap_msg_chars}, rcon::{RconError, RconResult}};
 use either::Either::{Left, Right};
 use futures::{future::join_all, StreamExt};
@@ -242,6 +243,10 @@ impl Inner {
             old_matchers.as_ref());
         self.matchmap = matching::matchers_to_matchmap(&self.matchers);
         matching::matchmap_restrict(&mut self.matchmap,  &self.config.options_reserved_hidden);
+        let options = self.matchers.iter()
+            .map(|(mip, matcher)| format!("{}({})", mip.map.short(), matcher.number))
+            .join(", ");
+        info!("Updated matchers: {}.", options);
     }
 }
 
@@ -759,10 +764,11 @@ impl Mapvote {
                                     // make sure the map is in the pool
                                     if inner.popstate.pool.contains_map(map) {
                                         // make sure this VIP hasn't exceeded their nomination limit this round.
-                                        if inner.vip_n_noms(&player) < self.config.max_noms_per_vip
-                                        {
-                                            // phew, that's a lot of ifs...
+                                        if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
+                                            // phew, that was a lot of ifs...
+                                            info!("Player {} has nominated {}", player.name, map.Pretty());
                                             inner.vip_nom(&player, map);
+                                            info!("The new alternatives are {:?}.", inner.alternatives);
 
                                             let announce = self.config.announce_nominator.unwrap_or(true);
                                             if announce {
@@ -968,13 +974,18 @@ impl Mapvote {
         tokio::time::sleep(Duration::from_secs(7)).await; // FIXME: ^
 
         let players = self.players.players(bf4).await;
+        let bogus_player = Player { name: "Bogus Player".into_ascii_string().unwrap(), eaid: Eaid::new_invalid() };
 
         let maybe = {
             let mut lock = self.inner.lock().await;
             if let Some(inner) = &mut *lock {
-                let profile = inner.to_profile();
-                let assignment = inner.to_assignment();
                 info!("Voting ended. Votes: {:#?}", &inner.votes);
+                let profile = inner.to_profile();
+
+                // get each player's votes, so we can simulate how the votes go later.
+                // Also add a bogus player, which is a non-voting fake player, only for logging.
+                let mut assignment = inner.to_assignment();
+                assignment.insert(bogus_player.clone(), Distr::new_empty());
 
                 inner.set_up_new_vote(self.config.n_options);
                 Some((profile, assignment, inner.anim_override_override.clone()))
@@ -989,13 +1000,22 @@ impl Mapvote {
         // only do something if we have an Inner.
         if let Some((profile, assignment, anim_override_override)) = maybe {
             let mut tracer = AnimTracer::start(profile.clone(), assignment);
-            if let Some(winner) = profile.vanilla_stv_1(&mut tracer) {
+
+            if let Some(winner) = profile.vanilla_stv_1(&mut tracer) { // <----- STV winner gets calculated here!
+                info!("Winner: {}", winner.map.Pretty());
 
                 let alts_start = profile.alts.iter()
                     .sorted_by(|a, b| Ord::cmp(&profile.score(b), &profile.score(a)))
                     .cloned()
                     .collect_vec();
                 let animation = animate::stv_anim_frames(&alts_start, players.keys(), &tracer);
+
+                // just for logging.
+                if let Some(bogus_animation) = animation.get(&bogus_player) {
+                    info!("Animation of how the winner was determined:\n{}", bogus_animation.join("\n"));
+                } else {
+                    warn!("No bogus Player in tracer, thus can't show animation :(");
+                }
 
                 let mut jhs = Vec::new();
                 for (player, frames) in animation {

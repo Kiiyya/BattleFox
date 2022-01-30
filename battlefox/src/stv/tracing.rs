@@ -328,6 +328,12 @@ impl <A: Eq + Hash + Clone + Debug> Distr<A> {
         }
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            profile: Profile { alts: HashSet::new(), ballots: Vec::new() }
+        }
+    }
+
     fn elem_t(&mut self, a: &A, b: &A, s: &Rat) {
         self.profile = self.profile.elem_t(a, b, s, &mut NoTracer);
     }
