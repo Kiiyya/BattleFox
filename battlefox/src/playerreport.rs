@@ -4,7 +4,7 @@ use ascii::AsciiString;
 use battlefield_rcon::{bf4::{Bf4Client, Event, Player, Visibility}, rcon::RconResult};
 use futures::StreamExt;
 use serde::{Serialize, Deserialize};
-use shared::{rabbitmq::RabbitMq, report::ReportModel};
+use battlefox_shared::{rabbitmq::RabbitMq, report::ReportModel};
 
 use crate::players::{MatchError, Players};
 

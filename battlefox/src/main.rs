@@ -20,7 +20,7 @@ use dotenv::dotenv;
 use guard::Guard;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shared::rabbitmq::RabbitMq;
+use battlefox_shared::rabbitmq::RabbitMq;
 use weaponforcer::WeaponEnforcer;
 use playerreport::PlayerReport;
 use std::{env::var, sync::Arc};
@@ -179,7 +179,7 @@ async fn main() -> rcon::RconResult<()> {
     //         bf4.say(msg, &player).await.unwrap();
     //         sleep(Duration::from_millis(1500)).await;
     //     }
-        
+
     //     // bf4.say("Test", Player {
     //     //     name: AsciiString::from_ascii("xfileFIN").unwrap(),
     //     //     eaid: Eaid::new(&AsciiString::from_ascii("EA_FCB11161E04E98494AEB5A91A9329486").unwrap()).unwrap(),

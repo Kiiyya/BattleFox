@@ -3,7 +3,7 @@ extern crate diesel;
 extern crate dotenv;
 
 use chrono::{Utc};
-use shared::mute::MuteType;
+use battlefox_shared::mute::MuteType;
 
 pub mod models;
 pub mod schema;
@@ -60,7 +60,7 @@ pub fn replace_into_muted_player(conn: &MysqlConnection, player: &BfoxMutedPlaye
     //     .count()
     //     .first::<i64>(conn)
     //     .unwrap();
-    
+
     // println!("Count: {}", exists);
 
     replace_into(bfox_muted_players)

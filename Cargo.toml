@@ -8,6 +8,6 @@ members = [
 	"battlefox",
 	"battlefox_discord",
 	"battlelog",
-	"shared",
-	"database",
+	"battlefox_shared",
+	"battlefox_database",
 ]

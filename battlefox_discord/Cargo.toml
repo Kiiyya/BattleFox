@@ -1,6 +1,6 @@
 [package]
 name = "battlefox_discord"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Razer2015 <razer138@gmail.com>"]
 edition = "2018"
 
@@ -20,8 +20,8 @@ anyhow = { version = "1.0" }
 
 serenity = { version = "0.10.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "unstable_discord_api"] }
 battlelog = { path = "../battlelog" }
-shared = { path = "../shared" }
-database = { path = "../database" }
+battlefox_shared = { path = "../battlefox_shared" }
+battlefox_database = { path = "../battlefox_database" }
 
 # amiquip = { version = "0.4", default-features = false }
 lapin = { version = "1.7.1", default-features = false, features = ["rustls"] }

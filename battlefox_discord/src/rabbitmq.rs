@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use shared::report::ReportModel;
+use battlefox_shared::report::ReportModel;
 use futures::{StreamExt};
 use lapin::{Connection, ConnectionProperties, options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;

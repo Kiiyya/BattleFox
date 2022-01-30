@@ -1,4 +1,4 @@
-use database::{replace_into_muted_player, delete_muted_player, establish_connection, get_muted_players, models::BfoxMutedPlayer};
+use battlefox_database::{replace_into_muted_player, delete_muted_player, establish_connection, get_muted_players, models::BfoxMutedPlayer};
 
 fn main() {
     println!("Attempting to connect to database");

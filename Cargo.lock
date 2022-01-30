@@ -189,15 +189,16 @@ dependencies = [
 
 [[package]]
 name = "battlefox"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "ascii",
  "async-trait",
  "battlefield_rcon",
+ "battlefox_database",
+ "battlefox_shared",
  "cached",
  "chrono",
  "combine",
- "database",
  "derive_more",
  "dotenv",
  "either",
@@ -220,7 +221,6 @@ dependencies = [
  "rand 0.8.4",
  "serde",
  "serde_yaml",
- "shared",
  "shrinkwraprs",
  "simple_logger",
  "strsim 0.10.0",
@@ -230,13 +230,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "battlefox_database"
+version = "0.2.3"
+dependencies = [
+ "battlefox_shared",
+ "chrono",
+ "diesel",
+ "dotenv",
+ "serde",
+]
+
+[[package]]
 name = "battlefox_discord"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
+ "battlefox_database",
+ "battlefox_shared",
  "battlelog",
  "chrono",
- "database",
  "dotenv",
  "futures",
  "lapin",
@@ -245,9 +257,21 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
- "shared",
  "simplelog",
  "tokio",
+]
+
+[[package]]
+name = "battlefox_shared"
+version = "0.2.3"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dotenv",
+ "lapin",
+ "lazy_static",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -517,17 +541,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "database"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "diesel",
- "dotenv",
- "serde",
- "shared",
 ]
 
 [[package]]
@@ -1917,19 +1930,6 @@ dependencies = [
  "cpufeatures",
  "digest",
  "opaque-debug",
-]
-
-[[package]]
-name = "shared"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "dotenv",
- "lapin",
- "lazy_static",
- "serde",
- "serde_json",
 ]
 
 [[package]]

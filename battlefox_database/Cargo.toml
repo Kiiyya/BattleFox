@@ -1,15 +1,16 @@
 [package]
-name = "shared"
-version = "0.1.0"
+name = "battlefox_database"
+version = "0.2.3"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-lapin = { version = "1.7.1", default-features = false, features = ["rustls"] }
-lazy_static = "1.4.0"
-dotenv = "0.15"
-anyhow = { version = "1.0" }
 chrono = "0.4.19"
+
+# DB Orm
+diesel = { version = "1.4.4", features = ["mysql", "chrono"] }
+dotenv = "0.15.0"
+
+battlefox_shared = { path = "../battlefox_shared" }

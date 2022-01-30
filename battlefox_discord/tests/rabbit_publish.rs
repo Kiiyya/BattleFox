@@ -20,7 +20,7 @@
 
 use lapin::{BasicProperties, Connection, ConnectionProperties, options::{BasicPublishOptions, QueueDeclareOptions}, types::FieldTable};
 use lazy_static::lazy_static;
-use shared::report::ReportModel;
+use battlefox_shared::report::ReportModel;
 
 lazy_static! {
     static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").unwrap_or_else(|_| "DefaultUser".to_string());

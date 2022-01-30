@@ -3,10 +3,10 @@ use std::{collections::{HashMap}, convert::TryInto, ops::Add, sync::{Arc}};
 use ascii::AsciiString;
 use battlefield_rcon::{bf4::{Bf4Client, CommmoRose, Eaid, Event, Player}, rcon::RconResult};
 use chrono::{Duration, Utc};
-use database::{delete_muted_player, establish_connection, get_muted_player, get_muted_players, models::BfoxMutedPlayer, replace_into_muted_player};
+use battlefox_database::{delete_muted_player, establish_connection, get_muted_player, get_muted_players, models::BfoxMutedPlayer, replace_into_muted_player};
 use futures::StreamExt;
 use serde::{Serialize, Deserialize};
-use shared::mute::MuteType;
+use battlefox_shared::mute::MuteType;
 use tokio::sync::Mutex;
 
 use crate::players::{MatchError, Players};
@@ -166,7 +166,7 @@ impl PlayerMute {
         &self,
         bf4: Arc<Bf4Client>,
         player: Player,
-        mut msg: AsciiString, 
+        mut msg: AsciiString,
         muted_players: &Arc<Mutex<HashMap<Eaid, MutedPlayerInfo>>>
     ) -> RconResult<()> {
 
@@ -197,7 +197,7 @@ impl PlayerMute {
                 // TODO: Should we notify about no permissions or just ignore?
                 return Ok(())
             }
-            
+
             if cmd.eq("mute") && split.len() < 4 {
                 let _ = bf4.say("\nMute player with: /mute <soldierName> <[r|d<days>|p]> <reason>\n\t/mute xfileFIN d2 reason\n\t/mute xfileFIN p permanent mute", &player).await;
 
@@ -252,7 +252,7 @@ impl PlayerMute {
                                 },
                                 'p' => {
                                     mute_player.type_ = MuteType::Permanent as i32;
-                                    
+
                                 },
                                 _ => {
                                     let _ = bf4.say("Invalid mute type\n\tr (round)\n\td (days) -> d2 (two days)\n\tp (permanent)", &player).await;
@@ -373,7 +373,7 @@ impl PlayerMute {
                 Ok(con) => {
                     if let Ok(mut player) = get_muted_player(&con, &eaid.to_string()) {
                         player.kicks = Some(player.kicks.unwrap_or(0) + 1);
-    
+
                         match replace_into_muted_player(&con, &player) {
                             Ok(_) => debug!("Added kick for {}", eaid.to_string()),
                             Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
