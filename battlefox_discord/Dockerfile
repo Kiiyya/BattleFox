@@ -6,8 +6,8 @@ RUN USER=root cargo new battlefox
 WORKDIR /usr/src/battlefox
 COPY ./battlefox_discord/Cargo.toml ./
 COPY ./battlelog ../battlelog
-COPY ./database ../database
-COPY ./shared ../shared
+COPY ./battlefox_database ../battlefox_database
+COPY ./battlefox_shared ../battlefox_shared
 RUN cargo build --release
 
 COPY ./battlefox_discord/src ./src
