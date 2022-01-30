@@ -6,15 +6,6 @@
 #[macro_use] extern crate multimap;
 #[macro_use] extern crate derive_more;
 
-// Instead of `cargo build`, set env vars:
-//     RUSTFLAGS='--cfg take_git_version_from_env'
-//     GIT_DESCRIBE='823we8fgse8f7gasef7238r27wef'
-// And then `cargo build`.
-#[cfg(not(take_git_version_from_env))]
-const GIT_DESCRIBE : &str = git_version::git_version!(); // if Rust-Analyzer complains, disable the `unresolved-macro-call` diagnostic: https://github.com/rust-analyzer/rust-analyzer/issues/8477#issuecomment-817736916
-#[cfg(take_git_version_from_env)]
-const GIT_DESCRIBE : &str = env!("GIT_DESCRIBE");
-
 use ascii::{IntoAsciiString};
 use dotenv::dotenv;
 use guard::Guard;
@@ -23,6 +14,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use battlefox_shared::rabbitmq::RabbitMq;
 use weaponforcer::WeaponEnforcer;
 use playerreport::PlayerReport;
+use std::time::Instant;
 use std::{env::var, sync::Arc};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}};
 use vips::Vips;
@@ -49,6 +41,19 @@ pub mod playerreport;
 pub mod humanlang;
 mod logging;
 mod playermute;
+
+// Instead of `cargo build`, set env vars:
+//     RUSTFLAGS='--cfg take_git_version_from_env'
+//     GIT_DESCRIBE='823we8fgse8f7gasef7238r27wef'
+// And then `cargo build`.
+#[cfg(not(take_git_version_from_env))]
+const GIT_DESCRIBE : &str = git_version::git_version!(); // if Rust-Analyzer complains, disable the `unresolved-macro-call` diagnostic: https://github.com/rust-analyzer/rust-analyzer/issues/8477#issuecomment-817736916
+#[cfg(take_git_version_from_env)]
+const GIT_DESCRIBE : &str = env!("GIT_DESCRIBE");
+
+lazy_static::lazy_static! {
+    static ref START_TIME: Instant = Instant::now();
+}
 
 fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
@@ -107,6 +112,7 @@ struct MapManagerConfig {
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     logging::init_logging();
+    let _ = START_TIME; // get it, so that it initializes with `Instant::now()`.
 
     info!("This is BattleFox {}", GIT_DESCRIBE);
 

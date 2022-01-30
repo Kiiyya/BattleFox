@@ -68,6 +68,7 @@ strsim = "0.10.0"
 lapin = { version = "1.7.1", default-features = false, features = ["rustls"] }
 lazy_static = "1.4.0"
 chrono = "0.4.19"
+humantime = "2.1.0"
 
 battlefox_shared = { path = "../battlefox_shared" }
 battlefox_database = { path = "../battlefox_database" }

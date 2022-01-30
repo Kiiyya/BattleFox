@@ -1,5 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
+use crate::START_TIME;
 use crate::{guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
@@ -21,6 +22,8 @@ use itertools::Itertools;
 use matching::AltMatcher;
 use multimap::MultiMap;
 use rand::{RngCore, thread_rng};
+use std::cell::Cell;
+use std::time::Instant;
 use std::{cmp::min, hash::Hash};
 use std::{
     any::Any,
@@ -889,8 +892,11 @@ impl Mapvote {
                 let _ = bf4.say_lines(messages, player).await;
             }
             "/bfoxver" => {
-                // let ver = git_version!();
                 let _ = bf4.say(format!("BattleFox {}", crate::GIT_DESCRIBE), player).await;
+            },
+            "/bfoxuptime" => {
+                let elapsed = START_TIME.elapsed();
+                let _ = bf4.say(format!("Uptime: {}", humantime::format_duration(elapsed)), player).await;
             }
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
