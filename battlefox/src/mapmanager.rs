@@ -162,6 +162,7 @@ impl MapManager {
         //     lock.pop_state.clone()
         // };
 
+        trace!("Population: {}", pop);
         let tickets = match pop {
             x if x <= 8 => 75_f64,
             x if x <= 16 => 75_f64.lerp_bounded(120_f64, (x as f64 - 8_f64) / 8_f64),
@@ -172,16 +173,16 @@ impl MapManager {
         // let tickets = ()
         let tickets = tickets as usize;
 
-        bf4.maplist_list().await?;
+        trace!("MapList: {:?}", bf4.maplist_list().await?);
         trace!("Adding {:?} {:?} 1 round at index 0 temporarily...", mip.map, mip.mode);
 
-        bf4.maplist_add(&mip.map, &mip.mode, 1, 0).await?;
-        bf4.maplist_list().await?;
+        bf4.maplist_add(&mip.map, &mip.mode, 1, Some(0)).await?;
+        trace!("MapList: {:?}", bf4.maplist_list().await?);
 
         switch_map_to(bf4, 0, vehicles, tickets).await?;
         bf4.maplist_remove(0).await?;
         trace!("...removed rcon maplist index 0 again.");
-        bf4.maplist_list().await?;
+        trace!("MapList: {:?}", bf4.maplist_list().await?);
 
         Ok(())
     }
@@ -316,15 +317,11 @@ impl MapManager {
         // it may not be on an empty server.
         let pop = self.get_pop_count(&bf4).await?;
         let state = determine_popstate(&self.pop_states, pop).clone();
-        self.change_pop_state(state, &bf4)
-            .await
-            .map_err(|mle| match mle {
-                MapListError::Rcon(rcon) => rcon,
-                MapListError::MapListFull => panic!("Map list full, huh!"),
-                MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-            }).unwrap();
+        match self.change_pop_state(state, &bf4).await {
+            Ok(()) => (),
+            Err(MapListError::Rcon(r)) => return Err(r),
+            Err(mle) => error!("While starting up MapManager: {:?}. MapManager is *not* starting now!", mle),
+        }
 
         let mut events = bf4.event_stream().await?;
         while let Some(event) = events.next().await {
@@ -332,24 +329,22 @@ impl MapManager {
                 // Join also catches the seeder bots joining.
                 // Authenticated doesn't (hopefully).
                 Ok(Event::Authenticated { player: _ }) => {
-                    self.pop_change(1, &bf4).await.map_err(|mle| match mle {
-                        MapListError::Rcon(rcon) => rcon,
-                        MapListError::MapListFull => panic!("Map list full, huh!"),
-                        MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                        MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                        MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                    }).unwrap()
+                    match self.pop_change(1, &bf4).await {
+                        Ok(()) => (),
+                        Err(MapListError::Rcon(r)) => return Err(r),
+                        Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
+                    }
                 }
                 Ok(Event::Leave {
                     player: _,
                     final_scores: _,
-                }) => self.pop_change(-1, &bf4).await.map_err(|mle| match mle {
-                    MapListError::Rcon(rcon) => rcon,
-                    MapListError::MapListFull => panic!("Map list full, huh!"),
-                    MapListError::InvalidGameMode => panic!("Invalid game mode, huh!"),
-                    MapListError::InvalidMapIndex => panic!("Invalid map index, huh!"),
-                    MapListError::InvalidRoundsPerMap => panic!("Invalid rounds per map, huh!"),
-                }).unwrap(),
+                }) => {
+                    match self.pop_change(-1, &bf4).await {
+                        Ok(()) => (),
+                        Err(MapListError::Rcon(r)) => return Err(r),
+                        Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
+                    }
+                },
                 _ => {}
             }
         }
@@ -375,8 +370,8 @@ pub async fn fill_rcon_maplist(
     nrounds: usize,
 ) -> Result<(), MapListError> {
     bf4.maplist_clear().await?;
-    for (offset, mip) in pool.pool.iter().enumerate() {
-        bf4.maplist_add(&mip.map, &mip.mode, nrounds as i32, offset as i32)
+    for mip in pool.pool.iter() {
+        bf4.maplist_add(&mip.map, &mip.mode, nrounds as i32, None)
             .await?;
     }
 
@@ -416,19 +411,4 @@ pub async fn switch_map_to(
     // println!("[mapman switch_map_to()] done.");
 
     Ok(())
-}
-
-/// Fetch the maplist in RCON and return it.
-pub async fn read_rcon_pool(bf4: &Arc<Bf4Client>) -> Result<MapPool, MapListError> {
-    let list = bf4.maplist_list().await?;
-    let mut pool = MapPool::new();
-    for mle in list {
-        pool.pool.push(MapInPool {
-            map: mle.map,
-            mode: mle.game_mode,
-            vehicles: None, // TODO: Should this be somehow populated?
-        });
-    }
-
-    Ok(pool)
 }

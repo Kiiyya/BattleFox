@@ -591,17 +591,21 @@ impl Bf4Client {
         map: &Map,
         game_mode: &GameMode,
         n_rounds: i32,
-        offset: i32,
+        index: Option<i32>,
     ) -> Result<(), MapListError> {
+        let mut words = veca![
+            "mapList.add",
+            map.rcon_encode(),
+            game_mode.rcon_encode(),
+            n_rounds.to_string(),
+        ];
+        if let Some(index) = index {
+            words.push(index.to_string().into_ascii_string().unwrap());
+        }
+
         self.rcon
             .query(
-                &veca![
-                    "mapList.add",
-                    map.rcon_encode(),
-                    game_mode.rcon_encode(),
-                    n_rounds.to_string(),
-                    offset.to_string(),
-                ],
+                &words,
                 ok_eof,
                 |err| match err {
                     "InvalidMap" => Some(MapListError::Rcon(RconError::protocol_msg(format!(
