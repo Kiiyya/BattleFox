@@ -13,7 +13,7 @@ WORKDIR /usr/src/battlefox
 COPY ./battlefox/Cargo.toml ./
 RUN echo "openssl = { version = \"0.10\", features = [\"vendored\"] }" >> ./Cargo.toml
 COPY ./battlefield_rcon ../battlefield_rcon
-COPY ./battlefox_database ../battlefox_database
+COPY ./battlefox_shared ../battlefox_shared
 COPY ./battlefox_database ../battlefox_database
 ENV RUSTFLAGS='--cfg take_git_version_from_env'
 RUN cargo build --release
