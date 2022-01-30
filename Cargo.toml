@@ -1,14 +1,11 @@
 [profile.release]
 lto = true
-# codegen-units = 1 # Reduce number of codegen units to increase optimizations.
-# opt-level = 3 # AFAIK default is 2.
 panic = 'abort'     # Abort on panic. Supposedly helps reduzing binary size.
 
 [workspace]
 members = [
 	"battlefield_rcon",
 	"battlefox",
-	"battlefox_web",
 	"battlefox_discord",
 	"battlelog",
 	"shared",

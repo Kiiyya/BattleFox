@@ -16,70 +16,70 @@ env:
   # GIT_VERSION_HASH: ${{ github.sha }}
 
 jobs:
-  battlefox_web:
-    name: "battlefox_web: build and push"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0 # need to fetch all history (0 means all) for `git describe` to work.
+  # battlefox_web:
+  #   name: "battlefox_web: build and push"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0 # need to fetch all history (0 means all) for `git describe` to work.
 
-        # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
-      - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
-        run: |
-          echo "GIT_DESCRIBE=$(git describe)" >> $GITHUB_ENV
-          echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-        # env vars set via `X=Y >> $GITHUB_ENV` don't materialise until next action.
-      - name: Echo GIT_DESCRIBE and COMMIT_TAG env vars
-        run: |
-          echo GIT_DESCRIBE = ${{ env.GIT_DESCRIBE }}
-          echo COMMIT_TAG = ${{ env.COMMIT_TAG }}
+  #       # https://stackoverflow.com/questions/57968497/how-do-i-set-an-env-var-with-a-bash-expression-in-github-actions
+  #     - name: Set GIT_DESCRIBE and COMMIT_TAG env vars for subsequent actions
+  #       run: |
+  #         echo "GIT_DESCRIBE=$(git describe)" >> $GITHUB_ENV
+  #         echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+  #       # env vars set via `X=Y >> $GITHUB_ENV` don't materialise until next action.
+  #     - name: Echo GIT_DESCRIBE and COMMIT_TAG env vars
+  #       run: |
+  #         echo GIT_DESCRIBE = ${{ env.GIT_DESCRIBE }}
+  #         echo COMMIT_TAG = ${{ env.COMMIT_TAG }}
 
-      # Creating builder (fancier docker build)
-      - uses: docker/setup-buildx-action@v1
-        id: builder_battlefox_web
-      - name: Battlefox builder name
-        run: echo ${{ steps.builder_battlefox_web.outputs.name }}
-      # Caching layers for faster building
-      - name: Cache Docker layers
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
+  #     # Creating builder (fancier docker build)
+  #     - uses: docker/setup-buildx-action@v1
+  #       id: builder_battlefox_web
+  #     - name: Battlefox builder name
+  #       run: echo ${{ steps.builder_battlefox_web.outputs.name }}
+  #     # Caching layers for faster building
+  #     - name: Cache Docker layers
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: /tmp/.buildx-cache
+  #         key: ${{ runner.os }}-buildx-${{ github.sha }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-buildx-
 
-      # Logging in to DockerHub
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+  #     # Logging in to DockerHub
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Building image and pushing it to DockerHub
-      - name: Build battlefox_web and push
-        id: battlefox_web_build
-        uses: docker/build-push-action@v2
-        with:
-          builder: ${{ steps.builder_battlefox_web.outputs.name }}
-          context: .
-          file: ./battlefox_web/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_web:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox_web:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+  #     # Building image and pushing it to DockerHub
+  #     - name: Build battlefox_web and push
+  #       id: battlefox_web_build
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         builder: ${{ steps.builder_battlefox_web.outputs.name }}
+  #         context: .
+  #         file: ./battlefox_web/Dockerfile
+  #         push: true
+  #         tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_web:${{ env.GIT_DESCRIBE }},${{ secrets.DOCKER_USERNAME }}/battlefox_web:latest
+  #         cache-from: type=local,src=/tmp/.buildx-cache
+  #         cache-to: type=local,dest=/tmp/.buildx-cache
 
-      # Printing image digests
-      - name: Image digest for battlefox
-        run: echo ${{ steps.battlefox_web_build.outputs.digest }}
+  #     # Printing image digests
+  #     - name: Image digest for battlefox
+  #       run: echo ${{ steps.battlefox_web_build.outputs.digest }}
 
-      - name: Invoke deployment hook
-        uses: distributhor/workflow-webhook@v2
-        env:
-          webhook_url: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB }}
-          webhook_secret: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB_SECRET }}
-          data: '{ "docker_image_tag": "${{ env.GIT_DESCRIBE }}" }'
+  #     - name: Invoke deployment hook
+  #       uses: distributhor/workflow-webhook@v2
+  #       env:
+  #         webhook_url: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB }}
+  #         webhook_secret: ${{ secrets.WEBHOOK_REDEPLOY_BATTLEFOX_WEB_SECRET }}
+  #         data: '{ "docker_image_tag": "${{ env.GIT_DESCRIBE }}" }'
 
   battlefox:
     name: Build battlefox docker image and push to Docker Hub
