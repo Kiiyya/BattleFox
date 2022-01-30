@@ -41,7 +41,7 @@ use tokio::{
 };
 
 use num_rational::BigRational as Rat;
-use num_traits::One;
+use num_traits::{One, ToPrimitive};
 
 pub mod config;
 mod animate;
@@ -897,7 +897,23 @@ impl Mapvote {
             "/bfoxuptime" => {
                 let elapsed = START_TIME.elapsed();
                 let _ = bf4.say(format!("Uptime: {}", humantime::format_duration(elapsed)), player).await;
-            }
+            },
+            "/ballots" => {
+                let lock = self.inner.lock().await;
+                if let Some(inner) = &*lock {
+                    let lines = inner.votes.iter().map(|(p, bal)| {
+                        let mut prefs = bal.preferences.iter().map(|mip| mip.map.short());
+                        format!("{}: {}* {}", p.name, bal.weight.numer(), prefs.join(">"))
+                    }).collect_vec();
+                    drop(lock);
+                    tokio::spawn(async move {
+                        for line in lines {
+                            let _ = bf4.say(line, &player).await;
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                        }
+                    });
+                }
+            },
             "!nominate" | "/nominate" | "!nom" | "/nom" => {
                 let map = match split.get(1) {
                     Some(&word) => match Map::try_from_short(word) {
