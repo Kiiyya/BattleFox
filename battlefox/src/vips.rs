@@ -100,17 +100,16 @@ impl Vips {
         drop(inner); // drop lock before rcon request inside `refresh()`.
                      // Yes it is technically possible that we do two refreshes at the same time, but that's not
                      // too bad. I worry more about latency.
-        Ok(self
-            .refersh(bf4, |inner| {
-                if let Some(j) = inner.vips.get(name) {
-                    unsafe { Guard::new_raw(name.to_owned(), j.to_owned()) }
-                } else {
-                    let j = Recent::now(MaybeVip::right(NotVip));
-                    inner.vips.insert(name.to_owned(), j);
-                    unsafe { Guard::new_raw(name.to_owned(), j) }
-                }
-            })
-            .await?)
+        self.refersh(bf4, |inner| {
+            if let Some(j) = inner.vips.get(name) {
+                unsafe { Guard::new_raw(name.to_owned(), j.to_owned()) }
+            } else {
+                let j = Recent::now(MaybeVip::right(NotVip));
+                inner.vips.insert(name.to_owned(), j);
+                unsafe { Guard::new_raw(name.to_owned(), j) }
+            }
+        })
+        .await
     }
 
     pub async fn get_player(

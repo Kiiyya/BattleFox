@@ -116,7 +116,7 @@ impl Inner {
         self.alternatives.pool.push(MapInPool {
             map,
             mode: GameMode::Rush,
-            vehicles: vehicles
+            vehicles,
         });
         self.update_matchers(true);
     }
@@ -252,6 +252,7 @@ impl Inner {
 
 /// When a user votes, they can still fuck up :)
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum VoteResult {
     Ok {
         new: Ballot<MapInPool>,
@@ -446,7 +447,7 @@ impl Mapvote {
                 if yoinked.len() == ballot.preferences.len() {
                     // ALL choices on the person's ballot were yoinked! Whoops!
                     futures_removals.push(bf4.say_lines(vec![
-                        format!("{}: Sorry, all maps you had voted for were removed from the map pool :(", player.to_owned()),
+                        format!("{}: Sorry, all maps you had voted for were removed from the map pool :(", player),
                         "Please vote again :)".to_string(),
                     ], player.to_owned()));
                     false // remove this ballot entirely.
@@ -458,7 +459,7 @@ impl Mapvote {
                         });
                         futures_removals.push(bf4.say_lines(vec![
                             format!("{}: Sorry, {} is/are no longer in the map pool and was removed from your ballot",
-                                player.to_owned(),
+                                player,
                                 yoinked.iter().join(", ")),
                             format!("Your ballot was changed to: {}", ballot),
                         ], player.to_owned()));
@@ -900,8 +901,7 @@ impl Mapvote {
                     None => NomMapParseResult::Empty,
                 };
 
-                let vehicles = split.get(2)
-                    .and_then(|val| Some(!val.eq_ignore_ascii_case("inf")));
+                let vehicles = split.get(2).map(|val| !val.eq_ignore_ascii_case("inf"));
 
                 tokio::spawn({
                     let player = player.clone();

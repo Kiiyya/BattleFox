@@ -4,9 +4,9 @@ use lazy_static::lazy_static;
 use crate::report::ReportModel;
 
 lazy_static! {
-    static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").unwrap_or("DefaultUser".to_string());
-    static ref RABBITMQ_PASSWORD: String = dotenv::var("RABBITMQ_PASSWORD").unwrap_or("DefaultPassword".to_string());
-    static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").unwrap_or("rabbitmq".to_string());
+    static ref RABBITMQ_USERNAME: String = dotenv::var("RABBITMQ_USERNAME").unwrap_or_else(|_| "DefaultUser".to_string());
+    static ref RABBITMQ_PASSWORD: String = dotenv::var("RABBITMQ_PASSWORD").unwrap_or_else(|_| "DefaultPassword".to_string());
+    static ref RABBITMQ_HOST: String = dotenv::var("RABBITMQ_HOST").unwrap_or_else(|_| "rabbitmq".to_string());
 }
 
 pub struct RabbitMq {
@@ -28,7 +28,7 @@ impl RabbitMq {
         // ).await;
 
         let connection = match Connection::connect(
-            &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
+            &format!("amqp://{}:{}@{}", &*RABBITMQ_USERNAME, &*RABBITMQ_PASSWORD, &*RABBITMQ_HOST),
             ConnectionProperties::default()
         ).await {
             Ok(file) => file,

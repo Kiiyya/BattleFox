@@ -18,7 +18,7 @@ lazy_static! {
 pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<(), anyhow::Error> {
     // Open connection.
     let connection = Connection::connect(
-        &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
+        &format!("amqp://{}:{}@{}", &*RABBITMQ_USERNAME, &*RABBITMQ_PASSWORD, &*RABBITMQ_HOST),
         ConnectionProperties::default()
     ).await?;
 

@@ -56,7 +56,7 @@ lazy_static! {
 async fn rabbit_publish_test() -> Result<(), anyhow::Error> {
     // Open connection.
     let connection = Connection::connect(
-        &format!("amqp://{}:{}@{}", RABBITMQ_USERNAME.to_string(), RABBITMQ_PASSWORD.to_string(), RABBITMQ_HOST.to_string()),
+        &format!("amqp://{}:{}@{}", &*RABBITMQ_USERNAME, &*RABBITMQ_PASSWORD, &*RABBITMQ_HOST),
         ConnectionProperties::default()
     ).await?;
 
