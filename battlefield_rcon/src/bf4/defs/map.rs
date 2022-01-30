@@ -297,6 +297,103 @@ impl Map {
         upper
     }
 
+    /// Given a prefix length, returns `map.short()` but with the first `prefixlen` letters
+    /// capitalized, and tabs appended so that the visual length is 4 tabs for all
+    /// combinations of `map` and `prefixlen`.
+    /// Or, well, I tested it ingame with prefixlengths 0 to 6. Other than that I give no
+    /// guarantee.
+    ///
+    /// For example,
+    /// `Map::Pearl.tabconstlen_prefixlen(3) = "PEArl\t\t"`.
+    pub fn tab4_prefixlen_wvehicles(&self, prefixlen: usize, vehicles: bool) -> String {
+        let ntabs = match (self, prefixlen, vehicles) {
+            (Map::Zavod, _, true) => 2,
+            (Map::Zavod, _, _) => 1,
+            (Map::LancangDam, _, true) => 2,
+            (Map::LancangDam, _, _) => 1,
+            (Map::FloodZone, 0, true) => 3,
+            (Map::FloodZone, 0, false) => 2,
+            (Map::FloodZone, _, true) => 2,
+            (Map::FloodZone, n, false) if n >= 2 => 1,
+            (Map::FloodZone, _, false) => 2,
+            (Map::GolmudRailway, _, true) => 2,
+            (Map::GolmudRailway, _, _) => 1,
+            (Map::ParacelStorm, _, true) => 2,
+            (Map::ParacelStorm, _, _) => 1,
+            (Map::Locker, _, true) => 2,
+            (Map::Locker, _, _) => 1,
+            (Map::HainanResort, _, true) => 2,
+            (Map::HainanResort, _, _) => 1,
+            (Map::Shanghai, _, true) => 2,
+            (Map::Shanghai, _, _) => 1,
+            (Map::RogueTransmission, _, true) => 2,
+            (Map::RogueTransmission, 0, false) => 2,
+            (Map::RogueTransmission, _, _) => 1,
+            (Map::Dawnbreaker, n, false) if n >= 2 => 1,
+            (Map::Dawnbreaker, _, _) => 2,
+            (Map::SilkRoad, _, true) => 3,
+            (Map::SilkRoad, _, _) => 2,
+            (Map::Altai, n, _) if n >= 3 => 2,
+            (Map::Altai, _, true) => 3,
+            (Map::Altai, _, _) => 2,
+            (Map::GuilinPeaks, n, false) if n >= 4 => 1,
+            (Map::GuilinPeaks, _, _) => 2,
+            (Map::DragonPass, _, true) => 2,
+            (Map::DragonPass, _, _) => 1,
+            (Map::Caspian, _, true) => 2,
+            (Map::Caspian, _, _) => 1,
+            (Map::Firestorm, n, _) if n >= 5 => 1,
+            (Map::Firestorm, _, true) => 2,
+            (Map::Firestorm, _, _) => 1,
+            (Map::Metro, n, false) if n >= 3 => 1,
+            (Map::Metro, _, _) => 2,
+            (Map::Oman, n, false) if n >= 4 => 1,
+            (Map::Oman, _, _) => 2,
+            (Map::LostIslands, _, true) => 2,
+            (Map::LostIslands, _, _) => 1,
+            (Map::NanshaStrike, _, true) => 2,
+            (Map::NanshaStrike, _, _) => 1,
+            (Map::WaveBreaker, _, true) => 2,
+            (Map::WaveBreaker, _, _) => 1,
+            (Map::OpMortar, _, true) => 2,
+            (Map::OpMortar, _, _) => 1,
+            (Map::PearlMarket, n, true) if n >= 3 => 2,
+            (Map::PearlMarket, _, true) => 3,
+            (Map::PearlMarket, n, false) if n >= 4 => 1,
+            (Map::PearlMarket, _, _) => 2,
+            (Map::Propaganda, n, false) if n >= 2 => 1,
+            (Map::Propaganda, _, _) => 2,
+            (Map::Lumphini, _, true) => 2,
+            (Map::Lumphini, _, _) => 1,
+            (Map::SunkenDragon, _, true) => 2,
+            (Map::SunkenDragon, _, _) => 1,
+            (Map::Whiteout, _, true) => 2,
+            (Map::Whiteout, _, _) => 1,
+            (Map::Hammerhead, _, true) => 2,
+            (Map::Hammerhead, _, _) => 1,
+            (Map::Hangar21, _, true) => 2,
+            (Map::Hangar21, _, _) => 1,
+            (Map::Karelia, _, true) => 2,
+            (Map::Karelia, _, _) => 1,
+            (Map::ZavodNight, 0, true) => 3,
+            (Map::ZavodNight, _, _) => 2,
+            (Map::Outbreak, n, _) if n >= 5 => 1,
+            (Map::Outbreak, _, true) => 2,
+            (Map::Outbreak, _, _) => 1,
+            (Map::DragonValley, n, false) if n >= 1 => 1,
+            (Map::DragonValley, _, _) => 2,
+        };
+
+        let split = min(prefixlen, self.short().len()); // to prevent index out of bounds.
+        let mut upper = self.short()[..split].to_ascii_uppercase();
+        let lower = self.short()[split..].to_string();
+        upper += &lower;
+        if !vehicles {
+            upper += "[INF]";
+        }
+        upper += &"\t".repeat(ntabs);
+        upper
+    }
 
     pub fn short_names(&self) -> std::slice::Iter<'static, &'static str> {
         match self {
@@ -480,7 +577,7 @@ impl Map {
             }
             Map::DragonPass => {
                 static ALL: [&str; 6] = [
-                    "dragonpass",
+                    "drgnpass",
                     "drpass",
                     "dragon-pass",
                     "dragon_pass",
@@ -508,7 +605,7 @@ impl Map {
             }
             Map::LostIslands => {
                 static ALL: [&str; 11] = [
-                    "lostislands",
+                    "lostislnd",
                     "lost",
                     "losti",
                     "lost-islands",
@@ -528,7 +625,7 @@ impl Map {
                 ALL.iter()
             }
             Map::WaveBreaker => {
-                static ALL: [&str; 5] = ["wavebreaker", "wave", "wave_breaker", "wave-breaker", "wav"];
+                static ALL: [&str; 5] = ["wavebrkr", "wave", "wave_breaker", "wave-breaker", "wav"];
                 ALL.iter()
             }
             Map::OpMortar => {
