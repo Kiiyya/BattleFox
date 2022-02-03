@@ -956,7 +956,7 @@ impl Mapvote {
                 if let Some(inner) = &mut *opt_inner {
                     inner.anim_override_override.insert(player.clone(), yesno);
                     drop(opt_inner);
-                    let _ = bf4.say(format!("Animation of vote result calculation at round end: {}", yesno), player).await;
+                    let _ = bf4.say(format!("Animation of vote result calculation at round end: {}", yesno), vis).await;
                 }
             }
             _ => {
