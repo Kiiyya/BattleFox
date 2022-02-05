@@ -112,7 +112,7 @@ struct MapManagerConfig {
 async fn main() -> rcon::RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     logging::init_logging();
-    let _ = START_TIME; // get it, so that it initializes with `Instant::now()`.
+    let _ = START_TIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
     info!("This is BattleFox {}", GIT_DESCRIBE);
 
