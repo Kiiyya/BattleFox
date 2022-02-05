@@ -1,6 +1,6 @@
 [package]
 name = "battlefox_discord"
-version = "0.2.3"
+version = "0.2.6"
 authors = ["Razer2015 <razer138@gmail.com>"]
 edition = "2018"
 

@@ -34,6 +34,7 @@ pub mod guard;
 pub mod mapmanager;
 pub mod mapvote;
 pub mod vips;
+pub mod admins;
 pub mod players;
 mod stv;
 pub mod weaponforcer;
