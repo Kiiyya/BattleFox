@@ -1,6 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::START_TIME;
+use crate::UPTIME;
 use crate::{guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
@@ -895,7 +895,7 @@ impl Mapvote {
                 let _ = bf4.say(format!("BattleFox {}", crate::GIT_DESCRIBE), player).await;
             },
             "/bfoxuptime" => {
-                let elapsed = START_TIME.elapsed();
+                let elapsed = UPTIME.elapsed();
                 let _ = bf4.say(format!("Uptime: {}", humantime::format_duration(elapsed)), player).await;
             },
             "/ballots" => {
