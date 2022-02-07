@@ -8,7 +8,11 @@
 #[macro_use] extern crate derive_more;
 
 use ascii::{IntoAsciiString};
+use async_trait::async_trait;
+use battlefield_rcon::bf4::Event;
+use battlefield_rcon::rcon::RconResult;
 use dotenv::dotenv;
+use futures::StreamExt;
 use guard::Guard;
 use itertools::Itertools;
 use players::Players;
@@ -20,6 +24,7 @@ use std::any::Any;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 use std::time::Instant;
 use std::{env::var, sync::Arc};
 use vips::Vips;
@@ -62,7 +67,7 @@ lazy_static::lazy_static! {
     static ref UPTIME: Instant = Instant::now();
 }
 
-fn get_rcon_coninfo() -> rcon::RconResult<RconConnectionInfo> {
+fn get_rcon_coninfo() -> RconResult<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
         .unwrap_or_else(|_| "47200".into())
@@ -82,8 +87,8 @@ enum ConfigError {
     Io(std::io::Error),
 }
 
-fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> {
-    info!("Loading {}", path);
+fn load_config<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigError> {
+    info!("Loading {}", path.as_ref().to_string_lossy());
     let mut file = File::open(path).map_err(ConfigError::Io)?;
     let mut s = String::new();
     file.read_to_string(&mut s).map_err(ConfigError::Io)?;
@@ -91,26 +96,63 @@ fn load_config<T: DeserializeOwned>(path: &str) -> Result<T, ConfigError> {
     Ok(t)
 }
 
-/// Convenience thing for loading stuff from Json.
-#[derive(Debug, Serialize, Deserialize)]
-struct MapManagerConfig {
-    enabled: bool,
-    pop_states: Vec<PopState>,
+#[async_trait]
+pub trait Plugin : Send + Sync + 'static {
+    const NAME: &'static str;
+    fn enabled(&self) -> bool { true }
 
-    vehicle_threshold: usize,
-    leniency: usize,
+    /// You *can* implement this, but you may be more interested in `event`.
+    ///
+    /// In case `run` is overridden, `event` does nothing.
+    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        if self.enabled() {
+            let mut stream = bf4.event_stream().await?;
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(event) => {
+                        let bf4 = bf4.clone();
+                        let self_clone = self.clone();
+                        tokio::spawn(async move { self_clone.event(bf4, event).await });
+                    },
+                    Err(err) => {
+                        error!("Plugin \"{}\" encountered bf4 error and has quit: {:?}", Self::NAME, err);
+                        break;
+                    },
+                }
+            }
+        } else {
+            info!("Plugin {} is disabled.", Self::NAME);
+        }
+        Ok(())
+    }
+
+    async fn event(self: Arc<Self>, _bf4: Arc<Bf4Client>, _ev: Event) -> RconResult<()> {
+        // do nothing unless overridden.
+        Ok(())
+    }
 }
 
-#[async_trait::async_trait]
-pub trait Plugin : Any + Send + Sync + 'static {
-    /// "mapman" will result in for example `configs/mapman.yaml`.
-    fn name() -> &'static str where Self: Sized;
+/// Just a helper trait to avoid trait object and associated constants clashing.
+#[async_trait]
+trait Plugin2: Sync + Send {
+    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()>;
+    fn name(&self) -> &'static str;
+}
 
-    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>);
+#[async_trait]
+impl<T: Plugin> Plugin2 for T {
+    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        self.run(bf4).await
+        // todo!()
+    }
+
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
 }
 
 pub struct App {
-    plugins: BTreeMap<String, Arc<dyn Plugin>>,
+    plugins: BTreeMap<String, Arc<dyn Plugin2>>,
 }
 
 impl App {
@@ -121,13 +163,12 @@ impl App {
     }
 
     fn has_plugin<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> P) -> Result<Arc<P>, ConfigError> {
-        let config_path = format!("configs/{}.yaml", P::name());
-        let config: C = load_config(&config_path)?;
+        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
         let p = Arc::new(f(config));
 
-        let exists = self.plugins.insert(P::name().to_string(), p.clone());
+        let exists = self.plugins.insert(P::NAME.to_string(), p.clone());
         if exists.is_some() {
-            panic!("Double-loading of plugins is forbidden. Plugin: {}", P::name());
+            panic!("Double-loading of plugins is forbidden. Plugin: {}", P::NAME);
         }
 
         Ok(p)
@@ -135,31 +176,35 @@ impl App {
 
     /// Invoke `run` on every loaded plugin, then wait for completion.
     pub async fn run(&mut self, bf4: Arc<Bf4Client>) {
-        let jhs = self.plugins.values()
-            .map(|p| {
+        let jhs = self.plugins.iter()
+            .map(|(name, p)| {
                 let bf4 = bf4.clone();
                 let p = p.clone();
-                tokio::spawn(p.run(bf4))
+                let jh = tokio::spawn(async move { p.run(bf4).await });
+                (name, jh)
             })
             .collect_vec();
 
         // TODO: Abort everything when even just one jh returns prematurely and with Err.
-        for jh in jhs {
-            jh.await.unwrap()
+        for (name, jh) in jhs {
+            match jh.await.unwrap() {
+                Ok(_) => (),
+                Err(err) => error!("Plugin {} has quit with error: {:?}", name, err),
+            }
         }
     }
 }
 
 #[allow(clippy::or_fun_call)]
 #[tokio::main]
-async fn main() -> rcon::RconResult<()> {
+async fn main() -> RconResult<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     logging::init_logging();
     info!("This is BattleFox {}", GIT_DESCRIBE);
     let _ = UPTIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
     let mut app = App::new();
-    let admins = app.has_plugin(Admins::new).unwrap();
+    let _admins = app.has_plugin(Admins::new).unwrap();
 
     let coninfo = get_rcon_coninfo()?;
     info!("Connecting to {}:{} with password ***...", coninfo.ip, coninfo.port);

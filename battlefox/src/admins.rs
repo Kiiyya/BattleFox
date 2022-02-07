@@ -1,14 +1,10 @@
 //! Provides info on which player is an admin.
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use async_trait::async_trait;
-use battlefield_rcon::bf4::Bf4Client;
-use serde::Deserialize;
 
-use crate::Plugin;
-
+use crate::{Plugin};
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct Config {
@@ -20,15 +16,16 @@ pub struct Admins {
 }
 
 impl Admins {
-    pub fn new(cfg: Config) -> Self {
-        todo!()
+    pub fn new(config: Config) -> Self {
+        Self { config }
+    }
+
+    pub fn is_admin(&self, player_name: impl AsRef<str>) -> bool {
+        self.config.admins.contains(player_name.as_ref())
     }
 }
 
 #[async_trait]
 impl Plugin for Admins {
-    fn name() -> &'static str { "admins" }
-    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) {
-        todo!()
-    }
+    const NAME: &'static str = "admins";
 }
