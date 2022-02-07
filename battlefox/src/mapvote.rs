@@ -296,7 +296,34 @@ enum NomMapParseResult {
 impl Plugin for Mapvote {
     const NAME: &'static str = "mapvote";
 
+    fn enabled(&self) -> bool { self.config.enabled }
+
+    async fn start(self: &Arc<Self>, bf4: &Arc<Bf4Client>) {
+        let mapvote = self.clone();
+        let bf4 = bf4.clone();
+        let _jh = tokio::spawn(async move {
+            mapvote.status_spammer(bf4).await;
+            warn!("Mapvote spammer has stopped!");
+        });
+
+        // TODO: join the spammer JoinHandle some day too.
+    }
+
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
+        match event {
+            Event::Chat { vis, player, msg } => {
+                if msg.as_str().starts_with("/haha next map") && player.name == "PocketWolfy" {
+                    let mapman = self.mapman.clone();
+                    self.handle_round_over(&bf4).await;
+                } else {
+                    let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
+                }
+            }
+            Event::RoundOver { .. } => {
+                self.handle_round_over(&bf4).await;
+            }
+            _ => {} // ignore everything else.
+        }
         todo!()
     }
 }
@@ -518,58 +545,6 @@ impl Mapvote {
             info!("Popstate initialized! New: {}", init.popstate.name);
             *lock = Some(init);
         }
-    }
-
-    /// Starts the main loop, listening for events, etc.
-    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
-        if !self.config.enabled {
-            debug!("Mapvote is disabled");
-            return Ok(());
-        }
-        // nothing set up yet, we're waiting for the Inner to be initialized.
-
-        let jh_spammer = {
-            let mapvote = self.clone();
-            let bf4 = bf4.clone();
-            tokio::spawn(async move {
-                mapvote.status_spammer(bf4).await;
-            })
-        };
-
-        let mut events = bf4.event_stream().await?;
-        while let Some(event) = events.next().await {
-            match event {
-                Ok(Event::Chat { vis, player, msg }) => {
-                    let bf4 = bf4.clone();
-                    let mapvote = self.clone();
-
-                    if msg.as_str().starts_with("/haha next map") && player.name == "PocketWolfy" {
-                        let mapman = self.mapman.clone();
-                        tokio::spawn(async move {
-                            mapvote.handle_round_over(&bf4).await;
-                        });
-                    } else {
-                        tokio::spawn(async move {
-                            let _ = mapvote.handle_chat_msg(bf4, vis, player, msg).await;
-                        });
-                    }
-                }
-                Ok(Event::RoundOver { winning_team: _ }) => {
-                    let bf4 = bf4.clone();
-                    let mapvote = self.clone();
-                    let mapman = self.mapman.clone();
-                    // fire and forget about it, so we don't block other events. Yay concurrency!
-                    tokio::spawn(async move {
-                        mapvote.handle_round_over(&bf4).await;
-                    });
-                }
-                Err(Bf4Error::Rcon(RconError::ConnectionClosed)) => break,
-                _ => {} // ignore everything else.
-            }
-        }
-
-        jh_spammer.await.unwrap();
-        Ok(())
     }
 
     async fn broadcast_status(&self, bf4: &Bf4Client) {
