@@ -12,15 +12,11 @@ use battlefield_rcon::bf4::Event;
 use battlefield_rcon::rcon::RconResult;
 use dotenv::dotenv;
 use futures::StreamExt;
-use guard::Guard;
 use itertools::Itertools;
 use players::Players;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use battlefox_shared::rabbitmq::RabbitMq;
+use serde::{de::DeserializeOwned};
 use thiserror::Error;
 use weaponforcer::WeaponEnforcer;
-use playerreport::PlayerReport;
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
@@ -29,16 +25,15 @@ use std::time::Instant;
 use std::{env::var, sync::Arc};
 use vips::Vips;
 
-use battlefield_rcon::{bf4::{Bf4Client}, rcon::{self, RconConnectionInfo}};
-use mapmanager::{MapManager, PopState};
+use battlefield_rcon::{bf4::Bf4Client, rcon::RconConnectionInfo};
+use mapmanager::MapManager;
 use mapvote::{
     config::{MapVoteConfig, MapVoteConfigJson},
     Mapvote,
 };
 
 use crate::admins::Admins;
-use crate::{playermute::{PlayerMute, PlayerMuteConfig}, weaponforcer::Config};
-use crate::playerreport::PlayerReportConfig;
+use crate::playermute::PlayerMute;
 
 pub mod guard;
 // pub mod commands;

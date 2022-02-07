@@ -658,6 +658,7 @@ impl RconQueryable for RconClient {
             waiting.push(rx);
         }
 
+        #[allow(clippy::question_mark)]
         if self
             .queries
             .send(SendQuery::Sequential(single_queries))
