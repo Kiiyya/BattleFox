@@ -2,13 +2,15 @@
 
 use std::{collections::{BTreeMap, HashMap}, sync::Arc, time::{Duration, Instant}};
 
+use async_trait::async_trait;
 use battlefield_rcon::{
     bf4::{Bf4Client, Event, Player, Squad, Team, Visibility},
     rcon::RconResult,
 };
-use futures::StreamExt;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
+
+use crate::Plugin;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PlayerInServer {
@@ -209,90 +211,86 @@ impl Players {
             (levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()), key.to_owned())
         }).collect()
     }
+}
 
-    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
-        tokio::spawn({
-            let bf4 = Arc::clone(&bf4);
-            let myself = Arc::clone(&self);
-            async move { myself.poller(bf4).await }
-        });
+#[async_trait]
+impl Plugin for Players {
+    const NAME: &'static str = "players";
 
-        let mut events = bf4.event_stream().await?;
-        while let Some(event) = events.next().await {
-            let now = Instant::now();
-            match event {
-                Ok(Event::Authenticated { player }) => {
-                    let mut inner = self.inner.lock().await;
-                    inner.players_joining.insert(
-                        player.clone(),
-                        PlayerJoining {
-                            player,
-                            team: None,
-                            squad: None,
-                            last_seen: now,
-                        },
-                    );
-                    inner.trim_old();
+    async fn event(self: Arc<Self>, _bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
+        let now = Instant::now();
+        match event {
+            Event::Authenticated { player } => {
+                let mut inner = self.inner.lock().await;
+                inner.players_joining.insert(
+                    player.clone(),
+                    PlayerJoining {
+                        player,
+                        team: None,
+                        squad: None,
+                        last_seen: now,
+                    },
+                );
+                inner.trim_old();
+            },
+            Event::Leave {
+                player,
+                final_scores: _,
+            } => {
+                let mut inner = self.inner.lock().await;
+                inner.players_joining.remove(&player);
+                inner.players.remove(&player);
+            },
+            Event::SquadChange {
+                player,
+                team,
+                squad,
+            } => {
+                let mut inner = self.inner.lock().await;
+                if let Some(p) = inner.players.get_mut(&player) {
+                    p.team = team;
+                    p.squad = squad;
+                    p.last_seen = now;
                 }
-                Ok(Event::Leave {
-                    player,
-                    final_scores: _,
-                }) => {
-                    let mut inner = self.inner.lock().await;
-                    inner.players_joining.remove(&player);
-                    inner.players.remove(&player);
+                if let Some(p) = inner.players_joining.get_mut(&player) {
+                    p.team = Some(team);
+                    p.squad = Some(squad);
+                    p.last_seen = now;
+                    inner.check_submit(&player);
                 }
-                Ok(Event::SquadChange {
-                    player,
-                    team,
-                    squad,
-                }) => {
-                    let mut inner = self.inner.lock().await;
-                    if let Some(p) = inner.players.get_mut(&player) {
-                        p.team = team;
-                        p.squad = squad;
-                        p.last_seen = now;
-                    }
-                    if let Some(p) = inner.players_joining.get_mut(&player) {
-                        p.team = Some(team);
-                        p.squad = Some(squad);
-                        p.last_seen = now;
-                        inner.check_submit(&player);
-                    }
+            },
+            Event::TeamChange {
+                player,
+                team,
+                squad,
+            } => {
+                let mut inner = self.inner.lock().await;
+                if let Some(p) = inner.players.get_mut(&player) {
+                    p.team = team;
+                    p.squad = squad;
+                    p.last_seen = now;
                 }
-                Ok(Event::TeamChange {
-                    player,
-                    team,
-                    squad,
-                }) => {
-                    let mut inner = self.inner.lock().await;
-                    if let Some(p) = inner.players.get_mut(&player) {
-                        p.team = team;
-                        p.squad = squad;
-                        p.last_seen = now;
-                    }
-                    if let Some(p) = inner.players_joining.get_mut(&player) {
-                        p.team = Some(team);
-                        p.squad = Some(squad);
-                        p.last_seen = now;
-                        inner.check_submit(&player);
-                    }
+                if let Some(p) = inner.players_joining.get_mut(&player) {
+                    p.team = Some(team);
+                    p.squad = Some(squad);
+                    p.last_seen = now;
+                    inner.check_submit(&player);
                 }
-                Ok(Event::Spawn { player, team }) => {
-                    let mut inner = self.inner.lock().await;
-                    if let Some(p) = inner.players.get_mut(&player) {
-                        p.team = team;
-                        p.last_seen = now;
-                    }
-                    if let Some(p) = inner.players_joining.get_mut(&player) {
-                        p.team = Some(team);
-                        p.last_seen = now;
-                    }
+            },
+            Event::Spawn { player, team } => {
+                let mut inner = self.inner.lock().await;
+                if let Some(p) = inner.players.get_mut(&player) {
+                    p.team = team;
+                    p.last_seen = now;
                 }
-                _ => {}
-            }
+                if let Some(p) = inner.players_joining.get_mut(&player) {
+                    p.team = Some(team);
+                    p.last_seen = now;
+                }
+            },
+            _ => (),
         }
-
         Ok(())
     }
 }
+

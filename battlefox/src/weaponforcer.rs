@@ -1,31 +1,39 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use battlefield_rcon::{bf4::{Bf4Client, Event, Player, Weapon}, rcon::RconResult};
 use futures::StreamExt;
 use serde::{Serialize, Deserialize};
 
+use crate::Plugin;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct WeaponEnforcerConfig {
+pub struct Config {
     enabled: bool,
 }
 
 pub struct WeaponEnforcer {
-    config: WeaponEnforcerConfig,
+    config: Config,
 }
 
 impl WeaponEnforcer {
-    pub fn new(config: WeaponEnforcerConfig) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             config
         }
     }
+}
 
-    pub async fn run(&self, bf4: &Bf4Client) -> RconResult<()> {
-        if !self.config.enabled {
-            debug!("Weapon Enforcer is disabled");
-            return Ok(());
-        }
+#[async_trait]
+impl Plugin for WeaponEnforcer {
+    const NAME: &'static str = "weaponforcer";
 
+    fn enabled(&self) -> bool {
+        self.config.enabled
+    }
+
+    async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
         let mut offenses : HashMap<Player, usize> = HashMap::new();
 
         let mut stream = bf4.event_stream().await?;

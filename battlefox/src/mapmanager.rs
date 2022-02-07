@@ -1,22 +1,32 @@
 //! Manages map lists based on player population
 
+use async_trait::async_trait;
 use itertools::Itertools;
 use lerp::Lerp;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::{cmp::Ordering, convert::TryFrom, sync::Arc, time::Duration};
 
 use battlefield_rcon::{bf4::{Bf4Client, Event, ListPlayersError, Map, MapListError, Visibility, defs::Preset}, rcon::RconResult};
-use futures::{future::BoxFuture, StreamExt};
-use tokio::{sync::Mutex, time::sleep};
+use futures::future::BoxFuture;
+use tokio::time::sleep;
 
 use self::{
-    config::HasZeroPopState,
     pool::{MapInPool, MapPool},
 };
-use crate::guard::Guard;
+use crate::Plugin;
 
-pub mod config;
 pub mod pool;
+
+/// Convenience thing for loading stuff from Json.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MapManagerConfig {
+    enabled: bool,
+    pop_states: Vec<PopState>,
+
+    vehicle_threshold: usize,
+    leniency: usize,
+}
 
 /// One "population level", for example for seeding, or for a full server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,16 +64,17 @@ pub fn determine_popstate(states: &[PopState], pop: usize) -> &PopState {
 /////////////////////////////////////////////
 
 pub struct MapManager {
-    enabled: bool,
+    config: MapManagerConfig,
+    // enabled: bool,
     inner: Mutex<Inner>,
 
-    pop_states: Vec<PopState>,
-    vehicle_threshold: usize,
+    // pop_states: Vec<PopState>,
+    // vehicle_threshold: usize,
 
-    /// Don't want to be overly sensitive to join/leave changes. Amortize it a bit before deciding
-    /// to change the pop state.
-    /// Unit: Players. For example, 3 players.
-    leniency: usize,
+    // /// Don't want to be overly sensitive to join/leave changes. Amortize it a bit before deciding
+    // /// to change the pop state.
+    // /// Unit: Players. For example, 3 players.
+    // leniency: usize,
 }
 
 /// The stuff behind the mutex
@@ -91,36 +102,70 @@ pub enum CallbackResult {
     RemoveMe,
 }
 
+#[async_trait]
+impl Plugin for MapManager {
+    const NAME: &'static str = "mapman";
+
+    fn enabled(&self) -> bool { self.config.enabled }
+
+    async fn start(self: &Arc<Self>, bf4: &Arc<Bf4Client>) {
+        // on start, get current player amounts (pop), then switch to that popstate initially.
+        // In the constructor, popstate gets set to the base (0) case, but when we launch BattleFox,
+        // it may not be on an empty server.
+        let pop = self.get_pop_count(bf4).await.unwrap();
+        let state = determine_popstate(&self.config.pop_states, pop).clone();
+        match self.change_pop_state(state, bf4).await {
+            Ok(()) => (),
+            // Err(MapListError::Rcon(r)) => return Err(r),
+            Err(mle) => error!("While starting up MapManager: {:?}. MapManager is *not* starting now!", mle),
+        }
+    }
+
+    async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
+        match event {
+            // Join also catches the seeder bots joining, hence use Authenticated.
+            Event::Authenticated { .. } => {
+                match self.pop_change(1, &bf4).await {
+                    Ok(()) => (),
+                    Err(MapListError::Rcon(r)) => return Err(r),
+                    Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
+                }
+            }
+            Event::Leave { .. } => {
+                match self.pop_change(-1, &bf4).await {
+                    Ok(()) => (),
+                    Err(MapListError::Rcon(r)) => return Err(r),
+                    Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
+                }
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
 impl MapManager {
-    pub fn new(
-        pop_states: Guard<Vec<PopState>, HasZeroPopState>,
-        vehicle_threshold: usize,
-        leniency: usize,
-        enabled: bool,
-    ) -> Self {
+    pub fn new(config: MapManagerConfig) -> Self {
+        let initial_popstate = config.pop_states
+            .iter()
+            .find(|state| state.min_players == 0)
+            .unwrap()
+            .clone(); // unwrap: safe because of guard.
         Self {
-            enabled,
+            config,
             inner: Mutex::new(Inner {
-                // pool: MapPool::new(),
-                pop_state: pop_states
-                    .iter()
-                    .find(|state| state.min_players == 0)
-                    .unwrap()
-                    .clone(), // unwrap: safe because of guard.
+                pop_state: initial_popstate,
                 pop: None,
                 joins_leaves_since_pop: 0,
                 pool_change_callbacks: Vec::new(),
             }),
-            pop_states: pop_states.get(),
-            vehicle_threshold,
-            leniency,
         }
     }
 
     /// Registers a function to be called when the map pool selection changes.
     ///
     /// Used e.g. in mapvote.
-    pub async fn register_pool_change_callback<F>(&self, f: F)
+    pub fn register_pool_change_callback<F>(&self, f: F)
     where
         F: Fn(Arc<Bf4Client>, PopState) -> BoxFuture<'static, CallbackResult>
             + Send
@@ -128,18 +173,18 @@ impl MapManager {
             + 'static,
     {
         let b = Arc::new(f);
-        let mut lock = self.inner.lock().await;
+        let mut lock = self.inner.lock().unwrap();
         lock.pool_change_callbacks.push(b);
     }
 
     /// Checks whether the map is in the current pool.
     pub async fn is_in_current_pool(&self, map: Map) -> bool {
-        self.inner.lock().await.pop_state.pool.contains_map(map)
+        self.inner.lock().unwrap().pop_state.pool.contains_map(map)
     }
 
     /// Get the current popstate
     pub async fn popstate(&self) -> PopState {
-        self.inner.lock().await.pop_state.clone()
+        self.inner.lock().unwrap().pop_state.clone()
     }
 
     /// Switches to the new map and game mode, but optionally disables vehicle spawns with
@@ -150,7 +195,7 @@ impl MapManager {
         mip: &MapInPool,
     ) -> Result<(), MapListError> {
         let pop = self.get_pop_count(bf4).await?;
-        let mut vehicles = pop >= self.vehicle_threshold;
+        let mut vehicles = pop >= self.config.vehicle_threshold;
 
         if let Some(vehicles_enabled) = mip.vehicles {
             trace!("Overriding vehicles enabled from {:?} to {:?}", vehicles, vehicles_enabled);
@@ -190,17 +235,20 @@ impl MapManager {
     /// Gets the cached amount of players currently on the server, or fetches it by listing all
     /// players via RCON.
     pub async fn get_pop_count(&self, bf4: &Arc<Bf4Client>) -> RconResult<usize> {
-        let lock = self.inner.lock().await;
-        if let Some(pop) = lock.pop {
+        let pop = {
+            let lock = self.inner.lock().unwrap();
+            lock.pop
+        };
+        if let Some(pop) = pop {
             Ok(pop)
         } else {
-            drop(lock); // don't keep it locked while we query rcon.
-            let playerlist = match bf4.list_players(Visibility::All).await {
+            // drop(lock); // don't keep it locked while we query rcon.
+            let playerlist = match bf4.list_players(Visibility::All).await { // <--- error
                 Ok(list) => list,
                 Err(ListPlayersError::Rcon(rconerr)) => return Err(rconerr),
             };
             let new_pop = playerlist.len();
-            let mut lock = self.inner.lock().await;
+            let mut lock = self.inner.lock().unwrap();
             lock.pop = Some(new_pop);
             lock.joins_leaves_since_pop = 0;
             Ok(new_pop)
@@ -209,44 +257,44 @@ impl MapManager {
 
     /// Call this when someone joins/leaves and it'll auto update
     async fn pop_change(&self, change: isize, bf4: &Arc<Bf4Client>) -> Result<(), MapListError> {
-        let mut lock = self.inner.lock().await;
-        // every 5 joins/leaves, we yeet the pop count, to prevent it desyncing.
-        if lock.joins_leaves_since_pop > 5 {
-            // fuck it, next time someone calls `get_pop_count`, it'll update.
-            lock.pop = None;
-            lock.joins_leaves_since_pop = 0;
-        } else {
-            lock.joins_leaves_since_pop += 1;
-            if let Some(pop) = &mut lock.pop {
-                // this is fine due to 2s-complement
-                // but it can still happen that rcon somehow ate join/leave packets, so juuuuust
-                // in caaaase that happened, we need to prevent negative pop counts.
-                *pop = pop.wrapping_add(change as usize);
+        {
+            let mut lock = self.inner.lock().unwrap();
+            // every 5 joins/leaves, we yeet the pop count, to prevent it desyncing.
+            if lock.joins_leaves_since_pop > 5 {
+                // fuck it, next time someone calls `get_pop_count`, it'll update.
+                lock.pop = None;
+                lock.joins_leaves_since_pop = 0;
+            } else {
+                lock.joins_leaves_since_pop += 1;
+                if let Some(pop) = &mut lock.pop {
+                    // this is fine due to 2s-complement
+                    // but it can still happen that rcon somehow ate join/leave packets, so juuuuust
+                    // in caaaase that happened, we need to prevent negative pop counts.
+                    *pop = pop.wrapping_add(change as usize);
 
-                if *pop > 9999 {
-                    lock.pop = Some(0);
+                    if *pop > 9999 {
+                        lock.pop = Some(0);
+                    }
                 }
             }
         }
-        drop(lock);
 
         // now, check if we need to change the pop_state.
         let pop = self.get_pop_count(bf4).await?; // get true player count.
-        let next_state = determine_popstate(&self.pop_states, pop);
+        let next_state = determine_popstate(&self.config.pop_states, pop);
 
-        let lock = self.inner.lock().await;
-        let current_state = lock.pop_state.clone();
+        let current_state = {
+            let lock = self.inner.lock().unwrap();
+            lock.pop_state.clone()
+        };
         if next_state.name == current_state.name {
             // we're exactly where we should be. nice, nothing to do.
-            drop(lock);
             Ok(())
         } else {
-            let pop = isize::try_from(pop).unwrap();
-            let diff_current = pop - isize::try_from(lock.pop_state.min_players).unwrap(); // +: pop higher than min players, -: pop fell below min_players.
-            let _diff_next = pop - isize::try_from(next_state.min_players).unwrap();
-            drop(lock);
+            let diff_current = (pop as isize) - (current_state.min_players as isize); // +: pop higher than min players, -: pop fell below min_players.
+            // let _diff_next = pop - isize::try_from(next_state.min_players).unwrap();
 
-            let leniency = isize::try_from(self.leniency).unwrap();
+            let leniency = isize::try_from(self.config.leniency).unwrap();
             if diff_current < -leniency {
                 // pop fell below the current state's min_players. Switch to proper pop state.
                 // This also means we're going "down"
@@ -267,7 +315,7 @@ impl MapManager {
     /// The amortized one. This is **not** necessarily equal to getting current population, and then
     /// `determine_popstate`!
     pub async fn pop_state(&self) -> PopState {
-        let lock = self.inner.lock().await;
+        let lock = self.inner.lock().unwrap();
         lock.pop_state.clone()
     }
 
@@ -281,10 +329,11 @@ impl MapManager {
         // In turn, RCON isn't aware of vehicles yes/no...
         fill_rcon_maplist(bf4, &newpop.pool, 1).await?;
 
-        let mut lock = self.inner.lock().await;
-        lock.pop_state = newpop.clone();
-        let handlers = lock.pool_change_callbacks.clone();
-        drop(lock); // since handlers may need to make very long rcon calls, drop lock early.
+        let handlers = {
+            let mut lock = self.inner.lock().unwrap();
+            lock.pop_state = newpop.clone();
+            lock.pool_change_callbacks.clone()
+        };
 
         let mut yeet_handlers = Vec::new();
         // notify observers
@@ -303,51 +352,6 @@ impl MapManager {
         //     lock.pool_change_callbacks.remove(index)
         // }
 
-        Ok(())
-    }
-
-    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
-        if !self.enabled {
-            debug!("Mapmanager is disabled");
-            return Ok(());
-        }
-
-        // on start, get current player amounts (pop), then switch to that popstate initially.
-        // In the constructor, popstate gets set to the base (0) case, but when we launch BattleFox,
-        // it may not be on an empty server.
-        let pop = self.get_pop_count(&bf4).await?;
-        let state = determine_popstate(&self.pop_states, pop).clone();
-        match self.change_pop_state(state, &bf4).await {
-            Ok(()) => (),
-            Err(MapListError::Rcon(r)) => return Err(r),
-            Err(mle) => error!("While starting up MapManager: {:?}. MapManager is *not* starting now!", mle),
-        }
-
-        let mut events = bf4.event_stream().await?;
-        while let Some(event) = events.next().await {
-            match event {
-                // Join also catches the seeder bots joining.
-                // Authenticated doesn't (hopefully).
-                Ok(Event::Authenticated { player: _ }) => {
-                    match self.pop_change(1, &bf4).await {
-                        Ok(()) => (),
-                        Err(MapListError::Rcon(r)) => return Err(r),
-                        Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
-                    }
-                }
-                Ok(Event::Leave {
-                    player: _,
-                    final_scores: _,
-                }) => {
-                    match self.pop_change(-1, &bf4).await {
-                        Ok(()) => (),
-                        Err(MapListError::Rcon(r)) => return Err(r),
-                        Err(mle) => error!("MapManager mainloop encountered the following error, ignores it, and is optimistically continuing (things might break): {:?}.", mle),
-                    }
-                },
-                _ => {}
-            }
-        }
         Ok(())
     }
 }

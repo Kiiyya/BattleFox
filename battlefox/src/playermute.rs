@@ -1,14 +1,15 @@
 use std::{collections::{HashMap}, convert::TryInto, ops::Add, sync::{Arc}};
 
 use ascii::AsciiString;
+use async_trait::async_trait;
 use battlefield_rcon::{bf4::{Bf4Client, CommmoRose, Eaid, Event, Player}, rcon::RconResult};
 use chrono::{Duration, Utc};
 use battlefox_database::{delete_muted_player, establish_connection, get_muted_player, get_muted_players, models::BfoxMutedPlayer, replace_into_muted_player};
-use futures::StreamExt;
 use serde::{Serialize, Deserialize};
 use battlefox_shared::mute::MuteType;
 use tokio::sync::Mutex;
 
+use crate::Plugin;
 use crate::players::{MatchError, Players};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +20,8 @@ pub struct PlayerMuteConfig {
 
 pub struct PlayerMute {
     players: Arc<Players>,
-    config: PlayerMuteConfig
+    offenses: Arc<Mutex<HashMap<Eaid, MutedPlayerInfo>>>,
+    config: PlayerMuteConfig,
 }
 
 struct MutedPlayerInfo {
@@ -29,137 +31,70 @@ struct MutedPlayerInfo {
     reason: Option<String>
 }
 
-impl PlayerMute {
-    pub fn new(players: Arc<Players>, config: PlayerMuteConfig) -> Arc<Self> {
-        Arc::new(Self {
-            players,
-            config
-        })
-    }
+#[async_trait]
+impl Plugin for PlayerMute {
+    const NAME: &'static str = "playermute";
 
-    pub async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
-        if !self.config.enabled {
-            debug!("Player muting is disabled");
-            return Ok(());
-        }
+    async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
+        match event {
+            Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total} => {
+                debug!("Player Mute - Level loaded: {} {} {} {}", level_name.Pretty(), game_mode, rounds_played, rounds_total);
 
-        debug!("Starting player mute addon");
+                // Update mute list (remove expired mutes and add missing ones)
+                let mut lock = self.offenses.lock().await;
+                self.update_players(&mut lock); // TODO:
+            },
+            Event::Chat { vis: _, player, msg } => {
+                trace!("{} > {}", player.name, msg);
 
-        let offenses: Arc<Mutex<HashMap<Eaid, MutedPlayerInfo>>> = Arc::new(Mutex::new(HashMap::new()));
+                if msg.as_str().starts_with('/') { return Ok(()); }
+                if CommmoRose::decode(&msg).is_ok() { return Ok(()); }
 
-        // Fetch muted players
-        {
-            let offenses = Arc::clone(&offenses);
-            let mut offenses = offenses
-                .lock()
-                .await;
-            self.update_players(&mut offenses);
-        }
+                let mut lock = self.offenses.lock().await;
+                if let Some(muted_player) = lock.get_mut(&player.eaid) {
+                    muted_player.infractions += 1;
+                    let infractions = muted_player.infractions;
+                    drop(lock);
 
-        let mut stream = bf4.event_stream().await?;
-        while let Some(event) = stream.next().await {
-            match event {
-                Ok(Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total}) => {
-                    debug!("Player Mute - Level loaded: {} {} {} {}", level_name.Pretty(), game_mode, rounds_played, rounds_total);
-
-                    let offenses = Arc::clone(&offenses);
-                    let playerreport = self.clone();
-
-                    // Update mute list (remove expired mutes and add missing ones)
-                    tokio::spawn(async move {
-                        let mut offenses = offenses
-                            .lock()
-                            .await;
-
-                        playerreport.update_players(&mut offenses);
-                    });
-                },
-                // Ok(Event::ServerChat { vis, msg }) => {
-                //     debug!("Server > {}", msg);
-
-                //     let split = msg.as_str()
-                //         .split(' ')
-                //         .filter(|&s| !s.is_empty())
-                //         .collect::<Vec<_>>();
-
-                //     if split.len() < 2 {
-                //         continue;
-                //     }
-
-                //     let player = match bf4.resolve_player(&AsciiString::from_ascii(split[0]).unwrap()).await {
-                //         Ok(player) => player,
-                //         _ => {
-                //             warn!("Player {} not found", split[0]);
-                //             continue;
-                //         }
-                //     };
-                //     let message = AsciiString::from_ascii(split[1..].join(" ")).unwrap();
-
-                //     let bf4 = bf4.clone();
-                //     let playerreport = self.clone();
-
-                //     tokio::spawn(async move {
-                //         if let Err(_) = CommmoRose::decode(&message) {
-                //             // Not a commo rose message
-
-                //         }
-                //     });
-                // },
-                Ok(Event::Chat { vis: _, player, msg }) => {
-                    trace!("{} > {}", player.name, msg);
-
-                    if msg.as_str().starts_with('/') { continue; }
-                    if CommmoRose::decode(&msg).is_ok() { continue; }
-
-                    let mut lock = offenses.lock().await;
-                    if let Some(muted_player) = lock.get_mut(&player.eaid) {
-                        muted_player.infractions += 1;
-                        let infractions = muted_player.infractions;
-                        drop(lock);
-
-                        let bf4 = bf4.clone();
-                        let offenses = Arc::clone(&offenses);
-                        let self_clone = self.clone();
-                        tokio::spawn(async move {
-                            if infractions >= 2 {
-                                match bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await {
-                                    Ok(_) => {
-                                        self_clone.add_kicked(&player.eaid).await;
-                                    },
-                                    Err(error) => {
-                                        let _ = dbg!(error);
-                                    }
-                                };
-                            } else {
-                                let _ = dbg!(bf4.kill(player.name.clone()).await);
-                                let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
+                    let bf4 = bf4.clone();
+                    if infractions >= 2 {
+                        match bf4.kick(player.name.clone(), "You have been kicked for talking while muted.").await {
+                            Ok(_) => {
+                                self.add_kicked(&player.eaid).await;
+                            },
+                            Err(error) => {
+                                let _ = dbg!(error);
                             }
-
-                            // Mute/Unmute command handling
-                            let _ = self_clone.handle_chat_msg(bf4, player, msg, &offenses).await;
-                        });
+                        };
+                    } else {
+                        let _ = dbg!(bf4.kill(player.name.clone()).await);
+                        let _ = bf4.say("You are muted and are not allowed to talk in the server. You'll be kicked next time.", player.clone()).await;
                     }
-                },
-                Ok(Event::RoundOver { winning_team }) => {
-                    debug!("Player Mute - Round Over: {:#?}", winning_team);
 
-                    let offenses = Arc::clone(&offenses);
-                    let playerreport = self.clone();
-
-                    // Remove all that only had round mute
-                    tokio::spawn(async move {
-                        let mut offenses = offenses
-                            .lock()
-                            .await;
-
-                        playerreport.remove_round_mutes(&mut offenses);
-                    });
+                    // Mute/Unmute command handling
+                    let _ = self.handle_chat_msg(bf4, player, msg).await;
                 }
-                _ => {}
-            }
-        }
+            },
+            Event::RoundOver { winning_team } => {
+                debug!("Player Mute - Round Over: {:#?}", winning_team);
 
+                // Remove all that only had round mute
+                self.remove_round_mutes().await;
+            },
+            _ => {}
+        }
         Ok(())
+    }
+}
+
+
+impl PlayerMute {
+    pub fn new(players: Arc<Players>, config: PlayerMuteConfig) -> Self {
+        Self {
+            players,
+            config,
+            offenses: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     async fn handle_chat_msg(
@@ -167,7 +102,6 @@ impl PlayerMute {
         bf4: Arc<Bf4Client>,
         player: Player,
         mut msg: AsciiString,
-        muted_players: &Arc<Mutex<HashMap<Eaid, MutedPlayerInfo>>>
     ) -> RconResult<()> {
 
         msg.make_ascii_lowercase();
@@ -260,10 +194,8 @@ impl PlayerMute {
                                 }
                             }
 
-                            let mut muted_players = muted_players
-                                .lock()
-                                .await;
-                            if self.try_add_mute(best_match.eaid, mute_player, &mut muted_players) {
+                            let mut lock = self.offenses.lock().await;
+                            if self.try_add_mute(best_match.eaid, mute_player, &mut lock) {
                                 let _ = bf4.say(format!("{} has been muted for {}", best_match.name, reason), &player).await;
                                 let _ = bf4.say(format!("You have been muted for {}", reason), &best_match).await;
                                 return Ok(())
@@ -272,10 +204,8 @@ impl PlayerMute {
                         "unmute" => {
                             match self.try_get_muted_player(&best_match.eaid.to_string()) {
                                 Some(_) => {
-                                    let mut muted_players = muted_players
-                                        .lock()
-                                        .await;
-                                    if self.try_remove_mute(&best_match.eaid, &mut muted_players) {
+                                    let mut lock = self.offenses.lock().await;
+                                    if self.try_remove_mute(&best_match.eaid, &mut lock) {
                                         let _ = bf4.say(format!("Mute for player {} has been removed.", best_match.name), &player).await;
                                         let _ = bf4.say("You have been unmuted.", &best_match).await;
                                         return Ok(())
@@ -344,13 +274,14 @@ impl PlayerMute {
         }
     }
 
-    fn remove_round_mutes(&self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
+    async fn remove_round_mutes(&self) {
         debug!("Removing round muted players");
+
+        let lock = self.offenses.lock().await;
 
         match establish_connection() {
             Ok(con) => {
-
-                for (key, val) in map.iter() {
+                for (key, val) in lock.iter() {
                     if val.mute_type == MuteType::Round {
                         let result = delete_muted_player(&con, key.to_string());
                         match result {
