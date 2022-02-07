@@ -28,4 +28,9 @@ impl Admins {
 #[async_trait]
 impl Plugin for Admins {
     const NAME: &'static str = "admins";
+
+    // async fn event(self: Arc<Self>, _bf4: Arc<Bf4Client>, _ev: Event) -> RconResult<()> {
+    //     // do nothing unless overridden.
+    //     Ok(())
+    // }
 }

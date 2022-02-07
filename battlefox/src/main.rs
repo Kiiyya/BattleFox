@@ -1,5 +1,4 @@
 #![allow(clippy::new_without_default)]
-#![feature(trait_upcasting)]
 
 #[allow(unused_imports)] // we use maplin in tests
 #[macro_use] extern crate maplit;
@@ -18,6 +17,7 @@ use itertools::Itertools;
 use players::Players;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use battlefox_shared::rabbitmq::RabbitMq;
+use thiserror::Error;
 use weaponforcer::WeaponEnforcer;
 use playerreport::PlayerReport;
 use std::any::Any;
@@ -37,7 +37,7 @@ use mapvote::{
 };
 
 use crate::admins::Admins;
-use crate::{playermute::{PlayerMute, PlayerMuteConfig}, weaponforcer::WeaponEnforcerConfig};
+use crate::{playermute::{PlayerMute, PlayerMuteConfig}, weaponforcer::Config};
 use crate::playerreport::PlayerReportConfig;
 
 pub mod guard;
@@ -67,7 +67,7 @@ lazy_static::lazy_static! {
     static ref UPTIME: Instant = Instant::now();
 }
 
-fn get_rcon_coninfo() -> RconResult<RconConnectionInfo> {
+fn get_rcon_coninfo() -> anyhow::Result<RconConnectionInfo> {
     let ip = var("BFOX_RCON_IP").unwrap_or_else(|_| "127.0.0.1".into());
     let port = var("BFOX_RCON_PORT")
         .unwrap_or_else(|_| "47200".into())
@@ -81,18 +81,20 @@ fn get_rcon_coninfo() -> RconResult<RconConnectionInfo> {
     })
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum ConfigError {
-    Serde(serde_yaml::Error),
-    Io(std::io::Error),
+    #[error("Failed to deserialize config.")]
+    Serde(#[from] serde_yaml::Error),
+    #[error("Failed to open config file")]
+    Io(#[from] std::io::Error),
 }
 
 fn load_config<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigError> {
     info!("Loading {}", path.as_ref().to_string_lossy());
-    let mut file = File::open(path).map_err(ConfigError::Io)?;
+    let mut file = File::open(path)?;
     let mut s = String::new();
-    file.read_to_string(&mut s).map_err(ConfigError::Io)?;
-    let t: T = serde_yaml::from_str(&s).map_err(ConfigError::Serde)?;
+    file.read_to_string(&mut s)?;
+    let t: T = serde_yaml::from_str(&s)?;
     Ok(t)
 }
 
@@ -101,11 +103,15 @@ pub trait Plugin : Send + Sync + 'static {
     const NAME: &'static str;
     fn enabled(&self) -> bool { true }
 
+    async fn start(self: &Arc<Self>, _bf4: &Arc<Bf4Client>) { }
+
     /// You *can* implement this, but you may be more interested in `event`.
     ///
     /// In case `run` is overridden, `event` does nothing.
     async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
         if self.enabled() {
+            self.start(&bf4).await;
+
             let mut stream = bf4.event_stream().await?;
             while let Some(event) = stream.next().await {
                 match event {
@@ -164,7 +170,21 @@ impl App {
 
     fn has_plugin<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> P) -> Result<Arc<P>, ConfigError> {
         let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
-        let p = Arc::new(f(config));
+        self.has_plugin_noconfig(f(config))
+    }
+
+    fn has_plugin_arc<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> Arc<P>) -> Result<Arc<P>, ConfigError> {
+        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
+        let p = f(config);
+        let exists = self.plugins.insert(P::NAME.to_string(), p.clone());
+        if exists.is_some() {
+            panic!("Double-loading of plugins is forbidden. Plugin: {}", P::NAME);
+        }
+        Ok(p)
+    }
+
+    fn has_plugin_noconfig<P: Plugin>(&mut self, p: P) -> Result<Arc<P>, ConfigError> {
+        let p = Arc::new(p);
 
         let exists = self.plugins.insert(P::NAME.to_string(), p.clone());
         if exists.is_some() {
@@ -197,125 +217,33 @@ impl App {
 
 #[allow(clippy::or_fun_call)]
 #[tokio::main]
-async fn main() -> RconResult<()> {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok(); // load (additional) environment variables from `.env` file in working directory.
     logging::init_logging();
     info!("This is BattleFox {}", GIT_DESCRIBE);
     let _ = UPTIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
+    // Initialize plugins and their dependencies.
     let mut app = App::new();
-    let _admins = app.has_plugin(Admins::new).unwrap();
+    let _admins = app.has_plugin(Admins::new)?;
+    let players = app.has_plugin_noconfig(Players::new())?;
+    let vips = app.has_plugin_noconfig(Vips::new())?;
+    let _weaponforcer = app.has_plugin(WeaponEnforcer::new)?;
+    // let _playerreport = app.has_plugin(|c| PlayerReport::new(players.clone(), rabbitmq, c))?;
+    let _playermute = app.has_plugin(|c| PlayerMute::new(players.clone(), c))?;
+    let mapman = app.has_plugin(MapManager::new)?;
+    let _mapvote = app.has_plugin_arc(|c: MapVoteConfigJson|
+        Mapvote::new(mapman, vips, players, MapVoteConfig::from_json(c))
+    )?;
 
+    // Connect to RCON.
     let coninfo = get_rcon_coninfo()?;
     info!("Connecting to {}:{} with password ***...", coninfo.ip, coninfo.port);
     let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
     trace!("Connected!");
 
-    // actually start all the plugins and wait for them to finish.
+    // Actually start all the plugins and wait for them to finish.
     app.run(bf4).await;
-
-    // let mut rabbitmq = RabbitMq::new(None);
-    // if let Err(why) = rabbitmq.run().await {
-    //     error!("Error running rabbitmq publisher - Player Reports won't work: {:?}", why);
-    // }
-
-    // let players = Arc::new(Players::new());
-
-    // let vips = Arc::new(Vips::new());
-
-    // let weaponforcer_config : WeaponEnforcerConfig = load_config(&format!("{}weaponforcer.yaml", configs_path)).unwrap();
-    // let weaponforcer = WeaponEnforcer::new(weaponforcer_config);
-
-    // // let playerreport_config : PlayerReportConfig = load_config(&format!("{}playerreport.yaml", configs_path)).unwrap();
-    // // let playerreport = PlayerReport::new(players.clone(), rabbitmq, playerreport_config);
-
-    // let playermute_config : PlayerMuteConfig = load_config(&format!("{}playermute.yaml", configs_path)).unwrap();
-    // let playermute = PlayerMute::new(players.clone(), playermute_config);
-
-    // // let commands = Arc::new(Commands::new());
-
-    // let mapman_config: MapManagerConfig = load_config(&format!("{}mapman.yaml", configs_path)).unwrap();
-    // let mapman = Arc::new(MapManager::new(
-    //     Guard::new(mapman_config.pop_states).expect("Failed to validate map manager config"),
-    //     mapman_config.vehicle_threshold,
-    //     mapman_config.leniency,
-    //     mapman_config.enabled,
-    // ));
-
-    // let mapvote_config: MapVoteConfigJson = load_config(&format!("{}mapvote.yaml", configs_path)).unwrap();
-    // let mapvote = Mapvote::new(
-    //     mapman.clone(),
-    //     vips.clone(),
-    //     players.clone(),
-    //     MapVoteConfig::from_json(mapvote_config),
-    // )
-    // .await;
-
-
-
-
-    // { // Testing stuff
-    //     let player = Player {
-    //         name: AsciiString::from_ascii("xfileFIN").unwrap(),
-    //         eaid: Eaid::new(&AsciiString::from_ascii("EA_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX").unwrap()).unwrap(),
-    //     };
-    //     // for i in 0..10 {
-    //     //     bf4.say(format!("{}", i).repeat(20), Visibility::All).await.unwrap();
-    //     //     sleep(Duration::from_millis(2000)).await;
-    //     // }
-
-    //     for map in battlefield_rcon::bf4::Map::all() {
-    //         let mut msg = "\t".to_string();
-    //         for minlen in 2..5 {
-    //             msg += &format!("{}", map.tab4_prefixlen_wvehicles(minlen, false));
-    //             // let upper = map.short()[..minlen].to_ascii_uppercase();
-    //             // let lower = map.short()[minlen..].to_string();
-    //             // msg += &format!("[\t{}{}\t]  ", upper, lower); // TODO: trim last \t of last chunk item
-    //         }
-    //         msg += "|";
-    //         bf4.say(msg, &player).await.unwrap();
-    //         sleep(Duration::from_millis(1500)).await;
-    //     }
-
-    //     // bf4.say("Test", Player {
-    //     //     name: AsciiString::from_ascii("xfileFIN").unwrap(),
-    //     //     eaid: Eaid::new(&AsciiString::from_ascii("EA_FCB11161E04E98494AEB5A91A9329486").unwrap()).unwrap(),
-    //     // }).await.unwrap();
-
-    //     return Ok(());
-    // }
-
-    // // start parts.
-    // let mut jhs = Vec::new();
-
-    // // let bf4clone = bf4.clone();
-    // // jhs.push(tokio::spawn(async move { commands.run(bf4clone).await }));
-
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { players.run(bf4clone).await }));
-
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { mapvote.run(bf4clone).await }));
-
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { mapman.run(bf4clone).await }));
-
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { weaponforcer.run(&bf4clone).await }));
-
-    // // let bf4clone = bf4.clone();
-    // // jhs.push(tokio::spawn(async move { playerreport.run(bf4clone).await }));
-
-    // let bf4clone = bf4.clone();
-    // jhs.push(tokio::spawn(async move { playermute.run(bf4clone).await }));
-
-    // // Wait for all our spawned tasks to finish.
-    // // This'll happen at shutdown, or never, when you CTRL-C.
-    // for jh in jhs.drain(..) {
-    //     jh.await.unwrap()?
-    // }
-
-    trace!("Exiting gracefully :)");
 
     Ok(())
 }

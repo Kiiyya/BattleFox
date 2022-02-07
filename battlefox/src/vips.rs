@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use std::{collections::HashMap, time::Duration};
 
 use ascii::AsciiString;
+use async_trait::async_trait;
 use battlefield_rcon::{
     bf4::{Bf4Client, Player},
     rcon::RconResult,
@@ -8,6 +10,7 @@ use battlefield_rcon::{
 
 use tokio::{sync::Mutex, time::Instant};
 
+use crate::Plugin;
 use crate::guard::{
     or::Or,
     recent::{Age, MaxAge, Recent},
@@ -179,6 +182,16 @@ impl Vips {
         debug!("VIPs: {}", vips.join(", "));
 
         Ok(getter(&mut inner)) // before we drop the lock, use the getter on it.
+    }
+}
+
+#[async_trait]
+impl Plugin for Vips {
+    const NAME: &'static str = "vips";
+
+    async fn run(self: Arc<Self>, _bf4: Arc<Bf4Client>) -> RconResult<()> {
+        // Disable the default event loop for Vips
+        Ok(())
     }
 }
 

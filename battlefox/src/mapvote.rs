@@ -1,6 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
-use crate::UPTIME;
+use crate::{UPTIME, Plugin};
 use crate::{guard::{
         recent::Age::{Old, Recent},
         Cases, Guard,
@@ -14,6 +14,7 @@ use self::{config::MapVoteConfig, matching::{AltMatchers, AltMatchersInv}};
 use super::stv::tracing::{NoTracer, StvAction, LoggingTracer, AnimTracer};
 use super::stv::Ballot;
 use ascii::{AsciiString, IntoAsciiString, AsciiChar};
+use async_trait::async_trait;
 use battlefield_rcon::bf4::Eaid;
 use battlefield_rcon::{bf4::{Bf4Client, Event, GameMode, Map, Player, Visibility, error::{Bf4Error, Bf4Result}, wrap_msg_chars}, rcon::{RconError, RconResult}};
 use either::Either::{Left, Right};
@@ -291,9 +292,18 @@ enum NomMapParseResult {
     Other,
 }
 
+#[async_trait]
+impl Plugin for Mapvote {
+    const NAME: &'static str = "mapvote";
+
+    async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
+        todo!()
+    }
+}
+
 impl Mapvote {
     /// Creates a new instance of `MapVote`, but doesn't start it yet, just sets stuff up.
-    pub async fn new(
+    pub fn new(
         mapman: Arc<MapManager>,
         vips: Arc<Vips>,
         players: Arc<Players>,
@@ -301,11 +311,6 @@ impl Mapvote {
     ) -> Arc<Self> {
         let myself = Arc::new(Self {
             inner: Mutex::new(None),
-            //     Inner {
-            //     alternatives: MapPool::new(),
-            //     votes: HashMap::new(),
-            //     pop_state: mapman.pop_state().await,
-            // }),
             mapman: mapman.clone(),
             vips,
             players,
@@ -332,8 +337,7 @@ impl Mapvote {
                         CallbackResult::RemoveMe
                     }
                 })
-            })
-            .await;
+            });
 
         // trace!("after setting up ugly callback");
 
