@@ -32,7 +32,7 @@ cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
 cmd_err!(pub ServerInfoError, );
 cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
-cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull);
+cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull, PlayerNotInList);
 cmd_err!(pub GameAdminError, Full, AlreadyInList);
 cmd_err!(pub PlayerKickError, PlayerNotFound);
 
@@ -759,10 +759,10 @@ impl Bf4Client {
             .await
     }
 
-    pub async fn admin_add(&self, player: &Player, level: usize) -> Result<(), ReservedSlotsError> {
+    pub async fn admin_add(&self, player: impl AsRef<str>, level: usize) -> Result<(), ReservedSlotsError> {
         self.rcon
             .query(
-                &veca!["gameAdmin.add", player.name.as_str(), level.to_string()],
+                &veca!["gameAdmin.add", player.as_ref(), level.to_string()],
                 ok_eof,
                 |err| match err {
                     "Full" => Some(ReservedSlotsError::ReservedSlotsFull),
@@ -771,6 +771,17 @@ impl Bf4Client {
                 },
             )
             .await
+    }
+
+    pub async fn admin_remove(&self, player: &Player) -> Result<(), ReservedSlotsError> {
+        self.rcon.query(
+            &veca!["gameAdmin.remove", player.name.as_str()],
+            ok_eof,
+            |err| match err {
+                "PlayerNotInList" => Some(ReservedSlotsError::PlayerNotInList),
+                _ => None,
+            }
+        ).await
     }
 
     /// Lists the game Admins (undocumented in the PDF), together with their level (1, 2, 3).

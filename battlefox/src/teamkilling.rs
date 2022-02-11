@@ -139,6 +139,12 @@ impl TeamKilling {
 
 	async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
 		match event {
+			Event::Authenticated { player } => {
+				let _ = bf4.admin_add(&player.name, 1).await;
+			},
+			Event::Leave { player , .. } => {
+				let _ = bf4.admin_remove(&player).await;
+			}
 			Event::Kill {killer: Some(killer), victim, weapon, .. } => {
 				if let Some(killer2) = self.players.player(&killer).await {
 					if let Some(victim2) = self.players.player(&victim).await {
@@ -213,7 +219,7 @@ impl Plugin for TeamKilling {
     const NAME: &'static str = "teamkilling";
 	fn enabled(&self) -> bool { self.config.enabled }
 
-	async fn start(self: &Arc<Self>, _bf4: &Arc<Bf4Client>) {
+	async fn start(self: &Arc<Self>, bf4: &Arc<Bf4Client>) {
 		let self_clone = self.clone();
 		tokio::spawn(async move {
 			// every 10 minutes, trim teamkilling entries and yeet empty ones.
@@ -223,6 +229,20 @@ impl Plugin for TeamKilling {
 				lock.histories.iter_mut()
 					.for_each(|(_, hist)| hist.trim(self_clone.config.trim_history_minutes));
 				lock.histories.retain(|_, hist| !hist.teamkills.is_empty());
+			}
+		});
+
+		// put all players into admin list
+		// let self_clone = self.clone();
+		let bf4 = bf4.clone();
+		tokio::spawn(async move {
+			loop {
+				// let players = self_clone.players.players(&*bf4).await;
+				let players = bf4.list_players(Visibility::All).await.unwrap(); // bad unwrap... :(
+				for player in players.iter() {
+					let _ = bf4.admin_add(&player.player_name, 1);
+				}
+				// tokio::time::sleep(Duration::from_secs(60 * 20)).await;
 			}
 		});
 	}
