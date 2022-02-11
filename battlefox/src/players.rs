@@ -90,6 +90,11 @@ impl Players {
         }
     }
 
+    pub async fn player(&self, player: &Player) -> Option<PlayerInServer> {
+        let inner = self.inner.lock().await;
+        inner.players.get(player).cloned()
+    }
+
     pub async fn players(&self, bf4: &Bf4Client) -> HashMap<Player, PlayerInServer> {
         let inner = self.inner.lock().await;
         if let Some(last_checked) = inner.last_checked {
