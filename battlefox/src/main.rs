@@ -8,6 +8,7 @@
 use ascii::{IntoAsciiString};
 use async_trait::async_trait;
 use battlefield_rcon::bf4::Event;
+use battlefield_rcon::bf4::error::Bf4Error;
 use battlefield_rcon::rcon::RconResult;
 use dotenv::dotenv;
 use futures::StreamExt;
@@ -94,6 +95,14 @@ fn load_config<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ConfigE
     Ok(t)
 }
 
+/// This is the trait you want to implement when you're creating a new plugin.
+///
+/// The simplest way to use this trait is to implement the `event` function.
+/// The `run` function can be overridden, but it invokes the `event` function and does some common
+/// error-handling. If you override `run`, then you lose that.
+///
+/// Remember to do something like `async fn enabled(&self) -> bool { self.config.enabled }`
+/// (you have to provide the config).
 #[async_trait]
 pub trait Plugin : Send + Sync + 'static {
     const NAME: &'static str;
@@ -105,6 +114,7 @@ pub trait Plugin : Send + Sync + 'static {
     ///
     /// In case `run` is overridden, `event` does nothing.
     async fn run(self: Arc<Self>, bf4: Arc<Bf4Client>) -> RconResult<()> {
+        info!("Plugin {} is {}.", Self::NAME, if self.enabled() { "enabled" } else { "disabled" });
         if self.enabled() {
             self.start(&bf4).await;
 
@@ -116,14 +126,16 @@ pub trait Plugin : Send + Sync + 'static {
                         let self_clone = self.clone();
                         tokio::spawn(async move { self_clone.event(bf4, event).await });
                     },
-                    Err(err) => {
-                        error!("Plugin \"{}\" encountered bf4 error and has quit: {:?}", Self::NAME, err);
+                    Err(Bf4Error::Rcon(err)) => {
+                        // This is likely a disconnected event thing.
+                        error!("[{}] encountered Bf4Error(Rcon(_)), and quitting: {:?}", Self::NAME, err);
                         break;
+                    }
+                    Err(err) => {
+                        debug!("[{}] encountered Bf4Error, but continuing: {:?}", Self::NAME, err);
                     },
                 }
             }
-        } else {
-            info!("Plugin {} is disabled.", Self::NAME);
         }
         Ok(())
     }
