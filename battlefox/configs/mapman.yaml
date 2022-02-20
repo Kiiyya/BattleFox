@@ -5,61 +5,39 @@ pop_states:
       pool:
         - map: Locker
           mode: Rush
-        - map: PearlMarket
-          mode: Rush
-        - map: Propaganda
-          mode: Rush
         - map: FloodZone
           mode: Rush
-        - map: Metro
+        - map: Shanghai
           mode: Rush
     min_players: 0
-  - name: LowPopulation
-    pool:
-      pool:
-        - map: Locker
-          mode: Rush
-        - map: Metro
-          mode: Rush
-        - map: PearlMarket
-          mode: Rush
-        - map: Propaganda
-          mode: Rush
-        - map: FloodZone
-          mode: Rush
-    min_players: 20
   - name: MediumPopulation
     pool:
       pool:
         - map: Locker
           mode: Rush
-        - map: Metro
-          mode: Rush
-        - map: PearlMarket
-          mode: Rush
-        - map: Propaganda
+        - map: Zavod
           mode: Rush
         - map: FloodZone
           mode: Rush
-        - map: Zavod
-          mode: Rush
         - map: GolmudRailway
-          mode: Rush
-        - map: Shanghai
           mode: Rush
         - map: ParacelStorm
           mode: Rush
+        - map: Locker
+          mode: Rush
         - map: HainanResort
+          mode: Rush
+        - map: Shanghai
           mode: Rush
         - map: RogueTransmission
           mode: Rush
         - map: Dawnbreaker
           mode: Rush
-    min_players: 40
+    min_players: 16
   - name: HighPopulation
     pool:
       pool:
-        - map: Zavod
+        - map: Locker
           mode: Rush
         - map: LancangDam
           mode: Rush
@@ -69,7 +47,7 @@ pop_states:
           mode: Rush
         - map: ParacelStorm
           mode: Rush
-        - map: Locker
+        - map: Zavod
           mode: Rush
         - map: HainanResort
           mode: Rush
@@ -79,18 +57,50 @@ pop_states:
           mode: Rush
         - map: Dawnbreaker
           mode: Rush
+        - map: GuilinPeaks
+          mode: Rush
+        - map: Caspian
+          mode: Rush
+        - map: Firestorm
+          mode: Rush
         - map: Metro
           mode: Rush
         - map: Oman
           mode: Rush
+        - map: NanshaStrike
+          mode: Rush
         - map: PearlMarket
           mode: Rush
+          vehicles: false
         - map: Propaganda
           mode: Rush
         - map: Lumphini
           mode: Rush
         - map: SunkenDragon
           mode: Rush
-    min_players: 50
+        - map: Hammerhead
+          mode: Rush
+        - map: Hangar21
+          mode: Rush
+        - map: Karelia
+          mode: Rush
+        - map: ZavodNight
+          mode: Rush
+        - map: DragonValley
+          mode: Rush
+        - map: Outbreak
+          mode: Rush
+        - map: Altai
+          mode: Rush
+        - map: LostIslands
+          mode: Rush
+        - map: OpMortar
+          mode: Rush
+        - map: WaveBreaker
+          mode: Rush
+        - map: SilkRoad
+          mode: Rush
+    min_players: 32
 vehicle_threshold: 30
 leniency: 2
+
