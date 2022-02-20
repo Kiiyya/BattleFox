@@ -4,7 +4,6 @@
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
-#[macro_use] extern crate derive_more;
 
 use ascii::{IntoAsciiString};
 use async_trait::async_trait;

@@ -61,7 +61,6 @@ quickcheck = "1"
 quickcheck_macros = "1"
 
 shrinkwraprs = "0.3" # to deal with newtypes better
-derive_more = "0.99" # general goodness
 
 git-version = "0.3"
 

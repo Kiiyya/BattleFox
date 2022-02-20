@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// - map
 /// - game mode (Rush, Conquest, ...)
 /// - vehicles (None -> Adaptive based on vehicle_threshold, False -> No vehicles, True -> Vehicles)
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MapInPool {
     pub map: Map,
     pub mode: GameMode,
