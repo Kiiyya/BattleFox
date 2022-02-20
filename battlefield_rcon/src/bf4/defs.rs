@@ -159,6 +159,10 @@ pub enum Event {
         player: Player,
         final_scores: PlayerInfo,
     },
+    Disconnect {
+        player: AsciiString,
+        reason: String,
+    },
     TeamChange {
         player: Player,
         team: Team,

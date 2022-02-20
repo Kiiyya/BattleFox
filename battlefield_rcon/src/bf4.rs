@@ -309,6 +309,12 @@ impl Bf4Client {
                     Err(Bf4Error::Rcon(RconError::malformed_packet(packet.words.clone(), format!("Expected exactly one PlayerInfo entry for onLeave packet, but found {} entries instead", pib.len()))))
                 }
             }
+            "player.onDisconnect" => {
+                Ok(Event::Disconnect {
+                    player: packet.words[1].clone(),
+                    reason: packet.words[2].to_string()
+                })
+            }
             "server.onRoundOver" => {
                 if packet.words.len() != 2 {
                     return Err(Bf4Error::Rcon(RconError::malformed_packet(
