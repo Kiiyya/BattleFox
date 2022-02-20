@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
@@ -72,12 +72,6 @@ struct HistEntry {
 	victim: Player,
 }
 
-impl HistEntry {
-	fn badness(&self, config: &Config) -> f32 {
-		config.interpolate_time_scale(self.timestamp.elapsed())
-	}
-}
-
 impl Display for HistEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{} ago: Killed {} with {}",
@@ -102,6 +96,12 @@ impl Display for PlayerHistory {
     }
 }
 
+impl HistEntry {
+	fn badness(&self, config: &Config) -> f32 {
+		config.interpolate_time_scale(self.timestamp.elapsed())
+	}
+}
+
 impl PlayerHistory {
 	/// Sum of the badness of all history entries.
 	fn badness(&self, config: &Config) -> f32 {
@@ -116,8 +116,15 @@ impl PlayerHistory {
 	}
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DebugSatk {
+	SuicidesAsTk,
+	KillsAsTk,
+}
+
 struct Inner {
 	histories: BTreeMap<Player, PlayerHistory>,
+	debug_count_suicides_as_tk: BTreeMap<Player, DebugSatk>,
 }
 
 pub struct TeamKilling {
@@ -133,6 +140,7 @@ impl TeamKilling {
 			players,
 			inner: Mutex::new(Inner {
 				histories: BTreeMap::new(),
+				debug_count_suicides_as_tk: BTreeMap::new(),
 			})
 		}
 	}
@@ -143,26 +151,44 @@ impl TeamKilling {
 				let _ = bf4.admin_add(&player.name, 1).await;
 			},
 			Event::Leave { player , .. } => {
-				let _ = bf4.admin_remove(&player).await;
+				let _ = bf4.admin_remove(&player.name).await;
 			}
 			Event::Kill {killer: Some(killer), victim, weapon, .. } => {
 				if let Some(killer2) = self.players.player(&killer).await {
 					if let Some(victim2) = self.players.player(&victim).await {
-						if killer2.team == victim2.team {
-							let hist = {
-								let mut lock = self.inner.lock().unwrap();
+						// Because of the debug stuff, we need to mutex-lock every kill event unfortunately.
+						// Without the debug stuff, this code would be a lot simpler, as you would instead
+						// check whether killer.team == victim.team, and *then* lock the mutex.
+
+						// We consider this kill a teamkill exactly when teamkill_history is Some(_).
+						let teamkill_history = {
+							let mut lock = self.inner.lock().unwrap();
+							let debug = match lock.debug_count_suicides_as_tk.get(&killer) {
+								Some(&DebugSatk::KillsAsTk) => true, // all kills are considered teamkills.
+								Some(&DebugSatk::SuicidesAsTk) => killer == victim, // only suicides
+								None => false, // Normal, non-debug behaviour.
+							};
+
+							// This value determines whether the kill will be consider a tk.
+							let is_tk = killer2.team == victim2.team || debug;
+
+							// If we do consider the kill to be a tk, then append it to the history,
+							// and return that history as Some(hist).
+							is_tk.then(|| {
 								let hist = lock.histories.entry(killer).or_default();
 								hist.teamkills.push(HistEntry {
 									timestamp: Instant::now(),
-									weapon,
+									weapon: weapon.clone(),
 									victim,
 								});
 								hist.trim(self.config.trim_history_minutes);
 								hist.clone()
-								// lock dropped here.
-							};
+							})
+						};
 
+						if let Some(hist) = teamkill_history {
 							let badness = hist.badness(&self.config);
+							trace!("Player {} teamkilled {} with {weapon}. Badness is now at {badness}", killer2.player.name, victim2.player.name);
 							if badness >= self.config.badness_threshold_kick {
 								info!("Player {} achieved teamkilling badness {} with history:\n{}",
 									killer2.player.name,
@@ -205,6 +231,28 @@ impl TeamKilling {
 							let _ = bf4.say("No recent teamkilling history", player).await;
 						}
 					},
+					"/tk debug" | "/tk debug off" | "/tk debug suicides" | "/tk debug kills" => {
+						let mode = {
+							let mut lock = self.inner.lock().unwrap();
+							match msg.as_str() {
+								"/tk debug off" => {
+									lock.debug_count_suicides_as_tk.remove(&player);
+									None
+								},
+								"/tk debug" | "/tk debug suicides" => {
+									lock.debug_count_suicides_as_tk.insert(player.clone(), DebugSatk::SuicidesAsTk);
+									Some(DebugSatk::SuicidesAsTk)
+								},
+								"/tk debug kills" => {
+									lock.debug_count_suicides_as_tk.insert(player.clone(), DebugSatk::KillsAsTk);
+									Some(DebugSatk::KillsAsTk)
+								},
+								_ => unreachable!(),
+							}
+						};
+
+						let _ = bf4.say(format!("Tk debug is now {mode:?}"), player).await;
+					},
 					_ => ()
 				}
 			}
@@ -237,12 +285,28 @@ impl Plugin for TeamKilling {
 		let bf4 = bf4.clone();
 		tokio::spawn(async move {
 			loop {
-				// let players = self_clone.players.players(&*bf4).await;
-				let players = bf4.list_players(Visibility::All).await.unwrap(); // bad unwrap... :(
-				for player in players.iter() {
-					let _ = bf4.admin_add(&player.player_name, 1);
+				let players: BTreeSet<_> = bf4.list_players(Visibility::All).await.unwrap() // bad unwrap... :(
+					.iter().map(|p| p.player_name.clone())
+					.collect();
+				let admins: BTreeSet<_> = bf4.admin_list().await.unwrap() // bad unwrap... :(
+					.iter().map(|(adm, _)| adm.clone())
+					.collect();
+
+				// visit admins who are not on the server, and remove them.
+				for admin in admins.difference(&players) {
+					debug!("RCON-Admin {admin} was admin but current not in server. Removing.");
+					bf4.admin_remove(admin).await.unwrap();
 				}
-				// tokio::time::sleep(Duration::from_secs(60 * 20)).await;
+
+				// visit players who are not admins, and add them to the admin list.
+				for player in players.difference(&admins) {
+					debug!("Player {player} is in server but not RCON-Admin. Adding with level 1.");
+					if let Err(e) = bf4.admin_add(player, 1).await {
+						warn!("Failed to add player {player} to RCON gameAdmin list: {e:?}");
+					}
+				}
+
+				tokio::time::sleep(Duration::from_secs(60 * 20)).await;
 			}
 		});
 	}
