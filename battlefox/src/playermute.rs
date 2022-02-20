@@ -35,6 +35,8 @@ struct MutedPlayerInfo {
 impl Plugin for PlayerMute {
     const NAME: &'static str = "playermute";
 
+    fn enabled(&self) -> bool { self.config.enabled }
+
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
             Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total} => {
