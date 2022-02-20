@@ -34,6 +34,7 @@ use mapvote::{
 
 use crate::admins::Admins;
 use crate::playermute::PlayerMute;
+use crate::teamkilling::TeamKilling;
 
 pub mod guard;
 // pub mod commands;
@@ -48,6 +49,7 @@ pub mod playerreport;
 pub mod humanlang;
 mod logging;
 mod playermute;
+mod teamkilling;
 
 // Instead of `cargo build`, set env vars:
 //     RUSTFLAGS='--cfg take_git_version_from_env'
@@ -228,8 +230,9 @@ async fn main() -> anyhow::Result<()> {
     let _playermute = app.has_plugin(|c| PlayerMute::new(players.clone(), c))?;
     let mapman = app.has_plugin(MapManager::new)?;
     let _mapvote = app.has_plugin_arc(|c: MapVoteConfigJson|
-        Mapvote::new(mapman, vips, players, MapVoteConfig::from_json(c))
+        Mapvote::new(mapman, vips, players.clone(), MapVoteConfig::from_json(c))
     )?;
+    let _tks = app.has_plugin(|c| TeamKilling::new(c, players))?;
 
     // Connect to RCON.
     let coninfo = get_rcon_coninfo()?;
