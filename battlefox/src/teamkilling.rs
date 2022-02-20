@@ -16,7 +16,7 @@ use crate::players::Players;
 // fn default_badness() -> f32 { 1.0 }
 fn const_true() -> bool { true }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
 	#[serde(default = "const_true")]
 	enabled: bool,
@@ -321,19 +321,15 @@ mod test {
 	use super::*;
 
 	#[test]
+	#[ignore]
 	fn interpolate() {
 		let cfg = Config {
-			enabled: true,
-			// vehicle_badness: 0.0,
-			// explosive_badness: 0.0,
-			// gun_badness: 0.0,
-			badness_threshold_kick: 0.0,
-			trim_history_minutes: 10000,
 			badness_time_scale: btreemap! {
 				0 => 0.0,
 				5 => 50.0,
 				10 => 100.0,
 			},
+			..Default::default()
 		};
 
 		for x in 0..20 {
