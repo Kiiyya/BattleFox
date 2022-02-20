@@ -773,9 +773,9 @@ impl Bf4Client {
             .await
     }
 
-    pub async fn admin_remove(&self, player: &Player) -> Result<(), ReservedSlotsError> {
+    pub async fn admin_remove(&self, player: impl AsRef<str>) -> Result<(), ReservedSlotsError> {
         self.rcon.query(
-            &veca!["gameAdmin.remove", player.name.as_str()],
+            &veca!["gameAdmin.remove", player.as_ref()],
             ok_eof,
             |err| match err {
                 "PlayerNotInList" => Some(ReservedSlotsError::PlayerNotInList),
@@ -788,9 +788,9 @@ impl Bf4Client {
     pub async fn admin_list(&self) -> Result<Vec<(AsciiString, usize)>, GameAdminError> {
         self.rcon
             .query(
-                &veca!["gameAdmin.list", "0"],
+                &veca!["gameAdmin.list"],
                 |ok| {
-                    if ok.len() == 2 {
+                    if ok.len() % 2 == 0 {
                         let mut vec = Vec::new();
                         let mut offset = 0;
                         while offset < ok.len() {
@@ -802,7 +802,7 @@ impl Bf4Client {
                         }
                         Ok(vec)
                     } else {
-                        Err(GameAdminError::Rcon(RconError::other(
+                        Err(GameAdminError::Rcon(RconError::protocol_msg(
                             "Bad argument amount returned by RCON, must be divisible by two.",
                         )))
                     }
