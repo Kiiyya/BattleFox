@@ -3,7 +3,7 @@ name = "battlelog"
 version = "0.1.0"
 authors = ["Razer2015 <razer138@gmail.com>"]
 description = "Library for accessing the BattleLog REST API"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

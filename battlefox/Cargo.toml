@@ -2,7 +2,7 @@
 name = "battlefox"
 version = "0.2.6"
 authors = ["Kiiya <snoewflaek@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 compress_logs = ["flexi_logger/compress"]
