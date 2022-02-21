@@ -79,7 +79,23 @@ impl Bf4Client {
 
         tx.send(Arc::downgrade(&myself)).unwrap();
 
+        let _ = myself.update_player_cache().await;
+
         Ok(myself)
+    }
+
+    async fn update_player_cache(&self) -> Result<Vec<PlayerInfo>, ListPlayersError> {
+        trace!("Updating player cache..");
+        let pib = self.list_players(Visibility::All).await?;
+
+        let mut cache = self.player_cache.lock()
+            .expect("Failed to acquire mutex lock on player cache");
+        for pi in &pib {
+            cache.insert(&pi.player_name, &pi.eaid);
+        }
+        drop(cache);
+
+        Ok(pib)
     }
 
     pub async fn resolve_player(&self, name: &AsciiString) -> Bf4Result<Player> {
@@ -93,47 +109,32 @@ impl Bf4Client {
 
         if let Some(entry) = entry {
             // oh neat, player is already cached. No need for sending a command to rcon.
-            // println!("[Bf4Client::resolve_player] Cache hit for {} -> {}", name, entry.eaid);
             Ok(Player {
                 name: name.clone(),
                 eaid: entry.eaid,
             })
         } else {
             // welp, gotta ask rcon and update cache...
-            // println!("[Bf4Client::resolve_player] Cache miss for {}, resolving...", name);
-            let mut pib = match self.list_players(Visibility::All).await {
-                // hm, sucks that you need clone for this :/
-                Ok(pib) => pib,
+            match self.update_player_cache().await {
+                Ok(pib) => match pib.iter().find(|pi| &pi.player_name == name) {
+                    Some(pi) => {
+                        let player = Player {
+                            name: pi.player_name.clone(),
+                            eaid: pi.eaid,
+                        };
+                        Ok(player)
+                    }
+                    None => Err(Bf4Error::PlayerGuidResolveFailed {
+                        player_name: name.clone(),
+                        rcon: None,
+                    }),
+                },
                 Err(ListPlayersError::Rcon(rcon)) => {
-                    return Err(Bf4Error::PlayerGuidResolveFailed {
+                    Err(Bf4Error::PlayerGuidResolveFailed {
                         player_name: name.clone(),
                         rcon: Some(rcon),
-                    });
+                    })
                 }
-            };
-
-            let mut cache = self
-                .player_cache
-                .lock()
-                .expect("Failed to acquire mutex lock on player cache");
-            // technically it's possible someone else updated the cache meanwhile, but that's fine.
-            for pi in &mut pib {
-                cache.insert(&pi.player_name, &pi.eaid);
-            }
-            drop(cache);
-
-            match pib.iter().find(|pi| &pi.player_name == name) {
-                Some(pi) => {
-                    let player = Player {
-                        name: pi.player_name.clone(),
-                        eaid: pi.eaid,
-                    };
-                    Ok(player)
-                }
-                None => Err(Bf4Error::PlayerGuidResolveFailed {
-                    player_name: name.clone(),
-                    rcon: None,
-                }),
             }
         }
     }
