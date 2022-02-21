@@ -1,5 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 
+use crate::admins::Admins;
 use crate::{UPTIME, Plugin};
 use crate::{guard::{
         recent::Age::{Old, Recent},
@@ -80,6 +81,7 @@ pub struct Mapvote {
     vips: Arc<Vips>,
     players: Arc<Players>,
     config: Arc<MapVoteConfig>,
+    admins: Arc<Admins>,
 }
 
 impl Inner {
@@ -312,8 +314,7 @@ impl Plugin for Mapvote {
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
             Event::Chat { vis, player, msg } => {
-                if msg.as_str().starts_with("/haha next map") && player.name == "PocketWolfy" {
-                    let mapman = self.mapman.clone();
+                if msg.as_str().starts_with("/bfox endvote") && self.admins.is_admin(&player.name) {
                     self.handle_round_over(&bf4).await;
                 } else {
                     let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
@@ -334,6 +335,7 @@ impl Mapvote {
         mapman: Arc<MapManager>,
         vips: Arc<Vips>,
         players: Arc<Players>,
+        admins: Arc<Admins>,
         config: MapVoteConfig,
     ) -> Arc<Self> {
         let myself = Arc::new(Self {
@@ -342,6 +344,7 @@ impl Mapvote {
             vips,
             players,
             config: Arc::new(config),
+            admins,
         });
 
 
@@ -870,12 +873,27 @@ impl Mapvote {
                 drop(lock);
                 let _ = bf4.say_lines(messages, player).await;
             }
-            "/bfoxver" => {
-                let _ = bf4.say(format!("BattleFox {}", crate::GIT_DESCRIBE), player).await;
-            },
-            "/bfoxuptime" => {
-                let elapsed = UPTIME.elapsed();
-                let _ = bf4.say(format!("Uptime: {}", humantime::format_duration(elapsed)), player).await;
+            "/bfox" => {
+                if split.len() == 1 {
+                    let _ = bf4.say("Subcommands of /bfox are: version, uptime, endvote", player).await;
+                } else {
+                    match split[1] {
+                        "version" | "ver" | "v" => { let _ = bf4.say(format!("BattleFox {}", crate::GIT_DESCRIBE), player).await; },
+                        "uptime" => {
+                            let elapsed = UPTIME.elapsed();
+                            let _ = bf4.say(format!("Uptime: {}", humantime::format_duration(elapsed)), player).await;
+                        },
+                        "endvote" => {
+                            if self.admins.is_admin(&player.name) {
+                                let _ = bf4.say("Ending vote.", player).await;
+                                self.handle_round_over(&bf4).await;
+                            } else {
+                                let _ = bf4.say("You are not admin (according to bfox config).", player).await;
+                            }
+                        },
+                        _ => (),
+                    }
+                }
             },
             "/ballots" => {
                 let lock = self.inner.lock().await;
@@ -999,7 +1017,7 @@ impl Mapvote {
             // important: lock is dropped here at end of scope!
         };
 
-        dbg!(&maybe);
+        // dbg!(&maybe);
 
         // only do something if we have an Inner.
         if let Some((profile, assignment, anim_override_override)) = maybe {

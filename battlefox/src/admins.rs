@@ -11,6 +11,7 @@ pub struct Config {
     admins: BTreeSet<String>,
 }
 
+#[derive(Debug)]
 pub struct Admins {
     config: Config,
 }
