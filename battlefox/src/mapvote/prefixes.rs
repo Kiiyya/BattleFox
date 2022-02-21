@@ -109,7 +109,6 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, rese
         trie.insert(s.as_ref(), Type::Normal(s));
     });
     reserved.for_each(|s| {
-        dbg!(s);
         match trie.insert(s, Type::Reserved) {
             Some(Type::Normal(oops)) => error!("Collision of normal and reserved strings when computing shortest unique prefixes: {}. You most likely want to remove the reserved string.", s),
             Some(Type::Reserved) => (), // user has the same reserved string listed twice... ignore it.
@@ -156,7 +155,7 @@ pub fn shortest_unique_prefixes<'a, 'b>(set: impl Iterator<Item = &'a str>, rese
         // }
     }
 
-    dbg!(ret)
+    ret
 }
 
 #[cfg(test)]
