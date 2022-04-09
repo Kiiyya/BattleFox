@@ -30,6 +30,7 @@ lazy_static = "1.4"
 md5 = "0.7"
 
 serde = {version = "1", features = ["derive"]}
+serde_repr = "0.1"
 
 log = "0.4"
 

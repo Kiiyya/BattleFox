@@ -2,12 +2,14 @@ use std::str::FromStr;
 
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Serialize_repr, Deserialize_repr};
 
 use crate::{rcon::RconError, rcon::RconResult};
 
 use super::Player;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum Team {
     Neutral = 0,
     One = 1,
@@ -32,7 +34,8 @@ impl Team {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum Squad {
     NoSquad = 0,
     Alpha = 1,
