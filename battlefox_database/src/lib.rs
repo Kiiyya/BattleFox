@@ -2,11 +2,11 @@
 extern crate diesel;
 extern crate dotenv;
 
-use chrono::{Utc};
+use chrono::Utc;
 use battlefox_shared::mute::MuteType;
-
 pub mod models;
 pub mod schema;
+pub mod better;
 
 use diesel::{delete, prelude::*, replace_into};
 use dotenv::dotenv;
