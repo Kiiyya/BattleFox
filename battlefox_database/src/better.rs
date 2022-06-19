@@ -1,30 +1,25 @@
-//! A new, better, attempt at battlefox_database with SQLx. Because fuck Diesel.
+//! A new, better, attempt at battlefox_database with SQLx. Because Diesel is clunky.
 //!
 //! And yet I'm too lazy to get rid of diesel, so that's why I'm just making a `better` module
 //! instead of rewriting the whole thing.
 
 // pub struct Config { }
 
-use sea_orm::{DatabaseConnection, Database, EntityTrait, QueryFilter, ColumnTrait, DbErr};
+use sqlx::mysql::MySqlPoolOptions;
+pub use sqlx::types::time::OffsetDateTime; // apparently sqlX uses its own datetime stuff.
 use thiserror::Error;
-
-use crate::entities::adkats_bans::Entity as AdkatsBans;
-use crate::entities::tbl_playerdata::Entity as PlayerData;
-use crate::entities::*;
+use sqlx::query;
 
 /// Database Connection Pool. Cheap to clone, inner reference counting.
 #[derive(Clone)]
 pub struct BfoxDb {
-    db: DatabaseConnection,
+    db: sqlx::MySqlPool,
 }
 
 #[derive(Error, Debug)]
 pub enum BfoxDbError {
-    #[error("Uh oh")]
-    UhOh,
-
     #[error("{0}")]
-    DbErr(#[from] DbErr),
+    DbErr(#[from] sqlx::Error),
 }
 
 impl BfoxDb {
@@ -33,8 +28,12 @@ impl BfoxDb {
     /// `db_uri` is something like `protocol://username:password@host/database`.
     ///
     /// https://www.sea-ql.org/SeaORM/docs/install-and-config/connection
-    pub async fn new(db_uri: impl AsRef<str>) -> Result<Self, anyhow::Error> {
-        let db: DatabaseConnection = Database::connect(db_uri.as_ref()).await?;
+    pub async fn new(db_uri: impl AsRef<str>) -> Result<Self, BfoxDbError> {
+        // let db: DatabaseConnection = Database::connect(db_uri.as_ref()).await?;
+        let db = MySqlPoolOptions::new()
+            // .max_connections(3)
+            .connect(db_uri.as_ref())
+            .await?;
 
         Ok(Self {
             db
@@ -46,23 +45,51 @@ impl BfoxDb {
     /// - `None` means there is no ban record for the player, i.e. not banned.
     /// - `Some((playerdata, ban))` means the player is probably banned, but please still
     ///    check `ban_status`, `end_time`, just to be sure.
-    pub async fn get_ban(&self, guid: impl AsRef<str>) -> Result<Option<(tbl_playerdata::Model, adkats_bans::Model)>, BfoxDbError> {
-        let ban = PlayerData::find()
-            .filter(tbl_playerdata::Column::Eaguid.eq(guid.as_ref()))
-            .inner_join(AdkatsBans)
-            .select_also(AdkatsBans)
-            .one(&self.db).await?;
+    pub async fn get_ban(&self, guid: impl AsRef<str>) -> Result<Option<BanInfo>, BfoxDbError> {
+        let ban = query!(
+            "SELECT PlayerID, ClanTag, SoldierName, EAGUID, ban_notes, ban_status, ban_startTime, ban_endTime, record_message
+            FROM tbl_playerdata AS pd
+            INNER JOIN adkats_bans AS bans ON pd.PlayerId = bans.player_id
+            INNER JOIN adkats_records_main AS records ON records.record_id = bans.latest_record_id
+            WHERE pd.EAGUID = ?;"
+        , guid.as_ref()).fetch_optional(&self.db).await?;
 
-        let ban = match ban {
-            None => None,
-            Some((_, None)) => unreachable!("Impossible for inner_join to return only one of two entities."),
-            Some((pd, Some(b))) => Some((pd, b)),
-        };
+        if let Some(ban) = ban {
+            let status = match ban.ban_status.as_ref() {
+                "Active" => BanStatus::Active,
+                "Expired" => BanStatus::Expired,
+                "Disabled" => BanStatus::Disabled,
+                _ => unreachable!("Unknown ban status!")
+            };
 
-        Ok(ban)
+            let bi = BanInfo {
+                start: ban.ban_startTime.assume_utc(),
+                end: ban.ban_endTime.assume_utc(),
+                status,
+                reason: ban.record_message,
+            };
+
+            Ok(Some(bi))
+        } else {
+            Ok(None)
+        }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BanStatus {
+    Active,
+    Expired,
+    Disabled,
+}
+
+#[derive(Debug, Clone)]
+pub struct BanInfo {
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
+    pub status: BanStatus,
+    pub reason: String,
+}
 
 #[cfg(test)]
 mod test {
@@ -72,8 +99,8 @@ mod test {
 
     fn get_db_coninfo() -> anyhow::Result<String> {
         dotenv::dotenv()?;
-        let uri = std::env::var("BFOX_ADKATS_URI")
-            .context("Need to specify AdKats db URI via env var, for example BFOX_ADKATS_URI=\"mysql://username:password@host/database\"")?;
+        let uri = std::env::var("DATABASE_URL")
+            .context("Need to specify AdKats db URI via env var, for example DATABASE_URL=\"mysql://username:password@host/database\"")?;
         Ok(uri)
     }
 
@@ -82,11 +109,8 @@ mod test {
     async fn test() -> anyhow::Result<()> {
         let uri = get_db_coninfo()?;
         let db = BfoxDb::new(uri).await?;
-
-        let ban = db.get_ban("EA_23497BD31CD2C20EED45BF21542EA2AD").await?;
-
+        let ban = db.get_ban("EA_insert your GUID here").await?;
         println!("{ban:#?}");
-
-        Ok(())
+        panic!()
     }
 }

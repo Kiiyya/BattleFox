@@ -19,5 +19,5 @@ Either setting environment variables directly, or creating a `.env` file in the 
 BFOX_RCON_IP=127.0.0.1
 BFOX_RCON_PORT=12345
 BFOX_RCON_PASSWORD=qw3RTy
-BFOX_ADKATS_URI=mysql://username:password@host/database
+DATABASE_URL=mysql://username:password@host/database
 ```

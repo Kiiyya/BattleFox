@@ -83,8 +83,8 @@ fn get_rcon_coninfo() -> anyhow::Result<RconConnectionInfo> {
 }
 
 fn get_db_coninfo() -> anyhow::Result<String> {
-    let uri = var("BFOX_ADKATS_URI")
-        .context("Need to specify AdKats db URI via env var, for example BFOX_ADKATS_URI=\"mysql://username:password@host/database\"")?;
+    let uri = var("DATABASE_URL")
+        .context("Need to specify AdKats db URI via env var, for example DATABASE_URL=\"mysql://username:password@host/database\"")?;
     Ok(uri)
 }
 

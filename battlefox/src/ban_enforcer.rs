@@ -5,9 +5,7 @@ use async_trait::async_trait;
 use battlefield_rcon::bf4::ban_list::{Ban, BanTimeout};
 use battlefield_rcon::bf4::{Bf4Client, Event, BanListError, PlayerKickError};
 use battlefield_rcon::rcon::RconResult;
-use battlefox_database::better::BfoxDb;
-use battlefox_database::entities::sea_orm_active_enums::BanStatus;
-use chrono::{Utc, DateTime, TimeZone};
+use battlefox_database::better::{BfoxDb, OffsetDateTime, BanStatus};
 use serde::{Deserialize, Serialize};
 
 use crate::Plugin;
@@ -33,15 +31,16 @@ impl BanEnforcer {
 		match event {
 			Event::Authenticated { player } => {
 				match self.db.get_ban(format!("{}", player.eaid)).await {
-					Ok(Some((_, ban))) => {
-						let now = Utc::now();
-						let ban_end : DateTime<Utc> = Utc.from_utc_datetime(&ban.ban_end_time); // assume our data is UTC.
+					Ok(Some(ban)) => {
+						let now = OffsetDateTime::now_utc();
 
-						let is_banned_time = now < ban_end;
-						let is_banned_status = ban.ban_status == BanStatus::Active;
+						// let ban_end : DateTime<Utc> = Utc.from_utc_datetime(&ban.ban_end_time); // assume our data is UTC.
+
+						let is_banned_time = now < ban.end;
+						let is_banned_status = ban.status == BanStatus::Active;
 
 						if is_banned_time != is_banned_status {
-							warn!("Ban end time and ban_status mismatch for player {player}. All times (assumed) in UTC. Now = {}, ban_end = {}, ban_status = {:?}", &now, &ban_end, ban.ban_status);
+							warn!("Ban end time and ban_status mismatch for player {player}. All times (assumed) in UTC. Now = {}, ban_end = {}, ban_status = {:?}", &now, &ban.end, ban.status);
 						}
 
 						// ban expiry time is more important than the ban_status column.
@@ -51,7 +50,7 @@ impl BanEnforcer {
 							match bf4.ban_add(
 								Ban::Guid(player.eaid),
 								BanTimeout::Time(Duration::from_secs(1)), // I guess rcon will remove this by itself?
-								Some("") // reason
+								Some(ban.reason.clone()) // reason
 							).await {
 								Ok(()) => (),
 								Err(BanListError::BanListFull) => warn!("Ban list is full?!"),
@@ -59,13 +58,13 @@ impl BanEnforcer {
 								Err(BanListError::Rcon(rcon_err)) => error!("Failed to tempban player for a second: {rcon_err:?}"),
 							}
 
-							match bf4.kick(player.name, "").await {
+							match bf4.kick(player.name, ban.reason).await {
 								Ok(()) => (),
 								Err(PlayerKickError::PlayerNotFound) => (),
 								Err(PlayerKickError::Rcon(rcon_err)) => error!("Failed to kick player: {rcon_err:?}"),
 							}
 						} else {
-							debug!("Player {player} is in , but the ban has expired.");
+							debug!("Player {player} is in adkats_bans, but the ban has expired.");
 						}
 					},
 					Ok(None) => (), // player is not banned
