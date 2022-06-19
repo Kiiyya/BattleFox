@@ -5,7 +5,6 @@ extern crate dotenv;
 use chrono::Utc;
 use battlefox_shared::mute::MuteType;
 pub mod models;
-pub mod entities;
 pub mod schema;
 pub mod better;
 

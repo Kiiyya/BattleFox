@@ -14,9 +14,7 @@ diesel = { version = "1.4.4", features = ["mysql", "chrono"] }
 dotenv = "0.15.0"
 
 # SQLx because I hate Diesel. Yes, we use two SQL libs now...
-# sqlx = { version = "0.5.13", features = [ "runtime-tokio-rustls", "mysql", "macros", "time", "offline" ] }
-sea-orm = { version = "0.8.0", features = ["sqlx-mysql", "runtime-tokio-rustls"] }
-
+sqlx = { version = "0.6.0", features = [ "runtime-tokio-rustls", "mysql", "macros", "time", "offline", "tls" ] }
 
 battlefox_shared = { path = "../battlefox_shared" }
 
