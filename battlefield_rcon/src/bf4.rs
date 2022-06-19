@@ -527,7 +527,20 @@ impl Bf4Client {
         };
         let typ = typ.into_ascii_string().unwrap();
 
-        let mut words = veca!["banList.add", typ, id, timeout.rcon_encode()];
+        let mut words = veca!["banList.add", typ, id];
+
+        match timeout {
+            BanTimeout::Permanent => words.push("perm".into_ascii_string().unwrap()),
+            BanTimeout::Rounds(rounds) => {
+                words.push("rounds".into_ascii_string().unwrap());
+                words.push(format!("{rounds}").into_ascii_string().unwrap());
+            },
+            BanTimeout::Time(dur) => {
+                words.push("seconds".into_ascii_string().unwrap());
+                words.push(format!("{}", dur.as_secs()).into_ascii_string().unwrap());
+            }
+        }
+
         if let Some(reason) = reason {
             words.push(reason.into_ascii_string()?);
         }

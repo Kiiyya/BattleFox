@@ -46,7 +46,7 @@ impl BanEnforcer {
 
 						// ban expiry time is more important than the ban_status column.
 						if is_banned_time {
-							info!("Player {player} is banned, and will be kicked via tempban for two minutes: {ban:#?}");
+							info!("Player {player} is banned, and will be kicked via tempban for one second: {ban:#?}");
 
 							match bf4.ban_add(
 								Ban::Guid(player.eaid),
