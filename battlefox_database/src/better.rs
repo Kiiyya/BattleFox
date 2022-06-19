@@ -5,7 +5,7 @@
 
 // pub struct Config { }
 
-use sea_orm::{DatabaseConnection, Database, EntityTrait, QueryFilter, ColumnTrait, QuerySelect, DbErr};
+use sea_orm::{DatabaseConnection, Database, EntityTrait, QueryFilter, ColumnTrait, DbErr};
 use thiserror::Error;
 
 use crate::entities::adkats_bans::Entity as AdkatsBans;
@@ -77,7 +77,7 @@ mod test {
         Ok(uri)
     }
 
-    // #[ignore]
+    #[ignore]
     #[tokio::test]
     async fn test() -> anyhow::Result<()> {
         let uri = get_db_coninfo()?;
@@ -87,7 +87,6 @@ mod test {
 
         println!("{ban:#?}");
 
-        panic!();
         Ok(())
     }
 }
