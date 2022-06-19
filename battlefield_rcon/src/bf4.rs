@@ -1,6 +1,8 @@
 #![allow(clippy::useless_vec)]
 use std::sync::{Arc, Mutex, Weak};
+use std::time::Duration;
 
+use self::ban_list::{Ban, BanTimeout};
 use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
 use crate::rcon::{ok_eof, packet::Packet, RconClient, RconError, RconQueryable, RconResult};
 use ascii::{AsciiStr, AsciiString, IntoAsciiString};
@@ -22,6 +24,7 @@ pub(crate) mod player_cache;
 pub mod player_info_block;
 pub mod server_info;
 mod util;
+pub mod ban_list;
 
 pub use defs::{Event, GameMode, Map, Player, Squad, Team, Visibility, CommmoRose, Weapon};
 pub use ea_guid::Eaid;
@@ -35,12 +38,13 @@ cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, Invali
 cmd_err!(pub ReservedSlotsError, PlayerAlreadyInList, ReservedSlotsFull, PlayerNotInList);
 cmd_err!(pub GameAdminError, Full, AlreadyInList);
 cmd_err!(pub PlayerKickError, PlayerNotFound);
+cmd_err!(pub BanListError, BanListFull, NotFound);
 
 pub(crate) trait RconDecoding: Sized {
     fn rcon_decode(ascii: &AsciiStr) -> RconResult<Self>;
 }
 
-pub(crate) trait RconEncoding: RconDecoding {
+pub(crate) trait RconEncoding {
     fn rcon_encode(&self) -> AsciiString;
 }
 
@@ -58,6 +62,7 @@ pub struct Bf4Client {
     /// - When parsing replies to queries.
     player_cache: Mutex<PlayerEaidCache>,
 }
+
 
 impl Bf4Client {
     pub async fn connect(addr: impl ToSocketAddrs, password: AsciiString) -> RconResult<Arc<Self>> {
@@ -504,6 +509,65 @@ impl Bf4Client {
                 },
             )
             .await
+    }
+
+    /// Adds a ban to the ban list.
+    ///
+    /// # RCON Errors
+    /// The usual, and `BanListFull`.
+    pub async fn ban_add(
+        &self,
+        ban: Ban,
+        timeout: BanTimeout,
+        reason: Option<impl IntoAsciiString + Into<String>>
+    ) -> Result<(), BanListError> {
+        let (typ, id) = match ban {
+            Ban::Name(name) => ("name", name),
+            Ban::Ip(ip) => ("ip", ip),
+            Ban::Guid(guid) => ("guid", guid),
+        };
+        let (typ, id) = (typ.into_ascii_string().unwrap(), id.into_ascii_string()?);
+
+        let mut words = veca!["banList.add", typ, id, timeout.rcon_encode()];
+        if let Some(reason) = reason {
+            words.push(reason.into_ascii_string()?);
+        }
+
+        self.rcon.query(
+            &words,
+            ok_eof,
+            |err| match err {
+                "BanListFull" => Some(BanListError::BanListFull),
+                _ => None,
+            }
+        ).await
+    }
+
+    /// Removes a ban from the ban list.
+    ///
+    /// # RCON Errors
+    /// The usual, and `NotFound` when ban isn't in ban list.
+    pub async fn ban_remove(
+        &self,
+        ban: Ban,
+    ) -> Result<(), BanListError> {
+        let (typ, id) = match ban {
+            Ban::Name(name) => ("name", name),
+            Ban::Ip(ip) => ("ip", ip),
+            Ban::Guid(guid) => ("guid", guid),
+        };
+        let (typ, id) = (typ.into_ascii_string().unwrap(), id.into_ascii_string()?);
+
+        let words = veca!["banList.remove", typ, id];
+
+        self.rcon.query(
+            &words,
+            ok_eof,
+            |err| match err {
+                "NotFound" => Some(BanListError::NotFound),
+                _ => None,
+            }
+        ).await
     }
 
     pub async fn say(
