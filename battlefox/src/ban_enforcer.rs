@@ -50,13 +50,13 @@ impl BanEnforcer {
 
 							match bf4.ban_add(
 								Ban::Guid(player.eaid),
-								BanTimeout::Time(Duration::from_secs(120)), // I guess rcon will remove this by itself?
+								BanTimeout::Time(Duration::from_secs(1)), // I guess rcon will remove this by itself?
 								Some("") // reason
 							).await {
 								Ok(()) => (),
 								Err(BanListError::BanListFull) => warn!("Ban list is full?!"),
 								Err(BanListError::NotFound) => unreachable!(),
-								Err(BanListError::Rcon(rcon_err)) => error!("Failed to tempban player for two minutes: {rcon_err:?}"),
+								Err(BanListError::Rcon(rcon_err)) => error!("Failed to tempban player for a second: {rcon_err:?}"),
 							}
 
 							match bf4.kick(player.name, "").await {
