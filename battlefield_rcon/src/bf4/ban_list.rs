@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use ascii::IntoAsciiString;
 
-use super::RconEncoding;
+use super::{RconEncoding, Eaid};
 
 
 #[derive(Clone, Debug)]
 pub enum Ban {
     Name(String),
     Ip(String),
-    Guid(String),
+    Guid(Eaid),
 }
 
 #[derive(Clone, Debug)]

@@ -1,6 +1,5 @@
 #![allow(clippy::useless_vec)]
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
 
 use self::ban_list::{Ban, BanTimeout};
 use self::{defs::Preset, error::Bf4Result, player_cache::PlayerEaidCache};
@@ -522,11 +521,11 @@ impl Bf4Client {
         reason: Option<impl IntoAsciiString + Into<String>>
     ) -> Result<(), BanListError> {
         let (typ, id) = match ban {
-            Ban::Name(name) => ("name", name),
-            Ban::Ip(ip) => ("ip", ip),
-            Ban::Guid(guid) => ("guid", guid),
+            Ban::Name(name) => ("name", name.into_ascii_string()?),
+            Ban::Ip(ip) => ("ip", ip.into_ascii_string()?),
+            Ban::Guid(guid) => ("guid", guid.rcon_encode()),
         };
-        let (typ, id) = (typ.into_ascii_string().unwrap(), id.into_ascii_string()?);
+        let typ = typ.into_ascii_string().unwrap();
 
         let mut words = veca!["banList.add", typ, id, timeout.rcon_encode()];
         if let Some(reason) = reason {
@@ -552,11 +551,11 @@ impl Bf4Client {
         ban: Ban,
     ) -> Result<(), BanListError> {
         let (typ, id) = match ban {
-            Ban::Name(name) => ("name", name),
-            Ban::Ip(ip) => ("ip", ip),
-            Ban::Guid(guid) => ("guid", guid),
+            Ban::Name(name) => ("name", name.into_ascii_string()?),
+            Ban::Ip(ip) => ("ip", ip.into_ascii_string()?),
+            Ban::Guid(guid) => ("guid", guid.rcon_encode()),
         };
-        let (typ, id) = (typ.into_ascii_string().unwrap(), id.into_ascii_string()?);
+        let typ = typ.into_ascii_string().unwrap();
 
         let words = veca!["banList.remove", typ, id];
 

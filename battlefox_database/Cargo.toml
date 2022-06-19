@@ -13,4 +13,16 @@ chrono = "0.4.19"
 diesel = { version = "1.4.4", features = ["mysql", "chrono"] }
 dotenv = "0.15.0"
 
+# SQLx because I hate Diesel. Yes, we use two SQL libs now...
+# sqlx = { version = "0.5.13", features = [ "runtime-tokio-rustls", "mysql", "macros", "time", "offline" ] }
+sea-orm = { version = "0.8.0", features = ["sqlx-mysql", "runtime-tokio-rustls"] }
+
+
 battlefox_shared = { path = "../battlefox_shared" }
+
+thiserror = "1.0.31"
+anyhow = "*" # just for quick prototyping
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+

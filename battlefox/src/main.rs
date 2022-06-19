@@ -5,11 +5,13 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
 
+use anyhow::Context;
 use ascii::{IntoAsciiString};
 use async_trait::async_trait;
 use battlefield_rcon::bf4::Event;
 use battlefield_rcon::bf4::error::Bf4Error;
 use battlefield_rcon::rcon::RconResult;
+use battlefox_database::better::BfoxDb;
 use dotenv::dotenv;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -33,6 +35,7 @@ use mapvote::{
 };
 
 use crate::admins::Admins;
+use crate::ban_enforcer::BanEnforcer;
 use crate::playermute::PlayerMute;
 use crate::teamkilling::TeamKilling;
 
@@ -50,6 +53,7 @@ pub mod humanlang;
 mod logging;
 mod playermute;
 mod teamkilling;
+mod ban_enforcer;
 
 // Instead of `cargo build`, set env vars:
 //     RUSTFLAGS='--cfg take_git_version_from_env'
@@ -76,6 +80,12 @@ fn get_rcon_coninfo() -> anyhow::Result<RconConnectionInfo> {
         port,
         password: password.into_ascii_string()?,
     })
+}
+
+fn get_db_coninfo() -> anyhow::Result<String> {
+    let uri = var("BFOX_ADKATS_URI")
+        .context("Need to specify AdKats db URI via env var, for example BFOX_ADKATS_URI=\"mysql://username:password@host/database\"")?;
+    Ok(uri)
 }
 
 #[derive(Error, Debug)]
@@ -231,6 +241,11 @@ async fn main() -> anyhow::Result<()> {
     info!("This is BattleFox {}", GIT_DESCRIBE);
     let _ = UPTIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
+    let rconinfo = get_rcon_coninfo()?;
+    let adkatsinfo = get_db_coninfo()?;
+
+    let db = BfoxDb::new(&adkatsinfo).await?;
+
     // Initialize plugins and their dependencies.
     let mut app = App::new();
     let admins = app.has_plugin(Admins::new)?;
@@ -243,12 +258,12 @@ async fn main() -> anyhow::Result<()> {
     let _mapvote = app.has_plugin_arc(|c: MapVoteConfigJson|
         Mapvote::new(mapman, vips, players.clone(), admins.clone(), MapVoteConfig::from_json(c))
     )?;
-    let _tks = app.has_plugin(|c| TeamKilling::new(c, players))?;
+    let _tks = app.has_plugin(|c| TeamKilling::new(c, players.clone()))?;
+    let _ban_enforcer = app.has_plugin(|c| BanEnforcer::new(c, players, db))?;
 
     // Connect to RCON.
-    let coninfo = get_rcon_coninfo()?;
-    info!("Connecting to {}:{} with password ***...", coninfo.ip, coninfo.port);
-    let bf4 = Bf4Client::connect((coninfo.ip, coninfo.port), coninfo.password).await.unwrap();
+    info!("Connecting to {}:{} with password ***...", rconinfo.ip, rconinfo.port);
+    let bf4 = Bf4Client::connect((rconinfo.ip, rconinfo.port), rconinfo.password).await.unwrap();
     trace!("Connected!");
 
     // Actually start all the plugins and wait for them to finish.
