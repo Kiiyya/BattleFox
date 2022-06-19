@@ -223,7 +223,6 @@ dependencies = [
 name = "battlefox_database"
 version = "0.2.6"
 dependencies = [
- "anyhow",
  "battlefox_shared",
  "chrono",
  "diesel",

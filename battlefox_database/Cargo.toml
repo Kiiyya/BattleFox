@@ -19,7 +19,6 @@ sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql", "macros"
 battlefox_shared = { path = "../battlefox_shared" }
 
 thiserror = "1.0.31"
-anyhow = "*" # just for quick prototyping
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
