@@ -213,7 +213,7 @@ impl Players {
     fn get_levenshtein(&self, map: &HashMap<Player, PlayerInServer>, target: &str) -> BTreeMap<usize, Player> {
         let target_lowercase = target.to_ascii_lowercase();
         map.iter().map(|(key, _value)| {
-            (levenshtein(&target_lowercase, &key.name.to_ascii_lowercase().to_string()), key.to_owned())
+            (levenshtein(&target_lowercase, key.name.to_ascii_lowercase().as_ref()), key.to_owned())
         }).collect()
     }
 }

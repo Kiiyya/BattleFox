@@ -163,6 +163,7 @@ impl TeamKilling {
 						// We consider this kill a teamkill exactly when teamkill_history is Some(_).
 						let teamkill_history = {
 							let mut lock = self.inner.lock().unwrap();
+							#[allow(clippy::significant_drop_in_scrutinee)] // this is a false positive...
 							let debug = match lock.debug_count_suicides_as_tk.get(&killer) {
 								Some(&DebugSatk::KillsAsTk) => true, // all kills are considered teamkills.
 								Some(&DebugSatk::SuicidesAsTk) => killer == victim, // only suicides

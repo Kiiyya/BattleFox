@@ -509,7 +509,7 @@ pub mod test {
     #[macro_export]
     macro_rules! ballot {
         [1, $($pref: expr),*] => {{
-            crate::stv::Ballot {
+            $crate::stv::Ballot {
                 weight: num_rational::BigRational::one(),
                 preferences: vec![
                     $($pref),*
@@ -517,7 +517,7 @@ pub mod test {
             }
         }};
         [2, $($pref: expr),*] => {{
-            crate::stv::Ballot {
+            $crate::stv::Ballot {
                 weight: Rat::one() + Rat::one(),
                 preferences: vec![
                     $($pref),*
@@ -525,7 +525,7 @@ pub mod test {
             }
         }};
         [0.5, $($pref: expr),*] => {{
-            crate::stv::Ballot {
+            $crate::stv::Ballot {
                 weight: num_rational::BigRational::one() / (num_rational::BigRational::one() + num_rational::BigRational::one()),
                 preferences: vec![
                     $($pref),*

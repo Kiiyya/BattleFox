@@ -64,7 +64,7 @@ pub fn replace_into_muted_player(conn: &MysqlConnection, player: &BfoxMutedPlaye
     // println!("Count: {}", exists);
 
     replace_into(bfox_muted_players)
-        .values(&*player)
+        .values(player)
         .execute(conn)?;
 
     Ok(())

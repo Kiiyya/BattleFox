@@ -9,7 +9,7 @@ pub struct MutedPlayer {
     pub kicks: Option<u32>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MuteType {
     Disabled = 0,
     Round = 1,

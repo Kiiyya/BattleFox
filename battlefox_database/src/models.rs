@@ -1,3 +1,4 @@
+#![allow(clippy::extra_unused_lifetimes)] // warning stems from macro-generated stuff...
 use chrono::NaiveDate;
 use serde::Serialize;
 

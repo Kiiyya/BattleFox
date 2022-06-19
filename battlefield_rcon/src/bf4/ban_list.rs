@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use ascii::IntoAsciiString;
-
-use super::{RconEncoding, Eaid};
-
+use super::Eaid;
 
 #[derive(Clone, Debug)]
 pub enum Ban {

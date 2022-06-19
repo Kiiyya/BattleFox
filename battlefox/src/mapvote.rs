@@ -25,6 +25,7 @@ use matching::AltMatcher;
 use multimap::MultiMap;
 use rand::{RngCore, thread_rng};
 use std::cell::Cell;
+use std::fmt::Write;
 use std::time::Instant;
 use std::{cmp::min, hash::Hash};
 use std::{
@@ -141,7 +142,7 @@ impl Inner {
             // msg += "\t";
             for (mip, matcher) in chunk {
                 // TODO: Add [NV] for vehicle_threshold as well
-                msg += &format!("\t{}\t{}", matcher.number, mip.map.tab4_prefixlen_wvehicles(matcher.minlen, mip.vehicles.unwrap_or(true))); // TODO: trim last \t of last chunk item.
+                write!(msg, "\t{}\t{}", matcher.number, mip.map.tab4_prefixlen_wvehicles(matcher.minlen, mip.vehicles.unwrap_or(true))).unwrap(); // TODO: trim last \t of last chunk item.
             }
             msg += "\n"; // TODO: trim last \n of last line.
         }

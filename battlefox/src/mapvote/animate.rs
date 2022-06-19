@@ -16,7 +16,7 @@ fn usize_of_rat(rat: &Rat) -> usize {
         warn!("{} is not an integer. Rounding towards zero and continuing..", rat);
     }
     let (sign, digits) = rat.to_integer().to_u64_digits();
-    *digits.get(0).unwrap_or(&0) as usize
+    *digits.first().unwrap_or(&0) as usize
 }
 
 type Bars = HashMap<MapInPool, String>;
@@ -95,7 +95,7 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool], players: impl Iterator<Item
 
         for (bars, hist_entry) in bars_seq.iter().zip_eq(x) {
             let mut lines = Vec::new();
-            let frame = match hist_entry {
+            match hist_entry {
                 HistEntry::Starting { profile, assignment } => {
                     lines.push("Everyones' votes:".to_string());
                     let your_vote = assignment.get(player)
@@ -113,7 +113,7 @@ pub fn stv_anim_frames<'a>(alts_start: &[MapInPool], players: impl Iterator<Item
                     let winner = elected.iter().next().unwrap();
                     lines.push(format!("Mapvote winner: {}", winner.map.Pretty()));
                 }
-            };
+            }
             player_frames.push(lines.join("\n"));
         }
 
