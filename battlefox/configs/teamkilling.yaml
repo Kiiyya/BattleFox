@@ -3,12 +3,17 @@ badness_threshold_kick: 5.0
 trim_history_minutes: 60
 badness_time_scale:
   # in the most recent three seconds, it's extra bad
-  0: 1.5
+  0: 1.2
   3: 1.0
   # then drop off slowly
   60: 0.7 # 1 minute
   600: 0.3 # 10 minutes
   3600: 0.0 # 1 hour
+
+# Weapon (as is sent via RCON) badness factors.
+# Default if not specified: 1.0
+weapon_badness:
+  M224: 1.5
 
 # Ideas:
 # - Different badness factors for each map, e.g. lower on Metro/Locker.
