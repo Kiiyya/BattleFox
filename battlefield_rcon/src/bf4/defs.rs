@@ -84,6 +84,16 @@ impl RconDecoding for Weapon {
     }
 }
 
+impl Weapon {
+    pub fn short_name(&self) -> &str {
+        match self {
+            Weapon::Mortar => "Mortar",
+            Weapon::Ucav => "UCAV",
+            Weapon::Other(s) => s.as_str(),
+        }
+    }
+}
+
 /////////////////////////////////////////////////////////////////////
 /////////////////////// GameMode ////////////////////////////////////
 /////////////////////////////////////////////////////////////////////

@@ -12,21 +12,22 @@ use serde::{Deserialize, Serialize};
 use crate::Plugin;
 use crate::players::Players;
 
-// // Serde doesn't allow literals as default values, apparently? Yikes.
-// fn default_badness() -> f32 { 1.0 }
+// Serde doesn't allow literals as default values, apparently? Yikes.
 fn const_true() -> bool { true }
+
+fn weapon_badness_default() -> BTreeMap<String, f32> {
+	BTreeMap::new()
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
 	#[serde(default = "const_true")]
 	enabled: bool,
 
-	// #[serde(default = "default_badness")]
-	// vehicle_badness: f32,
-	// #[serde(default = "default_badness")]
-	// explosive_badness: f32,
-	// #[serde(default = "default_badness")]
-	// gun_badness: f32,
+	/// Badness factors for each weapon, using the weapon name as transmitted by rcon.
+	/// If not specified, assumed `1.0`.
+	#[serde(default = "weapon_badness_default")]
+	weapon_badness: BTreeMap<String, f32>,
 
 	// badness_threshold_kill: f32,
 	badness_threshold_kick: f32,
@@ -99,6 +100,8 @@ impl Display for PlayerHistory {
 impl HistEntry {
 	fn badness(&self, config: &Config) -> f32 {
 		config.interpolate_time_scale(self.timestamp.elapsed())
+		*
+		config.weapon_badness.get(self.weapon.short_name()).unwrap_or(&1.0)
 	}
 }
 
