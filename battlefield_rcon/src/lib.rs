@@ -44,6 +44,7 @@ mod tests {
     use crate::bf4::{Bf4Client, ServerInfoError};
 
     #[tokio::test]
+    #[ignore]
     async fn test_server_info() {
         let bf4 = Bf4Client::connect_restricted(
             "127.0.0.1:47200",

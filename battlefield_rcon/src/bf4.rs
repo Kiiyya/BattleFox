@@ -72,7 +72,7 @@ impl Bf4Client {
     /// ```
     /// use battlefield_rcon::bf4::Bf4Client;
     ///
-    /// let bf4_client = Bf4Client::connect_restricted("127.0.0.1:47200",).await.unwrap();
+    /// let bf4_client = Bf4Client::connect_restricted("127.0.0.1:47200").await.unwrap();
     /// ```
     pub async fn connect_restricted(addr: impl ToSocketAddrs) -> RconResult<Arc<Self>> {
         let rcon = RconClient::connect(addr).await?;
