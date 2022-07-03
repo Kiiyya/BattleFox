@@ -64,6 +64,21 @@ pub struct Bf4Client {
 
 
 impl Bf4Client {
+    /// Open a connection to a BF4 server without logging in to it. 
+    /// When not logging in, you only have a restricted access and all commands won't work.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battlefield_rcon::bf4::Bf4Client;
+    ///
+    /// let bf4_client = Bf4Client::connect_restricted("127.0.0.1:47200",).await.unwrap();
+    /// ```
+    pub async fn connect_restricted(addr: impl ToSocketAddrs) -> RconResult<Arc<Self>> {
+        let rcon = RconClient::connect(addr).await?;
+        Bf4Client::new_from(rcon).await
+    }
+
     pub async fn connect(addr: impl ToSocketAddrs, password: AsciiString) -> RconResult<Arc<Self>> {
         let rcon = RconClient::connect(addr).await?;
         rcon.login_hashed(password).await?;
