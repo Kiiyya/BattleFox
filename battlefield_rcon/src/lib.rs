@@ -51,7 +51,7 @@ mod tests {
         )
         .await
         .unwrap();
-    
+
         // Server info test
         let serverinfo = match bf4.server_info().await {
             Ok(info) => info,
