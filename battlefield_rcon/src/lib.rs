@@ -38,3 +38,31 @@ pub mod macros;
 #[cfg(feature = "bf4")]
 pub mod bf4;
 pub mod rcon;
+
+#[cfg(test)]
+mod tests {
+    use crate::bf4::{Bf4Client, ServerInfoError};
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_server_info() {
+        let bf4 = Bf4Client::connect_restricted(
+            "127.0.0.1:47200",
+        )
+        .await
+        .unwrap();
+
+        // Server info test
+        let serverinfo = match bf4.server_info().await {
+            Ok(info) => info,
+            Err(ServerInfoError::Rcon(rconerr)) => panic!("{:?}", rconerr),
+        };
+
+        // println!("ServerInfo {:?}", serverinfo);
+
+        let json_string = serde_json::to_string(&serverinfo).unwrap();
+        println!("{}", json_string);
+
+        assert_eq!("IN_GAME", serverinfo.blaze_game_state);
+    }
+}
