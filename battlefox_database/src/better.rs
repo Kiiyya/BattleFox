@@ -51,7 +51,7 @@ impl BfoxDb {
             FROM tbl_playerdata AS pd
             INNER JOIN adkats_bans AS bans ON pd.PlayerId = bans.player_id
             INNER JOIN adkats_records_main AS records ON records.record_id = bans.latest_record_id
-            WHERE pd.EAGUID = ?;"
+            WHERE pd.EAGUID = ? AND ban_status != 'Disabled';"
         , guid.as_ref()).fetch_optional(&self.db).await?;
 
         if let Some(ban) = ban {
