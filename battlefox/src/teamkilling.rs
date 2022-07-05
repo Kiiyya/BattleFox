@@ -101,7 +101,7 @@ impl HistEntry {
 	fn badness(&self, config: &Config) -> f32 {
 		config.interpolate_time_scale(self.timestamp.elapsed())
 		*
-		config.weapon_badness.get(self.weapon.short_name()).unwrap_or(&1.0)
+		config.weapon_badness.get(&self.weapon.to_string()).unwrap_or(&1.0)
 	}
 }
 

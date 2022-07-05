@@ -15,8 +15,16 @@ badness_time_scale:
 weapon_badness:
   M224: 1.5
 
+  Tank: 0.7
+  Lav: 0.7
+  Roadkill: 0.7
+
+  TransportChopper: 0.3
+  Amtrac: 0.5
+  M67: 0.9
+
+
 # Ideas:
 # - Different badness factors for each map, e.g. lower on Metro/Locker.
-# - Less badness for grenades / tanks.
 # - Make !sorry reduce the badness of the recent teamkill.
 # - Make !punish increase the badness of the recent teamkill.
