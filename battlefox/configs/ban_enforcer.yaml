@@ -1,8 +1,1 @@
 enabled: true
-
-# AdKats DB has two fields for bans: end time and ban status. And for some reason these do not
-# match up always. So here you can choose which one of those fields should ultimately be
-# deciding in whether a player is banned (and will be kicked) or not.
-# Values: "EndTime", "Status".
-time_or_status: EndTime
-

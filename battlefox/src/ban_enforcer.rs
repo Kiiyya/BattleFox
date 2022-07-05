@@ -12,20 +12,8 @@ use crate::Plugin;
 use crate::players::Players;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
-enum TimeOrStatus {
-	#[default]
-	EndTime,
-	Status,
-}
-
-fn default_timeorstatus() -> TimeOrStatus { TimeOrStatus::EndTime }
-
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
 	enabled: bool,
-
-	#[serde(default = "default_timeorstatus")]
-	time_or_status: TimeOrStatus,
 }
 
 pub struct BanEnforcer {
@@ -44,23 +32,18 @@ impl BanEnforcer {
 			Event::Authenticated { player } => {
 				match self.db.get_ban(format!("{}", player.eaid)).await {
 					Ok(Some(ban)) => {
-						let is_banned_status = ban.status == BanStatus::Active;
+						let banned = if ban.status == BanStatus::Active {
+							let now = OffsetDateTime::now_utc();
+							let is_banned_time = now < ban.end;
 
-						let banned = match self.config.time_or_status {
-							TimeOrStatus::EndTime => {
-								let now = OffsetDateTime::now_utc();
-								// let ban_end : DateTime<Utc> = Utc.from_utc_datetime(&ban.ban_end_time); // assume our data is UTC.
-								let is_banned_time = now < ban.end;
-
-								if is_banned_time != is_banned_status {
-									warn!("Ban end time and ban_status mismatch for player {player}. All times (assumed) in UTC. Now = {}, ban_end = {}, ban_status = {:?}", &now, &ban.end, ban.status);
-								}
-								is_banned_time
-							},
-							TimeOrStatus::Status => is_banned_status
+							if !is_banned_time {
+								warn!("Ban for player {player} is \"Active\" but endTime is in the past. All times (assumed) in UTC. Now = {}, ban_end = {}", &now, &ban.end);
+							}
+							is_banned_time
+						} else {
+							false
 						};
 
-						// ban expiry time is more important than the ban_status column.
 						if banned {
 							info!("Player {player} is banned, and will be kicked via tempban for one second: {ban:#?}");
 
