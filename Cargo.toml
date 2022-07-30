@@ -4,10 +4,10 @@ panic = 'abort'     # Abort on panic. Supposedly helps reduzing binary size.
 
 [workspace]
 members = [
-	"battlefield_rcon",
-	"battlefox",
-	"battlefox_discord",
-	"battlelog",
-	"battlefox_shared",
-	"battlefox_database",
+    "battlefield_rcon",
+    "battlefox",
+    "battlefox_discord",
+    "battlelog",
+    "battlefox_shared",
+    "battlefox_database",
 ]

@@ -157,9 +157,9 @@ mod tests {
         assert_eq!(806262072, meta.persona_id);
     }
 
-	#[tokio::test]
-	async fn search_user_test() {
-		dbg!(search_user("xfileFIN").await.unwrap());
-		// panic!()
-	}
+    #[tokio::test]
+    async fn search_user_test() {
+        dbg!(search_user("xfileFIN").await.unwrap());
+        // panic!()
+    }
 }
