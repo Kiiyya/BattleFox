@@ -71,6 +71,7 @@ struct Inner {
 
     anim_override_override: HashMap<Player, bool>,
 
+
     // for convenience.
     config: Arc<MapVoteConfig>,
 }
@@ -215,8 +216,14 @@ impl Inner {
         }
     }
 
-    fn set_up_new_vote(&mut self, n_options: usize) {
-        self.alternatives = self.popstate.pool.choose_random(n_options);
+    fn set_up_new_vote(&mut self, n_options: usize, without: Option<Map>) {
+        let pool = if let Some(without) = without {
+            self.popstate.pool.without(without)
+        } else {
+            self.popstate.pool.clone()
+        };
+        self.alternatives = pool.choose_random(n_options);
+
         self.votes.clear();
         self.nominations.clear();
         let pool = self.popstate.pool.pool.iter().map(|mip| mip.map.short()).join(", ");
@@ -545,7 +552,7 @@ impl Mapvote {
                 matchmap: AltMatchersInv::new(),
                 config: self.config.clone(),
             };
-            init.set_up_new_vote(self.config.n_options);
+            init.set_up_new_vote(self.config.n_options, None);
             info!("Popstate initialized! New: {}", init.popstate.name);
             *lock = Some(init);
         }
@@ -991,6 +998,7 @@ impl Mapvote {
     }
 
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
+        let current_map = self.mapman.current_map(bf4).await;
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
@@ -1010,7 +1018,7 @@ impl Mapvote {
                 // get each player's votes, so we can simulate how the votes go later.
                 let assignment = inner.to_assignment();
 
-                inner.set_up_new_vote(self.config.n_options);
+                inner.set_up_new_vote(self.config.n_options, current_map);
                 Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None

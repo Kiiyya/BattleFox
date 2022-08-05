@@ -3,14 +3,16 @@ use crate::rcon::{RconError, RconResult};
 use ascii::AsciiString;
 use serde::{Deserialize, Serialize};
 
+use super::{Map, GameMode, RconDecoding};
+
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ServerInfo {
     pub server_name: AsciiString,
     pub playercount: i32,
     pub max_playercount: i32,
-    pub game_mode: AsciiString,
-    pub map: AsciiString,
+    pub game_mode: GameMode,
+    pub map: Map,
     pub rounds_played: i32,
     pub rounds_total: i32,
     pub scores: TeamScores,
@@ -51,8 +53,8 @@ pub fn parse_serverinfo(words: &[AsciiString]) -> RconResult<ServerInfo> {
         server_name: words[0].clone(),
         playercount: parse_int(&words[1])?,
         max_playercount: parse_int(&words[2])?,
-        game_mode: words[3].clone(),
-        map: words[4].clone(),
+        game_mode: GameMode::rcon_decode(&words[3])?,
+        map: Map::rcon_decode(&words[4])?,
         rounds_played: parse_int(&words[5])?,
         rounds_total: parse_int(&words[6])?,
         scores: parse_teamscores(words, teams_count),

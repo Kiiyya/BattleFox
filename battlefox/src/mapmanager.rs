@@ -95,6 +95,15 @@ struct Inner {
                 + Sync,
         >,
     >,
+
+    /// A (trimmed) history of the last few played maps.
+    /// More recent maps have smaller index.
+    ///
+    /// - `map_history[0]` is always the current map.
+    /// - It *may* be that `map_history.is_empty()`! You can't rely that current map is at `map_history[0]`.
+    map_history: Vec<Map>,
+
+    // current_map: Option<Map>,
 }
 
 pub enum CallbackResult {
@@ -156,6 +165,7 @@ impl MapManager {
             inner: Mutex::new(Inner {
                 pop_state: initial_popstate,
                 pop: None,
+                map_history: Vec::new(),
                 joins_leaves_since_pop: 0,
                 pool_change_callbacks: Vec::new(),
             }),
@@ -223,6 +233,13 @@ impl MapManager {
 
         bf4.maplist_add(&mip.map, &mip.mode, 1, Some(0)).await?;
         trace!("MapList: {:?}", bf4.maplist_list().await?);
+
+        {
+            let mut inner = self.inner.lock().unwrap();
+            inner.map_history.insert(0, mip.map);
+            inner.map_history.truncate(10);
+            drop(inner);
+        }
 
         switch_map_to(bf4, 0, vehicles, tickets).await?;
         bf4.maplist_remove(0).await?;
@@ -353,6 +370,28 @@ impl MapManager {
         // }
 
         Ok(())
+    }
+
+    /// Get the current map (cached via `map_history` if possible).
+    pub async fn current_map(&self, bf4: &Bf4Client) -> Option<Map> {
+        let hist = {
+            let inner = self.inner.lock().unwrap();
+            inner.map_history.clone()
+        };
+
+        if hist.is_empty() {
+            let sein = bf4.server_info().await.ok()?;
+            let mut inner = self.inner.lock().unwrap();
+
+            if inner.map_history.is_empty() {
+                inner.map_history.push(sein.map);
+                Some(sein.map)
+            } else {
+                Some(inner.map_history[0])
+            }
+        } else {
+            Some(hist[0])
+        }
     }
 }
 
