@@ -31,6 +31,7 @@ pub use ea_guid::Eaid;
 // cmd_err!(pub PlayerKickError, PlayerNotFound, A);
 cmd_err!(pub PlayerKillError, InvalidPlayerName, SoldierNotAlive);
 cmd_err!(pub SayError, MessageTooLong, PlayerNotFound);
+cmd_err!(pub YellError, MessageTooLong, PlayerNotFound);
 cmd_err!(pub ListPlayersError, );
 cmd_err!(pub ServerInfoError, );
 cmd_err!(pub MapListError, MapListFull, InvalidGameMode, InvalidMapIndex, InvalidRoundsPerMap);
@@ -598,6 +599,31 @@ impl Bf4Client {
                 _ => None,
             }
         ).await
+    }
+
+    /// TODO: Needs testing, I don't think the protocol documentation is correct
+    pub async fn yell(
+        &self,
+        msg: impl IntoAsciiString + Into<String>,
+        dur: Option<impl IntoAsciiString + Into<String>>,
+        vis: impl Into<Visibility>,
+    ) -> Result<(), YellError> {
+        let mut words = if dur.is_some() { veca!["admin.yell", msg, dur] } else { veca!["admin.yell", msg] };
+        words.append(&mut vis.into().rcon_encode());
+        self.rcon
+            .query(&words, ok_eof, |err| match err {
+                "InvalidTeam" => Some(YellError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our teamId",
+                ))),
+                "InvalidSquad" => Some(YellError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our squadId",
+                ))),
+                "MessageTooLong" => Some(YellError::MessageTooLong),
+                "MessageIsTooLong" => Some(YellError::MessageTooLong),
+                "PlayerNotFound" => Some(YellError::PlayerNotFound),
+                _ => None,
+            })
+            .await
     }
 
     pub async fn say(

@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_aux::prelude::*;
+use serde_json::Value;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub username: Option<String>,
@@ -65,6 +66,20 @@ pub struct SearchResult {
     pub games: HashMap<i32, String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Persona {
+    pub picture: Option<String>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub user_id: u64,
+    pub user: Option<User>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub persona_id: u64,
+    pub persona_name: String,
+    pub namespace: String,
+    pub games: HashMap<i32, Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsResponse {
@@ -78,6 +93,66 @@ pub struct SearchResponse {
     pub r#type: String,
     pub message: String,
     pub data: Vec<SearchResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsersResponse {
+    pub r#type: String,
+    pub message: String,
+    pub data: HashMap<String, UserResult>,
+}
+
+/// # Example
+/// ```ron
+/// LoadoutResponse {
+///   "type": "success",
+///   "message": "OK",
+///   "data": {
+///     "personaId": 806262072,
+///     "personaName": "xfileFIN",
+///     "platformInt": 1,
+///     "playerLicenses": {/* ... */},
+///     "presets": {
+///       "kits": {
+///         "0": {/* ... */}
+///       },
+///       "vehicles": {
+///         "0": {/* ... */}
+///       }
+///     },
+///     "isPremium": true,
+///     "playerStats": {/* ... */},
+///     "game": 2048,
+///     "mySoldier": true,
+///     "maxPresetsPremium": "4",
+///     "releasedXpacks": [/* ... */],
+///     "maxPresetsStandard": "2",
+///     "currentLoadout": {
+///       "weapons": {/* ... */},
+///       "selectedKit": "3",
+///       "kits": [/* ... */],
+///       "version": "2",
+///       "vehicles": [/* ... */]
+///     }
+///   }
+/// }
+/// ```
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadoutResponse {
+    pub r#type: String,
+    pub message: String,
+    pub data: LoadoutResult,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UserResult {
+    pub persona: Persona,
+    pub user_id: String,
+    pub persona_id: String,
+    pub user: Option<User>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -269,4 +344,105 @@ impl IngameMetadataResponse {
 
         Some(self.emblem_url.replace(".dds", ".png"))
     }
+}
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadoutResult {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub persona_id: u64,
+    pub persona_name: Option<String>,
+    pub current_loadout: Option<CurrentLoadout>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentLoadout {
+    pub selected_kit: String,
+    /// # Explanation
+    /// ```ron
+    /// 0 = Assault
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Gadget 1
+    ///     3 = Gadget 2
+    ///     4 = Grenade
+    ///     5 = Knife
+    ///     6 = Specialization
+    ///     7 = Soldier appearance
+    ///     8 = Parachute appearance
+    /// 1 = Engineer
+    ///     ...
+    /// 2 = Support
+    ///     ...
+    /// 3 = Recon
+    ///     ...
+    /// ```
+    pub kits: Vec<Vec<String>>,
+    /// # Explanation
+    /// ```ron
+    /// 0 = MBT
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Simple optics
+    ///     4 = Upgrades
+    ///     5 = Paint
+    ///     6 = Gunner optics
+    ///     7 = Gunner upgrade
+    /// 1 = IFV
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Simple optics
+    ///     4 = Upgrades
+    ///     5 = Paint
+    ///     6 = Gunner optics
+    ///     7 = Gunner upgrade
+    /// 2 = AA
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Simple optics
+    ///     4 = Upgrades
+    ///     5 = Paint
+    /// 3 = Attack boat
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Simple optics
+    ///     4 = Upgrades
+    ///     5 = Paint
+    /// 4 = Stealth jet
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Upgrade
+    ///     4 = Paint
+    /// 5 = Scout heli
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Upgrades
+    ///     4 = Paint
+    /// 6 = Attack heli
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Upgrades
+    ///     4 = Paint
+    ///     5 = Gunner secondary
+    ///     6 = Gunner optics
+    ///     7 = Gunner upgrade
+    /// 7 = Attack jet
+    ///     0 = Primary weapon
+    ///     1 = Secondary weapon
+    ///     2 = Counter measure
+    ///     3 = Upgrade
+    ///     4 = Paint
+    /// 8 = Transport
+    ///     0 = Paint
+    /// ```
+    pub vehicles: Vec<Vec<String>>,
 }

@@ -1,7 +1,103 @@
 pub mod models;
 
-use http::{HeaderMap, HeaderValue, StatusCode, header::USER_AGENT};
+use http::{header::USER_AGENT, HeaderMap, HeaderValue, StatusCode};
 pub use models::*;
+
+pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, anyhow::Error> {
+    let mut params = vec![("kind", "light")];
+
+    for soldier_name in soldier_names.iter() {
+        params.push(("personaNames", soldier_name));
+    }
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get("https://battlelog.battlefield.com/bf4/battledash/getUsersByPersonaNames")
+        .query(&params)
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let response_data = match serde_json::from_str::<UsersResponse>(&data_str) {
+        Ok(data) => data,
+        Err(err) => return Err(anyhow::anyhow!("{} - {}", err, data_str)),
+    };
+
+    // let response_data = res.json::<UsersResponse>().await?;
+    //println!("UsersResponse: {:#?}", js);
+
+    let mut users: Vec<UserResult> = Vec::new();
+    for (_key, value) in response_data.data {
+        // If soldier is not from the PC namespace
+        if value.persona.namespace != "cem_ea_id" {
+            continue;
+        }
+
+        // If soldier has BF4
+        for val in value.persona.games.values() {
+            if val.is_string() {
+                if val.as_str().unwrap().parse::<i32>().unwrap() & 2048 == 0 {
+                    continue;
+                }
+            }
+            else if val.is_u64() {
+                if val.as_u64().unwrap() & 2048 == 0 {
+                    continue;
+                }
+            }
+            else {
+                continue;
+            }
+
+            users.push(value.clone());
+        }
+    }
+
+    if users.len() > 0 {
+        return Ok(users);
+    }
+
+    Err(anyhow::anyhow!("Users not found"))
+}
+
+pub async fn get_loadout(soldier_name: &str, persona_id: &str) -> Result<LoadoutResult, anyhow::Error> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get(format!("https://battlelog.battlefield.com/bf4/loadout/get/{}/{}/1/", soldier_name, persona_id))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let response_data = match serde_json::from_str::<LoadoutResponse>(&data_str) {
+        Ok(data) => data,
+        Err(err) => return Err(anyhow::anyhow!("{} - {}", err, data_str)),
+    };
+
+    // let response_data = res.json::<LoadoutResponse>().await?;
+    // println!("LoadoutResponse: {:#?}", response_data);
+
+    if response_data.r#type == "success" && response_data.message == "OK" {
+        return Ok(response_data.data);
+    }
+
+    Err(anyhow::anyhow!("Loadout not found for {} ({})", soldier_name, persona_id))
+}
 
 pub async fn search_user(soldier_name: &str) -> Result<SearchResult, anyhow::Error> {
     let params = [("query", soldier_name.to_owned())];
@@ -37,7 +133,7 @@ pub async fn search_user(soldier_name: &str) -> Result<SearchResult, anyhow::Err
             }
             //println!("Has BF4");
 
-            return Ok(js.data.remove(i))
+            return Ok(js.data.remove(i));
         }
     }
 
@@ -46,16 +142,17 @@ pub async fn search_user(soldier_name: &str) -> Result<SearchResult, anyhow::Err
 
 pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyhow::Error> {
     let res = reqwest::Client::new()
-        .get(format!("https://keeper.battlelog.com/snapshot/{}", server_guid))
+        .get(format!(
+            "https://keeper.battlelog.com/snapshot/{}",
+            server_guid
+        ))
         .header(USER_AGENT, "BattleFox")
         .send()
         .await?;
 
     let status = res.status();
 
-    let data_str = res
-        .text()
-        .await?;
+    let data_str = res.text().await?;
     //println!("{}", data_str);
 
     if status != StatusCode::OK {
@@ -71,16 +168,17 @@ pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyh
 
 pub async fn ingame_metadata(persona_id: u64) -> Result<IngameMetadataResponse, anyhow::Error> {
     let res = reqwest::Client::new()
-        .get(format!("https://battlelog.battlefield.com/api/bf4/pc/persona/1/{}/ingame_metadata", persona_id))
+        .get(format!(
+            "https://battlelog.battlefield.com/api/bf4/pc/persona/1/{}/ingame_metadata",
+            persona_id
+        ))
         .header(USER_AGENT, "BattleFox")
         .send()
         .await?;
 
     let status = res.status();
 
-    let data_str = res
-        .text()
-        .await?;
+    let data_str = res.text().await?;
     //println!("{}", data_str);
 
     if status != StatusCode::OK {
@@ -130,16 +228,22 @@ pub async fn get_user(persona_id: String) -> Result<StatsResponse, anyhow::Error
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     // Sadly we can't use asserts, since the player may not be in the server actually.
     #[tokio::test]
     async fn get_snapshot() {
-        let data = server_snapshot("4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string()).await.unwrap();
+        let data = server_snapshot("4d0151b3-81ff-4268-b4e8-5e60d5bc8765".to_string())
+            .await
+            .unwrap();
         println!("{:#?}", data);
 
         let player_by_personaid = data.snapshot.get_player_by_personaid(806262072);
         if player_by_personaid.is_some() {
-            println!("Found player by personaid: {:#?}", player_by_personaid.unwrap());
+            println!(
+                "Found player by personaid: {:#?}",
+                player_by_personaid.unwrap()
+            );
         }
 
         let player_by_name = data.snapshot.get_player_by_name("xfileFIN");
@@ -160,6 +264,28 @@ mod tests {
     #[tokio::test]
     async fn search_user_test() {
         dbg!(search_user("xfileFIN").await.unwrap());
+        // panic!()
+    }
+
+    #[tokio::test]
+    async fn test_get_users() {
+        let soldiers: Vec<String> = vec!["xfileFIN".to_string()];
+        dbg!(get_users(soldiers).await.unwrap());
+        // panic!()
+    }
+
+    #[tokio::test]
+    async fn test_get_loadout() {
+        dbg!(get_loadout("xfileFIN", "806262072").await.unwrap());
+        // panic!()
+    }
+
+    #[tokio::test]
+    async fn test_parse_users() {
+        let file = fs::read_to_string("response.json").unwrap();
+        let data: UsersResponse = serde_json::from_str(&file).unwrap();
+
+        dbg!(data);
         // panic!()
     }
 }
