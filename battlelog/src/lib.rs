@@ -61,7 +61,7 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
         }
     }
 
-    if users.len() > 0 {
+    if !users.is_empty() {
         return Ok(users);
     }
 

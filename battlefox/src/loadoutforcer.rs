@@ -43,7 +43,7 @@ impl LoadoutEnforcer {
         let player_names: Vec<_> = players.iter()
             .map(|val| val.player_name.to_string())
             .collect();
-        
+
         // Check for missing players
         let mut missing_players: Vec<String> = Vec::new();
         for player_name in player_names.iter() {
@@ -53,7 +53,7 @@ impl LoadoutEnforcer {
         }
 
         // Insert missing player personaIds
-        if missing_players.len() > 0 {
+        if !missing_players.is_empty() {
             match get_users(missing_players).await {
                 Ok(users) => {
                     for user in users.iter() {
@@ -70,13 +70,13 @@ impl LoadoutEnforcer {
 
         // Remove players that have left
         persona_ids.write().retain(|key, _value| {
-            player_names.contains(&key)
+            player_names.contains(key)
         });
     }
 
     async fn add_player(self: Arc<Self>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
         trace!("[{}] Adding player {} to player/personaId map.", Self::NAME, player);
-        
+
         // Insert if personaId missing
         if !persona_ids.read().contains_key(player) {
             match search_user(player).await {
@@ -86,7 +86,6 @@ impl LoadoutEnforcer {
                 },
                 Err(err) => {
                     error!("[{}] Fetching personaId from Battlelog failed: {:?}.", Self::NAME, err);
-                    return;
                 },
             };
         }
@@ -94,7 +93,7 @@ impl LoadoutEnforcer {
 
     async fn remove_player(self: Arc<Self>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
         trace!("[{}] Removing player {} from the player/personaId map.", Self::NAME, player);
-        
+
         // Insert if personaId missing
         if persona_ids.read().contains_key(player) {
             persona_ids.write().remove(player);
@@ -115,13 +114,13 @@ impl Plugin for LoadoutEnforcer {
         if self.enabled() {
             let mut persona_ids : Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
             self.clone().update_players(bf4.clone(), &mut persona_ids).await;
-    
+
             let mut stream = bf4.event_stream().await?;
             while let Some(event) = stream.next().await {
                 match event {
                     Ok(Event::Authenticated { player }) => {
                         trace!("[{}] Authenticated - {}", Self::NAME, player.name);
-                        self.clone().add_player(&mut persona_ids, &player.name.to_string()).await;
+                        self.clone().add_player(&mut persona_ids, player.name.as_ref()).await;
                     },
                     Ok(Event::LevelLoaded { level_name, game_mode: _, rounds_played: _, rounds_total: _ }) => {
                         trace!("[{}] LevelLoaded - {}", Self::NAME, level_name.Pretty());
@@ -129,34 +128,34 @@ impl Plugin for LoadoutEnforcer {
                     },
                     Ok(Event::Leave { player, final_scores: _ }) => {
                         trace!("[{}] Leave - {}", Self::NAME, player.name);
-                        self.clone().remove_player(&mut persona_ids, &player.name.to_string()).await;
+                        self.clone().remove_player(&mut persona_ids, player.name.as_ref()).await;
                     },
                     Ok(Event::Disconnect { player, reason })=> {
                         trace!("[{}] Disconnect - {} > {}", Self::NAME, player, reason);
-                        self.clone().remove_player(&mut persona_ids, &player.to_string()).await;
+                        self.clone().remove_player(&mut persona_ids, player.as_ref()).await;
                     },
                     Ok(Event::Spawn { player, team: _ }) => {
                         trace!("[{}] Spawn - {}", Self::NAME, player.name);
-    
+
                         let player_name = player.name.to_string();
                         if !persona_ids.read().contains_key(&player_name) {
                             warn!("[{}] Player ({}) doesn't have a known personaId, trying to fetch again...", Self::NAME, player.name);
-                            self.clone().add_player(&mut persona_ids, &player.name.to_string()).await;
+                            self.clone().add_player(&mut persona_ids, player.name.as_ref()).await;
                             continue;
                         }
-    
+
                         // let persona = persona_ids
                         //     .get(&player_name)
                         //     .map(|name: &String| (player_name.as_ref(), name.as_ref()))
                         //     .unwrap_or(("unknown", "0"));
-    
+
                         let persona_ids_clone = persona_ids.clone();
                         let self_clone = self.clone();
                         let bf4_clone = bf4.clone();
                         tokio::spawn(async move {
                             let soldier_name: String;
                             let persona_id: String;
-    
+
                             {
                                 let read_lock = persona_ids_clone.read();
                                 let persona = match read_lock.get_key_value(&player_name) {
@@ -166,21 +165,21 @@ impl Plugin for LoadoutEnforcer {
                                         return;
                                     },
                                 };
-    
+
                                 // let persona = read_lock
                                 //     .get(&player_name)
                                 //     .map(|name: &String| (player_name.as_ref(), name.as_ref()))
                                 //     .unwrap_or(("unknown", "0"));
-    
+
                                 soldier_name = persona.0.to_string();
                                 persona_id = persona.1.to_string();
                             }
-                            
+
                             // Wait 5 seconds after spawn to try and make sure Battlelog has the updated loadout
                             tokio::time::sleep(Duration::from_secs(5)).await;
                             match get_loadout(&soldier_name,&persona_id).await {
                                 Ok(loadout) => {
-                                    if let None = loadout.current_loadout { 
+                                    if loadout.current_loadout.is_none() {
                                         trace!("[{}] {} > Loadout response didn't have current_loadout", Self::NAME, player.name);
                                         return;
                                     }
@@ -193,10 +192,10 @@ impl Plugin for LoadoutEnforcer {
                                         for weapon_code in weapon_codes.iter() {
                                             if self_clone.config.banned_weapons.contains_key(weapon_code) {
                                                 let kill_message = &self_clone.config.banned_weapons[weapon_code];
-        
+
                                                 let _ = dbg!(bf4_clone.kill(player.name.clone()).await);
-                                                let _ = bf4_clone.say(format!("{}", kill_message), player.clone()).await;
-                                                let _ = bf4_clone.yell_dur(format!("{}", kill_message), player.clone(), "10").await;
+                                                let _ = bf4_clone.say(kill_message.to_string(), player.clone()).await;
+                                                let _ = bf4_clone.yell_dur(kill_message.to_string(), player.clone(), "10").await;
 
                                                 trace!("[{}] {} > {}", Self::NAME, player.name, kill_message);
                                                 return;
