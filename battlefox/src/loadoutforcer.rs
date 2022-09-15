@@ -196,7 +196,7 @@ impl Plugin for LoadoutEnforcer {
         
                                                 let _ = dbg!(bf4_clone.kill(player.name.clone()).await);
                                                 let _ = bf4_clone.say(format!("{}", kill_message), player.clone()).await;
-                                                let _ = bf4_clone.yell(format!("{}", kill_message), None, player.clone()).await;
+                                                let _ = bf4_clone.yell(format!("{}", kill_message), player.clone()).await;
                                                 trace!("[{}] {} > {}", Self::NAME, player.name, kill_message);
                                                 return;
                                             }

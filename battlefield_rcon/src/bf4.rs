@@ -602,13 +602,37 @@ impl Bf4Client {
     }
 
     /// TODO: Needs testing, I don't think the protocol documentation is correct
+    pub async fn yell_dur(
+        &self,
+        msg: impl IntoAsciiString + Into<String>,
+        vis: impl Into<Visibility>,
+        dur: impl IntoAsciiString + Into<String>
+    ) -> Result<(), YellError> {
+        let mut words = veca!["admin.yell", msg, dur];
+        words.append(&mut vis.into().rcon_encode());
+        self.rcon
+            .query(&words, ok_eof, |err| match err {
+                "InvalidTeam" => Some(YellError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our teamId",
+                ))),
+                "InvalidSquad" => Some(YellError::Rcon(RconError::protocol_msg(
+                    "Rcon did not understand our squadId",
+                ))),
+                "MessageTooLong" => Some(YellError::MessageTooLong),
+                "MessageIsTooLong" => Some(YellError::MessageTooLong),
+                "PlayerNotFound" => Some(YellError::PlayerNotFound),
+                _ => None,
+            })
+            .await
+    }
+
+    /// TODO: Needs testing, I don't think the protocol documentation is correct
     pub async fn yell(
         &self,
         msg: impl IntoAsciiString + Into<String>,
-        dur: Option<impl IntoAsciiString + Into<String>>,
         vis: impl Into<Visibility>,
     ) -> Result<(), YellError> {
-        let mut words = if dur.is_some() { veca!["admin.yell", msg, dur] } else { veca!["admin.yell", msg] };
+        let mut words = veca!["admin.yell", msg];
         words.append(&mut vis.into().rcon_encode());
         self.rcon
             .query(&words, ok_eof, |err| match err {
