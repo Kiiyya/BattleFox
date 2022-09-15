@@ -1,9 +1,9 @@
 use std::time::Duration;
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use battlefield_rcon::{bf4::{Bf4Client, Event, Player, Weapon, Visibility}, rcon::RconResult};
+use battlefield_rcon::{bf4::{Bf4Client, Event, Visibility}, rcon::RconResult};
 use futures::StreamExt;
 use parking_lot::RwLock;
 use serde::{Serialize, Deserialize};
@@ -74,7 +74,7 @@ impl LoadoutEnforcer {
         });
     }
 
-    async fn add_player(self: Arc<Self>, bf4: Arc<Bf4Client>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
+    async fn add_player(self: Arc<Self>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
         trace!("[{}] Adding player {} to player/personaId map.", Self::NAME, player);
         
         // Insert if personaId missing
@@ -92,7 +92,7 @@ impl LoadoutEnforcer {
         }
     }
 
-    async fn remove_player(self: Arc<Self>, bf4: Arc<Bf4Client>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
+    async fn remove_player(self: Arc<Self>, persona_ids: &mut Arc<RwLock<HashMap<String, String>>>, player: &str) {
         trace!("[{}] Removing player {} from the player/personaId map.", Self::NAME, player);
         
         // Insert if personaId missing
@@ -121,7 +121,7 @@ impl Plugin for LoadoutEnforcer {
                 match event {
                     Ok(Event::Authenticated { player }) => {
                         trace!("[{}] Authenticated - {}", Self::NAME, player.name);
-                        self.clone().add_player(bf4.clone(), &mut persona_ids, &player.name.to_string()).await;
+                        self.clone().add_player(&mut persona_ids, &player.name.to_string()).await;
                     },
                     Ok(Event::LevelLoaded { level_name, game_mode: _, rounds_played: _, rounds_total: _ }) => {
                         trace!("[{}] LevelLoaded - {}", Self::NAME, level_name.Pretty());
@@ -129,11 +129,11 @@ impl Plugin for LoadoutEnforcer {
                     },
                     Ok(Event::Leave { player, final_scores: _ }) => {
                         trace!("[{}] Leave - {}", Self::NAME, player.name);
-                        self.clone().remove_player(bf4.clone(), &mut persona_ids, &player.name.to_string()).await;
+                        self.clone().remove_player(&mut persona_ids, &player.name.to_string()).await;
                     },
                     Ok(Event::Disconnect { player, reason })=> {
                         trace!("[{}] Disconnect - {} > {}", Self::NAME, player, reason);
-                        self.clone().remove_player(bf4.clone(), &mut persona_ids, &player.to_string()).await;
+                        self.clone().remove_player(&mut persona_ids, &player.to_string()).await;
                     },
                     Ok(Event::Spawn { player, team: _ }) => {
                         trace!("[{}] Spawn - {}", Self::NAME, player.name);
@@ -141,7 +141,7 @@ impl Plugin for LoadoutEnforcer {
                         let player_name = player.name.to_string();
                         if !persona_ids.read().contains_key(&player_name) {
                             warn!("[{}] Player ({}) doesn't have a known personaId, trying to fetch again...", Self::NAME, player.name);
-                            self.clone().add_player(bf4.clone(), &mut persona_ids, &player.name.to_string()).await;
+                            self.clone().add_player(&mut persona_ids, &player.name.to_string()).await;
                             continue;
                         }
     
@@ -196,7 +196,8 @@ impl Plugin for LoadoutEnforcer {
         
                                                 let _ = dbg!(bf4_clone.kill(player.name.clone()).await);
                                                 let _ = bf4_clone.say(format!("{}", kill_message), player.clone()).await;
-                                                let _ = bf4_clone.yell(format!("{}", kill_message), player.clone()).await;
+                                                let _ = bf4_clone.yell_dur(format!("{}", kill_message), player.clone(), "10").await;
+
                                                 trace!("[{}] {} > {}", Self::NAME, player.name, kill_message);
                                                 return;
                                             }

@@ -632,7 +632,7 @@ impl Bf4Client {
         msg: impl IntoAsciiString + Into<String>,
         vis: impl Into<Visibility>,
     ) -> Result<(), YellError> {
-        let mut words = veca!["admin.yell", msg];
+        let mut words = veca!["admin.yell", msg, "10"];
         words.append(&mut vis.into().rcon_encode());
         self.rcon
             .query(&words, ok_eof, |err| match err {

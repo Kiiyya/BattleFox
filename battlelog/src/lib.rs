@@ -281,6 +281,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_parse_users() {
         let file = fs::read_to_string("response.json").unwrap();
         let data: UsersResponse = serde_json::from_str(&file).unwrap();
