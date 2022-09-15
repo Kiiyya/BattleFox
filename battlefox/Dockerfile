@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1.63.0 AS builder
+FROM rust:1.59.0 AS builder
 ARG GIT_DESCRIBE
 WORKDIR /usr/src/
 RUN rustup target add x86_64-unknown-linux-musl
