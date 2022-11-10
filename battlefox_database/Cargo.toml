@@ -10,7 +10,6 @@ serde = { version = "1", features = ["derive"] }
 chrono = "0.4.19"
 
 # DB Orm
-diesel = { version = "1.4.4", features = ["mysql", "chrono"] }
 dotenv = "0.15.0"
 
 # SQLx because I hate Diesel. Yes, we use two SQL libs now...
