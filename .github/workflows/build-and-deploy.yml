@@ -116,7 +116,7 @@ jobs:
               EXEC=$BINARY_1
           fi
           if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
-            TAG=$GITHUB_REF_NAME
+            TAG=$(git describe)
           else
             TAG=$GITHUB_SHA
           fi
@@ -131,7 +131,7 @@ jobs:
               EXEC=$BINARY_2
           fi
           if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
-            TAG=$GITHUB_REF_NAME
+            TAG=$(git describe)
           else
             TAG=$GITHUB_SHA
           fi
@@ -170,7 +170,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Set commit tag to env
-        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: echo "COMMIT_TAG=$(git describe)" >> $GITHUB_ENV
       # Support for more platforms
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
