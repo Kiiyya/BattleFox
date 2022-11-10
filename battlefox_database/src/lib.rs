@@ -13,8 +13,11 @@
 use std::env;
 
 use sqlx::MySqlPool;
+use sqlx::types::time::OffsetDateTime;
 
 pub mod adkats;
+
+pub type DateTime = OffsetDateTime;
 
 pub struct BfoxContext {
     pool: MySqlPool,

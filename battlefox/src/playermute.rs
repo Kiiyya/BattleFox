@@ -4,7 +4,6 @@ use ascii::AsciiString;
 use async_trait::async_trait;
 use battlefield_rcon::{bf4::{Bf4Client, CommmoRose, Eaid, Event, Player}, rcon::RconResult};
 use chrono::{Duration, Utc};
-use battlefox_database::{delete_muted_player, establish_connection, get_muted_player, get_muted_players, models::BfoxMutedPlayer, replace_into_muted_player};
 use serde::{Serialize, Deserialize};
 use battlefox_shared::mute::MuteType;
 use tokio::sync::Mutex;

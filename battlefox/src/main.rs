@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use battlefield_rcon::bf4::Event;
 use battlefield_rcon::bf4::error::Bf4Error;
 use battlefield_rcon::rcon::RconResult;
-use battlefox_database::better::BfoxDb;
+use battlefox_database::BfoxContext;
 use dotenv::dotenv;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -245,9 +245,9 @@ async fn main() -> anyhow::Result<()> {
     let _ = UPTIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
     let rconinfo = get_rcon_coninfo()?;
-    let adkatsinfo = get_db_coninfo()?;
 
-    let db = BfoxDb::new(&adkatsinfo).await?;
+    // TODO: Disable DB potentially.
+    let db = BfoxContext::new_env();
 
     // Initialize plugins and their dependencies.
     let mut app = App::new();

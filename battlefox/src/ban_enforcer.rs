@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use battlefield_rcon::bf4::ban_list::{Ban, BanTimeout};
 use battlefield_rcon::bf4::{Bf4Client, Event, BanListError, PlayerKickError};
 use battlefield_rcon::rcon::RconResult;
-use battlefox_database::better::{BfoxDb, OffsetDateTime, BanStatus};
+use battlefox_database::{BfoxContext, DateTime};
+use battlefox_database::adkats::bans::BanStatus;
 use serde::{Deserialize, Serialize};
 
 use crate::Plugin;
@@ -18,11 +19,11 @@ pub struct Config {
 
 pub struct BanEnforcer {
     config: Config,
-    db: BfoxDb,
+    db: BfoxContext,
 }
 
 impl BanEnforcer {
-    pub fn new(config: Config, _players: Arc<Players>, db: BfoxDb) -> Self {
+    pub fn new(config: Config, _players: Arc<Players>, db: BfoxContext) -> Self {
         Self { config, db }
     }
 
@@ -33,7 +34,7 @@ impl BanEnforcer {
                 match self.db.get_ban(format!("{}", player.eaid)).await {
                     Ok(Some(ban)) => {
                         let banned = if ban.status == BanStatus::Active {
-                            let now = OffsetDateTime::now_utc();
+                            let now = DateTime::now_utc();
                             let is_banned_time = now < ban.end;
 
                             if !is_banned_time {

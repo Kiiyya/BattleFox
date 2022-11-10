@@ -1,13 +1,12 @@
 use sqlx::query_as;
-use sqlx::types::time::OffsetDateTime;
 
-use crate::BfoxContext;
+use crate::{BfoxContext, DateTime};
 
 #[derive(Debug)]
 pub struct BfoxMutedPlayer {
     pub eaid: String, // TODO: use the EAID type
     pub type_: i32, // TODO: use an enum.
-    pub end_date: Option<OffsetDateTime>,
+    pub end_date: Option<DateTime>,
     pub kicks: Option<i32>, // TODO: use u32
     pub reason: Option<String>,
 }
