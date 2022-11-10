@@ -43,8 +43,8 @@ jobs:
             OS: ubuntu-latest
           # - TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
           #   OS: ubuntu-latest
-          - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
-            OS: ubuntu-latest
+          # - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
+          #   OS: ubuntu-latest
           # - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
           #   OS: ubuntu-latest
           # - TARGET: armv7-unknown-linux-gnueabihf # raspberry pi 2-3-4, not tested
@@ -172,7 +172,8 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          # platforms: linux/amd64,linux/arm64
           file: ./Dockerfile.cross-platform
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
