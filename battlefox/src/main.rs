@@ -4,6 +4,7 @@
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate log;
 #[macro_use] extern crate multimap;
+extern crate battlelog;
 
 use anyhow::Context;
 use ascii::{IntoAsciiString};
@@ -36,6 +37,7 @@ use mapvote::{
 
 use crate::admins::Admins;
 use crate::ban_enforcer::BanEnforcer;
+use crate::loadoutforcer::LoadoutEnforcer;
 use crate::playermute::PlayerMute;
 use crate::teamkilling::TeamKilling;
 
@@ -54,6 +56,7 @@ mod logging;
 mod playermute;
 mod teamkilling;
 mod ban_enforcer;
+pub mod loadoutforcer;
 
 // Instead of `cargo build`, set env vars:
 //     RUSTFLAGS='--cfg take_git_version_from_env'
@@ -252,6 +255,7 @@ async fn main() -> anyhow::Result<()> {
     let players = app.has_plugin_noconfig(Players::new())?;
     let vips = app.has_plugin_noconfig(Vips::new())?;
     let _weaponforcer = app.has_plugin(WeaponEnforcer::new)?;
+    let _loadoutenforcer = app.has_plugin(LoadoutEnforcer::new)?;
     // let _playerreport = app.has_plugin(|c| PlayerReport::new(players.clone(), rabbitmq, c))?;
     let _playermute = app.has_plugin(|c| PlayerMute::new(players.clone(), c))?;
     let mapman = app.has_plugin(MapManager::new)?;

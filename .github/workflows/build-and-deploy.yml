@@ -1,0 +1,212 @@
+name: Build and Deploy
+
+on:
+  push:
+    tags:
+      - "*"
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch: # enable button on github to manually trigger this
+
+env:
+  RELEASE_VERSION: ${{ github.run_number }}
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    # necessary for windows
+    shell: bash
+
+jobs:
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Cargo cache
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ./target
+  #         key: test-cargo-registry
+  #     - name: List
+  #       run: find ./
+  #     - name: Run tests
+  #       run: cargo test --verbose
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # a list of all the targets
+        include:
+          - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
+            OS: ubuntu-latest
+          # - TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
+          #   OS: ubuntu-latest
+          # - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
+          #   OS: ubuntu-latest
+          # - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
+          #   OS: ubuntu-latest
+          # - TARGET: armv7-unknown-linux-gnueabihf # raspberry pi 2-3-4, not tested
+          #   OS: ubuntu-latest
+          # - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
+          #   OS: ubuntu-latest
+          # - TARGET: arm-unknown-linux-gnueabihf # raspberry pi 0-1, not tested
+          #   OS: ubuntu-latest
+          # - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
+          #   OS: ubuntu-latest
+          # - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+          #   OS: macos-latest
+          # - TARGET: x86_64-pc-windows-msvc # tested on a windows machine
+          #   OS: windows-latest
+    # needs: test
+    runs-on: ${{ matrix.OS }}
+    env:
+      BINARY_1: battlefox
+      BINARY_2: battlefox_discord
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cargo cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ./target
+          key: build-cargo-registry-${{matrix.TARGET}}
+      - name: List
+        run: find ./
+      - name: Install and configure dependencies
+        run: |
+          # dependencies are only needed on ubuntu as that's the only place where
+          # we make cross-compilation
+          if [[ $OS =~ ^ubuntu.*$ ]]; then
+            sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+          fi
+
+          # some additional configuration for cross-compilation on linux
+          cat >>~/.cargo/config <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          [target.aarch64-unknown-linux-musl]
+          linker = "aarch64-linux-gnu-gcc"
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.armv7-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          [target.arm-unknown-linux-musleabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          EOF
+      - name: Install rust target
+        run: rustup target add $TARGET
+      - name: Run build
+        run: cargo build --release --verbose --target $TARGET
+      - name: List target
+        run: find ./target
+      - name: Compress battlefox
+        run: |
+          mkdir -p ./artifacts
+          # windows is the only OS using a different convention for executable file name
+          if [[ $OS =~ ^windows.*$ ]]; then
+              EXEC=$BINARY_1.exe
+          else
+              EXEC=$BINARY_1
+          fi
+          if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
+            TAG=$GITHUB_REF_NAME
+          else
+            TAG=$GITHUB_SHA
+          fi
+          tar -czf ./artifacts/$BINARY_1-$TARGET-$TAG.tar.gz -C ./target/$TARGET/release/ $EXEC
+      - name: Compress battlefox_discord
+        run: |
+          mkdir -p ./artifacts
+          # windows is the only OS using a different convention for executable file name
+          if [[ $OS =~ ^windows.*$ ]]; then
+              EXEC=$BINARY_2.exe
+          else
+              EXEC=$BINARY_2
+          fi
+          if [[ $GITHUB_REF_TYPE =~ ^tag$ ]]; then
+            TAG=$GITHUB_REF_NAME
+          else
+            TAG=$GITHUB_SHA
+          fi
+          tar -czf ./artifacts/$BINARY_2-$TARGET-$TAG.tar.gz -C ./target/$TARGET/release/ $EXEC
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: result
+          path: |
+            ./artifacts
+
+  # deploys to github releases on tag
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: result
+          path: ./artifacts
+      - name: List
+        run: find ./artifacts
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./artifacts/*.tar.gz
+
+  # publishes docker images
+  build_and_push_docker:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set commit tag to env
+        run: echo "COMMIT_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      # Support for more platforms
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      # Creating builder
+      - uses: docker/setup-buildx-action@v2
+      # Logging in to DockerHub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      # Building image and pushing it to DockerHub
+      - name: Build battlefox and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./battlefox
+          platforms: linux/amd64
+          # platforms: linux/amd64,linux/arm64
+          file: ./battlefox/Dockerfile.cross-platform
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
+          build-args: |
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            TAG=${{ env.COMMIT_TAG }}
+      # Building image and pushing it to DockerHub
+      - name: Build battlefox_discord and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./battlefox_discord
+          platforms: linux/amd64
+          # platforms: linux/amd64,linux/arm64
+          file: ./battlefox_discord/Dockerfile.cross-platform
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_discord:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox_discord:latest
+          build-args: |
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            TAG=${{ env.COMMIT_TAG }}

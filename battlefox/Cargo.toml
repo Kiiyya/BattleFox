@@ -56,5 +56,8 @@ lazy_static = "1.4.0"
 chrono = "0.4.19"
 humantime = "2.1.0"
 
+parking_lot = "0.12.1"
+
+battlelog = { path = "../battlelog" }
 battlefox_shared = { path = "../battlefox_shared" }
 battlefox_database = { path = "../battlefox_database" }

@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1.58.1 AS builder
+FROM rust:1.59.0 AS builder
 ARG GIT_DESCRIBE
 WORKDIR /usr/src/
 RUN rustup target add x86_64-unknown-linux-musl
@@ -15,6 +15,7 @@ RUN echo "openssl = { version = \"0.10\", features = [\"vendored\"] }" >> ./Carg
 COPY ./battlefield_rcon ../battlefield_rcon
 COPY ./battlefox_shared ../battlefox_shared
 COPY ./battlefox_database ../battlefox_database
+COPY ./battlelog ../battlelog
 ENV RUSTFLAGS='--cfg take_git_version_from_env'
 RUN cargo build --release
 
