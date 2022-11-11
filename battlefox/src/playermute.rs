@@ -1,4 +1,4 @@
-use std::{collections::{HashMap}, convert::TryInto, ops::Add, sync::{Arc}};
+use std::{collections::{HashMap}, convert::TryInto, sync::{Arc}};
 
 use ascii::AsciiString;
 use async_trait::async_trait;
@@ -41,9 +41,11 @@ impl Plugin for PlayerMute {
 
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
-            Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total} => {
+            Event::LevelLoaded { .. } => {
                 // Update mute list (remove expired mutes and add missing ones)
-                self.update_players();
+                if let Err(e) = self.update_players().await {
+                    error!("Error: {e}");
+                }
             },
             Event::Chat { vis: _, player, msg } => {
                 if msg.as_str().starts_with('/') { return Ok(()); }
@@ -74,9 +76,11 @@ impl Plugin for PlayerMute {
                     let _ = self.handle_chat_msg(bf4, player, msg).await;
                 }
             },
-            Event::RoundOver { winning_team } => {
+            Event::RoundOver { .. } => {
                 // Remove all that only had round mute
-                self.remove_round_mutes().await;
+                if let Err(e) = self.remove_round_mutes().await {
+                    error!("Error: {e}");
+                }
             },
             _ => {}
         }
@@ -173,7 +177,7 @@ impl PlayerMute {
                                         return Ok(())
                                     }
                                     match mute_type.as_str().parse::<i64>() {
-                                        Ok(n) => {
+                                        Ok(_n) => {
                                             todo!("There's some uncommented code here because of the diesel to sqlx migration"); // TODO: !!!
                                             // mute_player.end_date = Some(Utc::now().naive_utc().add(Duration::days(n)).date());
                                         },
@@ -266,7 +270,7 @@ impl PlayerMute {
         Ok(())
     }
 
-    async fn remove_round_mutes(&self) {
+    async fn remove_round_mutes(&self) -> anyhow::Result<()> {
         debug!("Removing round muted players");
 
         let lock = self.offenses.lock().await;
@@ -276,80 +280,85 @@ impl PlayerMute {
             .collect_vec();
         drop(lock);
 
-        self.db.delete_muted_players(&ids);
+        self.db.delete_muted_players(&ids).await?;
+        Ok(())
     }
 
-    async fn add_kicked(&self, eaid: &Eaid) {
-        debug!("Adding kick for {}", eaid.to_string());
+    async fn add_kicked(&self, _eaid: &Eaid) {
+        todo!()
+        // debug!("Adding kick for {}", eaid.to_string());
 
-        let mut player = self.db.get_muted_player(eaid.to_string()).await?;
-        player.kicks = Some(player.kicks.unwrap_or(0) + 1);
-        match replace_into_muted_player(&con, &player) {
-            Ok(_) => debug!("Added kick for {}", eaid.to_string()),
-            Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
-        }
+        // let mut player = self.db.get_muted_player(eaid.to_string()).await?;
+        // player.kicks = Some(player.kicks.unwrap_or(0) + 1);
+        // match replace_into_muted_player(&con, &player) {
+        //     Ok(_) => debug!("Added kick for {}", eaid.to_string()),
+        //     Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
+        // }
     }
 
-    fn try_get_muted_player(&self, eaid: &str) -> Option<BfoxMutedPlayer> {
-        match establish_connection() {
-            Ok(con) => {
-                if let Ok(player) = get_muted_player(&con, eaid) {
-                    return Some(player);
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
-        }
+    fn try_get_muted_player(&self, _eaid: &str) -> Option<BfoxMutedPlayer> {
+        todo!()
+        // match establish_connection() {
+        //     Ok(con) => {
+        //         if let Ok(player) = get_muted_player(&con, eaid) {
+        //             return Some(player);
+        //         }
+        //     },
+        //     Err(error) => error!("Failed to connect to database: {}", error),
+        // }
 
-        None
+        // None
     }
 
-    fn try_remove_mute(&self, eaid: &Eaid, muted_players: &mut HashMap<Eaid, MutedPlayerInfo>) -> bool {
-        debug!("Removing player {} from muted players", eaid.to_string());
+    fn try_remove_mute(&self, _eaid: &Eaid, _muted_players: &mut HashMap<Eaid, MutedPlayerInfo>) -> bool {
+        todo!()
+        // debug!("Removing player {} from muted players", eaid.to_string());
 
-        match establish_connection() {
-            Ok(con) => {
-                let result = delete_muted_player(&con, eaid.to_string());
-                match result {
-                    Ok(_) => {
-                        debug!("Removed mute from: {:#?}", eaid);
-                        if muted_players.remove(eaid).is_none() {
-                            return false
-                        }
+        // match establish_connection() {
+        //     Ok(con) => {
+        //         let result = delete_muted_player(&con, eaid.to_string());
+        //         match result {
+        //             Ok(_) => {
+        //                 debug!("Removed mute from: {:#?}", eaid);
+        //                 if muted_players.remove(eaid).is_none() {
+        //                     return false
+        //                 }
 
-                        return true
-                    },
-                    Err(err) => error!("Error trying to remove mute from {}: {}", eaid, err),
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
-        }
+        //                 return true
+        //             },
+        //             Err(err) => error!("Error trying to remove mute from {}: {}", eaid, err),
+        //         }
+        //     },
+        //     Err(error) => error!("Failed to connect to database: {}", error),
+        // }
 
-        false
+        // false
     }
 
-    fn try_add_mute(&self, eaid: Eaid, player: BfoxMutedPlayer, muted_players: &mut HashMap<Eaid, MutedPlayerInfo>) -> bool {
-        debug!("Adding player {} to muted players", eaid.to_string());
+    fn try_add_mute(&self, _eaid: Eaid, _player: BfoxMutedPlayer, _muted_players: &mut HashMap<Eaid, MutedPlayerInfo>) -> bool {
+        todo!()
+        // debug!("Adding player {} to muted players", eaid.to_string());
 
-        match establish_connection() {
-            Ok(con) => {
-                let result = replace_into_muted_player(&con, &player);
-                match result {
-                    Ok(_) => {
-                        muted_players.entry(eaid).or_insert(MutedPlayerInfo {
-                            infractions: 0,
-                            mute_type: player.type_.try_into().unwrap(),
-                            reason: player.reason.clone()
-                        });
+        // match establish_connection() {
+        //     Ok(con) => {
+        //         let result = replace_into_muted_player(&con, &player);
+        //         match result {
+        //             Ok(_) => {
+        //                 muted_players.entry(eaid).or_insert(MutedPlayerInfo {
+        //                     infractions: 0,
+        //                     mute_type: player.type_.try_into().unwrap(),
+        //                     reason: player.reason.clone()
+        //                 });
 
-                        debug!("Added mute for: {:#?}", eaid);
-                        return true
-                    },
-                    Err(err) => error!("Error trying to remove mute from {}: {}", eaid, err),
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
-        }
+        //                 debug!("Added mute for: {:#?}", eaid);
+        //                 return true
+        //             },
+        //             Err(err) => error!("Error trying to remove mute from {}: {}", eaid, err),
+        //         }
+        //     },
+        //     Err(error) => error!("Failed to connect to database: {}", error),
+        // }
 
-        false
+        // false
     }
 }

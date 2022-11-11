@@ -4,6 +4,7 @@ extern crate battlelog;
 mod discordclient;
 mod rabbitmq;
 
+use battlefox_database::BfoxContext;
 use discordclient::DiscordClient;
 use dotenv::dotenv;
 use log::LevelFilter;
@@ -40,13 +41,17 @@ impl EventHandler for Handler {
 
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     let _ = SimpleLogger::init(LevelFilter::Warn, Config::default());
 
+    let ctx = BfoxContext::new_env();
+
     // Report processing
     //tokio::spawn( async { rabbitmq::initialize_report_consumer().await.unwrap(); });
-    let mut discord_client = DiscordClient::new(None);
+
+    let mut discord_client = DiscordClient::new(None, ctx);
+
     if let Err(why) = discord_client.run().await {
         println!("Error running discord client: {:?}", why);
     }
@@ -65,4 +70,6 @@ async fn main() {
     // if let Err(why) = client.start().await {
     //     println!("Client error: {:?}", why);
     // }
+
+    Ok(())
 }
