@@ -85,12 +85,6 @@ fn get_rcon_coninfo() -> anyhow::Result<RconConnectionInfo> {
     })
 }
 
-fn get_db_coninfo() -> anyhow::Result<String> {
-    let uri = var("DATABASE_URL")
-        .context("Need to specify AdKats db URI via env var, for example DATABASE_URL=\"mysql://username:password@host/database\"")?;
-    Ok(uri)
-}
-
 #[derive(Error, Debug)]
 enum ConfigError {
     #[error("Failed to deserialize config.")]
