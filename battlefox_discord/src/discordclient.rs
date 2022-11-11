@@ -1,7 +1,6 @@
 use anyhow::Error;
 use battlelog::{ingame_metadata, search_user, server_snapshot, models::{IngameMetadataResponse, Player, SearchResult}};
 use chrono::prelude::*;
-use battlefox_database::{establish_connection, get_battlelog_player_by_persona_id};
 use lazy_static::lazy_static;
 use serde_json::{json, Value};
 use serenity::{async_trait, builder::{CreateComponents}, client::{Context, EventHandler}, http::{Http, HttpBuilder}, model::{channel::{Embed}, interactions::{Interaction, message_component::ButtonStyle}, prelude::Ready, webhook::Webhook}};

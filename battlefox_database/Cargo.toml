@@ -3,21 +3,15 @@ name = "battlefox_database"
 version = "0.2.6"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+dotenv = "0.15.0"
+thiserror = "1.0.31"
 serde = { version = "1", features = ["derive"] }
 chrono = "0.4.19"
 
-# DB Orm
-dotenv = "0.15.0"
-
-# SQLx because I hate Diesel. Yes, we use two SQL libs now...
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql", "macros", "time", "offline", "tls" ] }
-
 battlefox_shared = { path = "../battlefox_shared" }
 
-thiserror = "1.0.31"
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "mysql", "macros", "time", "offline", "tls" ] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

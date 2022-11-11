@@ -257,7 +257,7 @@ async fn main() -> anyhow::Result<()> {
     let _weaponforcer = app.has_plugin(WeaponEnforcer::new)?;
     let _loadoutenforcer = app.has_plugin(LoadoutEnforcer::new)?;
     // let _playerreport = app.has_plugin(|c| PlayerReport::new(players.clone(), rabbitmq, c))?;
-    let _playermute = app.has_plugin(|c| PlayerMute::new(players.clone(), c))?;
+    let _playermute = app.has_plugin(|c| PlayerMute::new(db.clone(), players.clone(), c))?;
     let mapman = app.has_plugin(MapManager::new)?;
     let _mapvote = app.has_plugin_arc(|c: MapVoteConfigJson|
         Mapvote::new(mapman, vips, players.clone(), admins.clone(), MapVoteConfig::from_json(c))

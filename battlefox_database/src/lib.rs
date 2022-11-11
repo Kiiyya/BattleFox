@@ -19,6 +19,7 @@ pub mod adkats;
 
 pub type DateTime = OffsetDateTime;
 
+#[derive(Clone, Debug)]
 pub struct BfoxContext {
     pool: MySqlPool,
 }

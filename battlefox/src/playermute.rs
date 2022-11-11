@@ -3,7 +3,9 @@ use std::{collections::{HashMap}, convert::TryInto, ops::Add, sync::{Arc}};
 use ascii::AsciiString;
 use async_trait::async_trait;
 use battlefield_rcon::{bf4::{Bf4Client, CommmoRose, Eaid, Event, Player}, rcon::RconResult};
-use chrono::{Duration, Utc};
+use battlefox_database::BfoxContext;
+use battlefox_database::adkats::mutes::BfoxMutedPlayer;
+use itertools::Itertools;
 use serde::{Serialize, Deserialize};
 use battlefox_shared::mute::MuteType;
 use tokio::sync::Mutex;
@@ -21,6 +23,7 @@ pub struct PlayerMute {
     players: Arc<Players>,
     offenses: Arc<Mutex<HashMap<Eaid, MutedPlayerInfo>>>,
     config: PlayerMuteConfig,
+    db: BfoxContext,
 }
 
 struct MutedPlayerInfo {
@@ -39,15 +42,10 @@ impl Plugin for PlayerMute {
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
             Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total} => {
-                debug!("Player Mute - Level loaded: {} {} {} {}", level_name.Pretty(), game_mode, rounds_played, rounds_total);
-
                 // Update mute list (remove expired mutes and add missing ones)
-                let mut lock = self.offenses.lock().await;
-                self.update_players(&mut lock); // TODO:
+                self.update_players();
             },
             Event::Chat { vis: _, player, msg } => {
-                trace!("{} > {}", player.name, msg);
-
                 if msg.as_str().starts_with('/') { return Ok(()); }
                 if CommmoRose::decode(&msg).is_ok() { return Ok(()); }
 
@@ -77,8 +75,6 @@ impl Plugin for PlayerMute {
                 }
             },
             Event::RoundOver { winning_team } => {
-                debug!("Player Mute - Round Over: {:#?}", winning_team);
-
                 // Remove all that only had round mute
                 self.remove_round_mutes().await;
             },
@@ -90,8 +86,9 @@ impl Plugin for PlayerMute {
 
 
 impl PlayerMute {
-    pub fn new(players: Arc<Players>, config: PlayerMuteConfig) -> Self {
+    pub fn new(db: BfoxContext, players: Arc<Players>, config: PlayerMuteConfig) -> Self {
         Self {
+            db,
             players,
             config,
             offenses: Arc::new(Mutex::new(HashMap::new())),
@@ -177,7 +174,8 @@ impl PlayerMute {
                                     }
                                     match mute_type.as_str().parse::<i64>() {
                                         Ok(n) => {
-                                            mute_player.end_date = Some(Utc::now().naive_utc().add(Duration::days(n)).date());
+                                            todo!("There's some uncommented code here because of the diesel to sqlx migration"); // TODO: !!!
+                                            // mute_player.end_date = Some(Utc::now().naive_utc().add(Duration::days(n)).date());
                                         },
                                         Err(_) => {
                                             let _ = bf4.say("Invalid mute type\n\tr (round)\n\td (days) -> d2 (two days)\n\tp (permanent)", &player).await;
@@ -241,80 +239,55 @@ impl PlayerMute {
         Ok(())
     }
 
-    fn update_players(&self, map: &mut HashMap<Eaid, MutedPlayerInfo>) {
+    async fn update_players(&self) -> anyhow::Result<()> {
         debug!("Updating muted players");
 
-        match establish_connection() {
-            Ok(con) => {
-                let result = get_muted_players(&con);
-                match result {
-                    Ok(muted_players) => {
-                        debug!("Muted players: {:#?}", muted_players);
+        let muted_players = self.db.get_muted_players().await?;
+        debug!("Muted players: {:#?}", muted_players);
 
-                        // Remove people who have gotten unmuted/mute has expired
-                        map.retain(|&key, _| muted_players.iter().any(|p| key.to_string() == p.eaid));
+        let mut map = self.offenses.lock().await;
+        // Remove people who have gotten unmuted/mute has expired
+        map.retain(|&key, _| muted_players.iter().any(|p| key.to_string() == p.eaid));
 
-                        // Add missing muted people
-                        for muted_player in muted_players.iter() {
-                            let eaid = Eaid::new(&AsciiString::from_ascii(muted_player.eaid.clone()).unwrap());
-                            if let Ok(eaid) = eaid {
-                                map.entry(eaid).or_insert(MutedPlayerInfo {
-                                    infractions: 0,
-                                    mute_type: muted_player.type_.try_into().unwrap(),
-                                    reason: muted_player.reason.clone()
-                                });
+        // Add missing muted people
+        for muted_player in muted_players.iter() {
+            let eaid = Eaid::new(&AsciiString::from_ascii(muted_player.eaid.clone()).unwrap());
+            if let Ok(eaid) = eaid {
+                map.entry(eaid).or_insert(MutedPlayerInfo {
+                    infractions: 0,
+                    mute_type: muted_player.type_.try_into().unwrap(),
+                    reason: muted_player.reason.clone()
+                });
 
-                                debug!("Added or updated mute for: {:#?}", eaid);
-                            }
-                        }
-                    }
-                    Err(err) => error!("Error fetching muted players: {}", err),
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
+                debug!("Added or updated mute for: {:#?}", eaid);
+            }
         }
+
+        Ok(())
     }
 
     async fn remove_round_mutes(&self) {
         debug!("Removing round muted players");
 
         let lock = self.offenses.lock().await;
+        let ids = lock.iter()
+            .filter(|(_, mp)| mp.mute_type == MuteType::Round)
+            .map(|(eaid, _)| eaid.to_string())
+            .collect_vec();
+        drop(lock);
 
-        match establish_connection() {
-            Ok(con) => {
-                for (key, val) in lock.iter() {
-                    if val.mute_type == MuteType::Round {
-                        let result = delete_muted_player(&con, key.to_string());
-                        match result {
-                            Ok(_) => debug!("Removed mute from: {:#?}", key),
-                            Err(err) => error!("Error trying to remove mute from {}: {}", key, err),
-                        }
-                    }
-                }
-            },
-            Err(error) => error!("Failed to connect to database: {}", error),
-        }
+        self.db.delete_muted_players(&ids);
     }
 
     async fn add_kicked(&self, eaid: &Eaid) {
         debug!("Adding kick for {}", eaid.to_string());
 
-        let eaid = *eaid;
-        tokio::task::spawn_blocking(move || {
-            match establish_connection() {
-                Ok(con) => {
-                    if let Ok(mut player) = get_muted_player(&con, &eaid.to_string()) {
-                        player.kicks = Some(player.kicks.unwrap_or(0) + 1);
-
-                        match replace_into_muted_player(&con, &player) {
-                            Ok(_) => debug!("Added kick for {}", eaid.to_string()),
-                            Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
-                        }
-                    }
-                },
-                Err(error) => error!("Failed to connect to database: {}", error),
-            }
-        });
+        let mut player = self.db.get_muted_player(eaid.to_string()).await?;
+        player.kicks = Some(player.kicks.unwrap_or(0) + 1);
+        match replace_into_muted_player(&con, &player) {
+            Ok(_) => debug!("Added kick for {}", eaid.to_string()),
+            Err(_) => debug!("Failed to add kick for {}", eaid.to_string()),
+        }
     }
 
     fn try_get_muted_player(&self, eaid: &str) -> Option<BfoxMutedPlayer> {
