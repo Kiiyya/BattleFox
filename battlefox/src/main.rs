@@ -6,7 +6,6 @@
 #[macro_use] extern crate multimap;
 extern crate battlelog;
 
-use anyhow::Context;
 use ascii::{IntoAsciiString};
 use async_trait::async_trait;
 use battlefield_rcon::bf4::Event;
@@ -184,12 +183,12 @@ impl App {
     }
 
     fn has_plugin<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> P) -> Result<Arc<P>, ConfigError> {
-        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
+        let config: C = load_config(format!("configs/{}.yaml", P::NAME))?;
         self.has_plugin_noconfig(f(config))
     }
 
     fn has_plugin_arc<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> Arc<P>) -> Result<Arc<P>, ConfigError> {
-        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
+        let config: C = load_config(format!("configs/{}.yaml", P::NAME))?;
         let p = f(config);
         let exists = self.plugins.insert(P::NAME.to_string(), p.clone());
         if exists.is_some() {
