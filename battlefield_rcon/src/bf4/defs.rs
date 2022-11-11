@@ -235,6 +235,14 @@ pub enum Event {
     RoundOver {
         winning_team: Team,
     },
+    RoundOverTeamScores {
+        number_of_entries: i32,
+        scores: Vec<i32>,
+        target_score: i32,
+    },
+    RoundOverPlayers {
+        players: Vec<PlayerInfo>
+    },
     Join {
         player: Player,
     },

@@ -9,6 +9,7 @@ use error::Bf4Error;
 use futures_core::Stream;
 use player_info_block::{parse_pib, PlayerInfo};
 use server_info::{parse_serverinfo, ServerInfo};
+use team_scores::{parse_team_scores};
 use tokio::{
     net::ToSocketAddrs,
     sync::{broadcast, mpsc, oneshot},
@@ -22,6 +23,7 @@ pub mod map_list;
 pub(crate) mod player_cache;
 pub mod player_info_block;
 pub mod server_info;
+pub mod team_scores;
 mod util;
 pub mod ban_list;
 
@@ -348,6 +350,28 @@ impl Bf4Client {
                 }
                 Ok(Event::RoundOver {
                     winning_team: Team::rcon_decode(&packet.words[1])?,
+                })
+            }
+            "server.onRoundOverTeamScores" => {
+                if packet.words.len() < 5 {
+                    return Err(Bf4Error::Rcon(RconError::malformed_packet(
+                        packet.words.clone(),
+                        format!("{} packet must have at least {} words", &packet.words[0], 5),
+                    )));
+                }
+
+                let team_scores = parse_team_scores(&packet.words)?;
+
+                Ok(Event::RoundOverTeamScores { 
+                    number_of_entries: team_scores.number_of_entries,
+                    scores: team_scores.scores,
+                    target_score: team_scores.target_score,
+                })
+            }
+            "server.onRoundOverPlayers" => {
+                let pib = parse_pib(&packet.words[1..])?;
+                Ok(Event::RoundOverPlayers { 
+                    players: pib,
                 })
             }
             "punkBuster.onMessage" => {
