@@ -204,6 +204,18 @@ impl MapPool {
                 .collect(),
         }
     }
+
+    /// Returns a new map pool which contains the same items, except with any with `map` removed.
+    pub fn without_many_vec(&self, maps: &Vec<Map>) -> Self {
+        Self {
+            pool: self
+                .pool
+                .iter()
+                .filter(|&mip| !maps.contains(&mip.map))
+                .cloned()
+                .collect(),
+        }
+    }
 }
 
 #[cfg(test)]

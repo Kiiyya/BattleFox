@@ -217,9 +217,9 @@ impl Inner {
         }
     }
 
-    fn set_up_new_vote(&mut self, n_options: usize, without: Option<Map>) {
+    fn set_up_new_vote(&mut self, n_options: usize, without: Option<Vec<Map>>) {
         let pool = if let Some(without) = without {
-            self.popstate.pool.without(without)
+            self.popstate.pool.without_many_vec(&without)
         } else {
             self.popstate.pool.clone()
         };
@@ -761,22 +761,31 @@ impl Mapvote {
                                     if inner.popstate.pool.contains_map(map) {
                                         // make sure this VIP hasn't exceeded their nomination limit this round.
                                         if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
-                                            // phew, that was a lot of ifs...
-                                            info!("Player {} has nominated {} (vehicles: {:?})", player.name, map.Pretty(), vehicles);
-                                            inner.vip_nom(&player, map, vehicles);
-                                            info!("The new alternatives are {:?}.", inner.alternatives);
+                                            // Check if the nominated map has recently been played
+                                            if !self.mapman.is_recently_played(&map) {
+                                                // phew, that was a lot of ifs...
+                                                info!("Player {} has nominated {} (vehicles: {:?})", player.name, map.Pretty(), vehicles);
+                                                inner.vip_nom(&player, map, vehicles);
+                                                info!("The new alternatives are {:?}.", inner.alternatives);
 
-                                            let announce = self.config.announce_nominator.unwrap_or(true);
-                                            if announce {
-                                                futures.push(bf4.say_lines(vec![
-                                                    format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
-                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
-                                                ], Visibility::All));
+                                                let announce = self.config.announce_nominator.unwrap_or(true);
+                                                if announce {
+                                                    futures.push(bf4.say_lines(vec![
+                                                        format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
+                                                        format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                    ], Visibility::All));
+                                                }
+                                                else {
+                                                    futures.push(bf4.say_lines(vec![
+                                                        format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                    ], Visibility::All));
+                                                }
                                             }
                                             else {
                                                 futures.push(bf4.say_lines(vec![
-                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
-                                                ], Visibility::All));
+                                                    format!("Apologies, {}, that map was just recently played.", &*player),
+                                                    "Try nominating some other map".to_string(),
+                                                ], player.get().into()));
                                             }
                                         } else {
                                             futures.push(bf4.say_lines(vec![
@@ -999,7 +1008,7 @@ impl Mapvote {
     }
 
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
-        let current_map = self.mapman.current_map(bf4).await;
+        let recent_maps = self.mapman.recent_maps();
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
@@ -1019,7 +1028,7 @@ impl Mapvote {
                 // get each player's votes, so we can simulate how the votes go later.
                 let assignment = inner.to_assignment();
 
-                inner.set_up_new_vote(self.config.n_options, current_map);
+                inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
                 Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None
