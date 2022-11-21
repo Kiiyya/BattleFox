@@ -23,6 +23,7 @@ use futures::{future::join_all, StreamExt};
 use itertools::Itertools;
 use matching::AltMatcher;
 use multimap::MultiMap;
+use num_bigint::BigInt;
 use rand::{RngCore, thread_rng};
 use std::cell::Cell;
 use std::fmt::Write;
@@ -43,7 +44,7 @@ use tokio::{
     time::{sleep, Interval},
 };
 
-use num_rational::BigRational as Rat;
+use num_rational::{BigRational as Rat, Ratio};
 use num_traits::{One, ToPrimitive};
 
 pub mod config;
@@ -621,7 +622,7 @@ impl Mapvote {
             prefs.retain(|MapInPool { map, mode, vehicles}| inner.alternatives.contains_map(*map));
 
             let weight = match player.clone().cases() {
-                Left(yesvip) => Rat::one() + Rat::one(), // 2
+                Left(yesvip) => self.vip_vote_weight(),
                 Right(novip) => Rat::one(),
             };
 
@@ -1077,6 +1078,17 @@ impl Mapvote {
                 let _ = bf4.say("Round over, no winner", Visibility::All).await;
             }
         }
+    }
+
+    /// Returns the configured (or default 2) VIP vote weight
+    /// - Can't be less than 1
+    fn vip_vote_weight(&self) -> Ratio<BigInt> {
+        let mut weight = Rat::one();
+        let config_weight = self.config.vip_vote_weight.unwrap_or(2);
+        for n in 1..config_weight {
+            weight += Rat::one();
+        }
+        weight
     }
 }
 
