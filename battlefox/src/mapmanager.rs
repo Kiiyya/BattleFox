@@ -35,6 +35,8 @@ pub struct PopState {
     pub pool: MapPool,
     /// At `min_players` or more players, activate this pool. Unless a pool with even higher `min_players` exists.
     pub min_players: usize,
+    /// The amount of map history to be excluded when generating a new vote
+    pub excluded_maps_count: Option<usize>,
 }
 
 impl PopState {
@@ -128,6 +130,9 @@ impl Plugin for MapManager {
             // Err(MapListError::Rcon(r)) => return Err(r),
             Err(mle) => error!("While starting up MapManager: {:?}. MapManager is *not* starting now!", mle),
         }
+
+        // Populate the current map in the history
+        let _ = self.current_map(&bf4).await;
     }
 
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
@@ -392,6 +397,34 @@ impl MapManager {
         } else {
             Some(hist[0])
         }
+    }
+
+    pub fn recent_maps(&self) -> Vec<Map> {
+        let hist = {
+            let inner = self.inner.lock().unwrap();
+            inner.map_history.clone()
+        };
+
+        let popstate = {
+            let lock = self.inner.lock().unwrap();
+            lock.pop_state.clone()
+        };
+
+        hist.iter()
+            .take(popstate.excluded_maps_count.unwrap_or(1))
+            .cloned()
+            .collect()
+    }
+
+    pub fn is_recently_played(&self, map: &Map) -> bool {
+        let recent_maps = self.recent_maps();
+        
+        for m in recent_maps.iter() {
+            if map.eq(&m) {
+                return true;
+            }
+        };
+        false
     }
 }
 

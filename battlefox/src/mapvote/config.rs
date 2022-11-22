@@ -22,6 +22,7 @@ pub struct MapVoteConfig {
     pub vip_ad: String,
 
     pub announce_nominator: Option<bool>,
+    pub vip_vote_weight: Option<usize>,
 
     pub animate: bool,
     pub animate_override: HashMap<AsciiString, bool>,
@@ -50,6 +51,7 @@ pub struct MapVoteConfigJson {
     pub vip_nom: String,
 
     pub announce_nominator: Option<bool>,
+    pub vip_vote_weight: Option<usize>,
 
     pub animate: bool,
     pub animate_override: HashMap<String, bool>,
@@ -72,6 +74,7 @@ impl MapVoteConfig {
             vip_nom: other.vip_ad,
             vip_ad: other.vip_nom,
             announce_nominator: other.announce_nominator,
+            vip_vote_weight: other.vip_vote_weight,
             animate: other.animate,
             animate_override: other.animate_override.iter().map(|(k, v)| (k.clone().into_ascii_string().unwrap(), *v)).collect(),
             options_minlen: other.options_minlen,
