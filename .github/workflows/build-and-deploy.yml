@@ -189,8 +189,8 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: ./battlefox
-          # platforms: linux/amd64
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          # platforms: linux/amd64,linux/arm64
           file: ./battlefox/Dockerfile.cross-platform
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/battlefox:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox:latest
@@ -202,8 +202,8 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: ./battlefox_discord
-          # platforms: linux/amd64
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          # platforms: linux/amd64,linux/arm64
           file: ./battlefox_discord/Dockerfile.cross-platform
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/battlefox_discord:${{ env.COMMIT_TAG }},${{ secrets.DOCKER_USERNAME }}/battlefox_discord:latest
