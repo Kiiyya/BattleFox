@@ -39,7 +39,7 @@ pub fn parse_map_list(words: &[AsciiString]) -> RconResult<Vec<MapListEntry>> {
             words.len() - offset
         )));
     }
-    let mut ret = Vec::with_capacity(n_maps as usize);
+    let mut ret = Vec::with_capacity(n_maps);
 
     for _ in 0..n_maps {
         ret.push(MapListEntry {

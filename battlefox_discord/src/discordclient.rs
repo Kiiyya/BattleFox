@@ -1,7 +1,7 @@
 use anyhow::Error;
+use battlefox_database::BfoxContext;
 use battlelog::{ingame_metadata, search_user, server_snapshot, models::{IngameMetadataResponse, Player, SearchResult}};
 use chrono::prelude::*;
-use battlefox_database::{establish_connection, get_battlelog_player_by_persona_id};
 use lazy_static::lazy_static;
 use serde_json::{json, Value};
 use serenity::{async_trait, builder::{CreateComponents}, client::{Context, EventHandler}, http::{Http, HttpBuilder}, model::{channel::{Embed}, interactions::{Interaction, message_component::ButtonStyle}, prelude::Ready, webhook::Webhook}};
@@ -34,6 +34,7 @@ lazy_static! {
 
 pub struct DiscordClient {
     http: Option<Http>,
+    ctx: BfoxContext,
 }
 
 struct Handler;
@@ -50,8 +51,8 @@ impl EventHandler for Handler {
 }
 
 impl DiscordClient {
-    pub fn new(http: Option<Http>) -> Self {
-        Self { http }
+    pub fn new(http: Option<Http>, ctx: BfoxContext) -> Self {
+        Self { http, ctx }
     }
 
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
@@ -60,7 +61,7 @@ impl DiscordClient {
             .await
             .expect("Error creating Http");
 
-        *self = Self::new(Some(http));
+        self.http = Some(http);
 
         // TODO: When there's support for button and select menu interactions, test if kill, kick, ban, mute would be possible from the report
         // // Build our client.
@@ -80,7 +81,7 @@ impl DiscordClient {
         Ok(())
     }
 
-    pub async fn post_report(&self, report: ReportModel) {
+    pub async fn post_report(&self, report: ReportModel) -> anyhow::Result<()> {
         println!("{:#?}", report);
 
         let reporter = report.reporter.clone();
@@ -102,13 +103,14 @@ impl DiscordClient {
 
         let http = match &self.http {
             Some(http) => http,
-            _ => return,
+            _ => return Ok(()),
         };
 
         self.post_admin_report(http, &report, &issuer, &target, &stats, &ingame_metadata)
-            .await;
+            .await?;
         self.post_public_report(http, &report, &issuer, &target, &stats, &ingame_metadata)
-            .await;
+            .await?;
+        Ok(())
     }
 
     async fn ensure_webhook(
@@ -146,12 +148,12 @@ impl DiscordClient {
         target: &Result<SearchResult, Error>,
         stats: &Option<Player>,
         ingame_metadata: &Option<IngameMetadataResponse>
-    ) {
+    ) -> anyhow::Result<()> {
         let webhook = self
             .ensure_webhook(http, *ADMIN_REPORTS_CHANNEL_ID, "battlefox_admin_reports")
             .await;
 
-        let value = self.build_report_message(true, report, issuer, target, stats, ingame_metadata);
+        let value = self.build_report_message(true, report, issuer, target, stats, ingame_metadata).await?;
         let map = value.as_object().unwrap();
 
         // Execute webhook
@@ -159,9 +161,10 @@ impl DiscordClient {
             println!("{:#?}", webhook.url());
             let _message = http
                 .execute_webhook(webhook.id.0, &webhook.token.unwrap(), true, map)
-                .await
-                .unwrap();
+                .await?;
         }
+
+        Ok(())
     }
 
     async fn post_public_report(
@@ -172,16 +175,16 @@ impl DiscordClient {
         target: &Result<SearchResult, Error>,
         stats: &Option<Player>,
         ingame_metadata: &Option<IngameMetadataResponse>
-    ) {
+    ) -> anyhow::Result<()> {
         if PUBLIC_REPORTS_CHANNEL_ID.eq(&0) {
-            return;
+            return Ok(());
         }
 
         let webhook = self
             .ensure_webhook(http, *PUBLIC_REPORTS_CHANNEL_ID, "battlefox_public_reports")
             .await;
 
-        let value = self.build_report_message(false, report, issuer, target, stats, ingame_metadata);
+        let value = self.build_report_message(false, report, issuer, target, stats, ingame_metadata).await?;
         let map = value.as_object().unwrap();
 
         // Execute webhook
@@ -192,17 +195,19 @@ impl DiscordClient {
                 .await
                 .unwrap();
         }
+
+        Ok(())
     }
 
-    fn build_report_message(
+    async fn build_report_message(
         &self,
         is_admin: bool,
         report: &ReportModel,
         issuer: &Result<SearchResult, Error>,
         target: &Result<SearchResult, Error>,
         stats: &Option<Player>,
-        ingame_metadata: &Option<IngameMetadataResponse>
-    ) -> Value {
+        ingame_metadata: &Option<IngameMetadataResponse>,
+    ) -> anyhow::Result<Value> {
         let reporter = &report.reporter;
         let reported = &report.reported;
         let reason = &report.reason;
@@ -292,31 +297,22 @@ impl DiscordClient {
                 // Admin links
                 if is_admin {
                     if let Some(link) = bfacp_url {
-                        match establish_connection() {
-                            Ok(connection) => {
-                                let adkats_player = get_battlelog_player_by_persona_id(
-                                    &connection,
-                                    &(user.persona_id),
-                                );
+                        let adkats_player = self.ctx.get_battlelog_player_by_persona_id(
+                            user.persona_id,
+                        ).await?;
 
-                                match adkats_player {
-                                    Ok(player) => {
-                                        components.create_action_row(|r| {
-                                            r.create_button(|b| {
-                                                b.label("BFACP")
-                                                    .url(format!(
-                                                        "{0}/players/{1}/{2}",
-                                                        link, player.player_id, user.persona_name
-                                                    ))
-                                                    .style(ButtonStyle::Link)
-                                            });
-                                            r
-                                        });
-                                    }
-                                    Err(err) => println!("Error fetching adkats_player: {}", err),
-                                }
-                            },
-                            Err(error) => error!("Failed to connect to database: {}", error),
+                        if let Some(player) = adkats_player {
+                            components.create_action_row(|r| {
+                                r.create_button(|b| {
+                                    b.label("BFACP")
+                                        .url(format!(
+                                            "{0}/players/{1}/{2}",
+                                            link, player.player_id, user.persona_name
+                                        ))
+                                        .style(ButtonStyle::Link)
+                                });
+                                r
+                            });
                         }
                     }
                 }
@@ -341,7 +337,7 @@ impl DiscordClient {
             },
         };
 
-        json!({
+        let ret = json!({
             "username": reporter,
             "avatar_url": match issuer {
                 Ok(user) => user.user.gravatar_md5.clone().map_or(
@@ -355,7 +351,8 @@ impl DiscordClient {
                 embed
             ],
             "components": components.0
-        })
+        });
+        Ok(ret)
     }
 }
 

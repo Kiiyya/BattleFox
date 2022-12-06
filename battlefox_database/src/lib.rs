@@ -1,81 +1,74 @@
-#[macro_use]
-extern crate diesel;
-extern crate dotenv;
+//! DB connector library with handy bfox-specific data models and queries.
+//!
+//! This is not a *backend*, it is merely a library which you can use in your app to connect
+//! to a MySQL or MariaDB SQL server with a fitting schema.
+//!
+//! We expose the `BfoxContext` struct, which takes a concrete database connection.
+//! This DB connection can be something you provide yourself, for example if you have an existing
+//! connection pool, or it can be a new database connection created with `establish_connection`.
+//!
+//! Different queries for different topics (e.g. banning players, teamkilling, etc..)
+//! are implemented in on-topic rust modules, so that this file doens't get too huge.
 
-use chrono::Utc;
-use battlefox_shared::mute::MuteType;
-pub mod models;
-pub mod schema;
-pub mod better;
+use std::env;
 
-use diesel::{delete, prelude::*, replace_into};
-use dotenv::dotenv;
-use models::BfoxMutedPlayer;
+use sqlx::MySqlPool;
+use sqlx::types::time::OffsetDateTime;
 
-use std::{env, error::Error};
+pub mod adkats;
 
-use self::models::{AdkatsBattlelogPlayer};
+pub type DateTime = OffsetDateTime;
 
-pub fn establish_connection() -> Result<diesel::MysqlConnection, ConnectionError> {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    MysqlConnection::establish(&database_url)
-        //.unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+#[derive(Clone, Debug)]
+pub struct BfoxContext {
+    pool: MySqlPool,
 }
 
-pub fn get_battlelog_player_by_persona_id(conn: &MysqlConnection, persona: &u64) -> Result<AdkatsBattlelogPlayer, diesel::result::Error> {
-    use schema::adkats_battlelog_players::dsl::{persona_id, adkats_battlelog_players};
+impl BfoxContext {
+    pub fn new_from_pool(pool: MySqlPool) -> Self {
+        Self { pool }
+    }
 
-    adkats_battlelog_players
-        .filter(persona_id.eq(persona))
-        // .select(player_id)
-        .first(conn)
+    pub async fn connect(url: impl AsRef<str>) -> Result<Self, sqlx::Error> {
+        let pool = MySqlPool::connect(url.as_ref()).await?; // TODO: unwrap
+        Ok(Self { pool })
+    }
+
+    /// Create a new `BfoxContext` using a connection string form the `DATABASE_URL` environment
+    /// variable, with something like `mysql://username:password@host/database`.
+    /// You may need to initialize `dotenv` yourself if you haven't done so yet.
+    ///
+    /// A connection will only be made when necessary.
+    pub fn new_env() -> Self {
+        let url = env::var("DATABASE_URL").unwrap(); // TODO: unwrap
+        // lazy: will only connect when needed.
+        let pool = MySqlPool::connect_lazy(&url).unwrap(); // TODO: unwrap
+        Self {
+            pool
+        }
+    }
 }
 
-pub fn get_muted_players(conn: &MysqlConnection) -> Result<Vec<BfoxMutedPlayer>, diesel::result::Error> {
-    use schema::bfox_muted_players::dsl::{type_, end_date, bfox_muted_players};
+#[cfg(test)]
+mod test {
+    use anyhow::Context;
 
-    bfox_muted_players
-        .filter(type_.eq(MuteType::Days as i32).and(end_date.gt(Some(Utc::now().naive_utc().date()))))
-        .or_filter(type_.ne(MuteType::Days as i32))
-        .filter(type_.ne(MuteType::Disabled as i32))
-        .load(conn)
-}
+    use super::BfoxContext;
 
-pub fn get_muted_player(conn: &MysqlConnection, id: &str) -> Result<BfoxMutedPlayer, diesel::result::Error> {
-    use schema::bfox_muted_players::dsl::{eaid, bfox_muted_players};
+    fn get_db_coninfo() -> anyhow::Result<String> {
+        dotenv::dotenv()?;
+        let uri = std::env::var("DATABASE_URL")
+            .context("Need to specify AdKats db URI via env var, for example DATABASE_URL=\"mysql://username:password@host/database\"")?;
+        Ok(uri)
+    }
 
-    bfox_muted_players
-        .filter(eaid.eq(id))
-        .first(conn)
-}
-
-pub fn replace_into_muted_player(conn: &MysqlConnection, player: &BfoxMutedPlayer) -> Result<(), Box<dyn Error>> {
-    use schema::bfox_muted_players::dsl::*;
-
-    // let primary_key = player.eaid.clone();
-    // let exists = bfox_muted_players
-    //     .filter(eaid.eq(primary_key))
-    //     .count()
-    //     .first::<i64>(conn)
-    //     .unwrap();
-
-    // println!("Count: {}", exists);
-
-    replace_into(bfox_muted_players)
-        .values(player)
-        .execute(conn)?;
-
-    Ok(())
-}
-
-pub fn delete_muted_player(conn: &MysqlConnection, id: String) -> Result<(), Box<dyn Error>> {
-    use schema::bfox_muted_players::dsl::*;
-
-    delete(bfox_muted_players)
-        .filter(eaid.eq(id))
-        .execute(conn)?;
-
-    Ok(())
+    #[ignore]
+    #[tokio::test]
+    async fn test() -> anyhow::Result<()> {
+        let uri = get_db_coninfo()?;
+        let db = BfoxContext::connect(uri).await?;
+        let ban = db.get_ban("EA_insert your GUID here").await?;
+        println!("{ban:#?}");
+        panic!()
+    }
 }

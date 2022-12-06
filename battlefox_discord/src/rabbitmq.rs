@@ -44,7 +44,7 @@ pub(crate) async fn initialize_report_consumer(client: DiscordClient) -> Result<
             let client_clone = client.clone();
             tokio::spawn(async move {
                 // Post report to Discord
-                client_clone.post_report(report).await;
+                client_clone.post_report(report).await.unwrap();
 
                 delivery
                     .ack(BasicAckOptions::default()).await

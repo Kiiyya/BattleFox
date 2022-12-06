@@ -6,13 +6,12 @@
 #[macro_use] extern crate multimap;
 extern crate battlelog;
 
-use anyhow::Context;
 use ascii::{IntoAsciiString};
 use async_trait::async_trait;
 use battlefield_rcon::bf4::Event;
 use battlefield_rcon::bf4::error::Bf4Error;
 use battlefield_rcon::rcon::RconResult;
-use battlefox_database::better::BfoxDb;
+use battlefox_database::BfoxContext;
 use dotenv::dotenv;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -83,12 +82,6 @@ fn get_rcon_coninfo() -> anyhow::Result<RconConnectionInfo> {
         port,
         password: password.into_ascii_string()?,
     })
-}
-
-fn get_db_coninfo() -> anyhow::Result<String> {
-    let uri = var("DATABASE_URL")
-        .context("Need to specify AdKats db URI via env var, for example DATABASE_URL=\"mysql://username:password@host/database\"")?;
-    Ok(uri)
 }
 
 #[derive(Error, Debug)]
@@ -190,12 +183,12 @@ impl App {
     }
 
     fn has_plugin<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> P) -> Result<Arc<P>, ConfigError> {
-        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
+        let config: C = load_config(format!("configs/{}.yaml", P::NAME))?;
         self.has_plugin_noconfig(f(config))
     }
 
     fn has_plugin_arc<P: Plugin, C: DeserializeOwned>(&mut self, f: impl FnOnce(C) -> Arc<P>) -> Result<Arc<P>, ConfigError> {
-        let config: C = load_config(&format!("configs/{}.yaml", P::NAME))?;
+        let config: C = load_config(format!("configs/{}.yaml", P::NAME))?;
         let p = f(config);
         let exists = self.plugins.insert(P::NAME.to_string(), p.clone());
         if exists.is_some() {
@@ -245,9 +238,9 @@ async fn main() -> anyhow::Result<()> {
     let _ = UPTIME.elapsed(); // get it, so that it initializes with `Instant::now()`.
 
     let rconinfo = get_rcon_coninfo()?;
-    let adkatsinfo = get_db_coninfo()?;
 
-    let db = BfoxDb::new(&adkatsinfo).await?;
+    // TODO: Disable DB potentially.
+    let db = BfoxContext::new_env();
 
     // Initialize plugins and their dependencies.
     let mut app = App::new();
@@ -257,7 +250,7 @@ async fn main() -> anyhow::Result<()> {
     let _weaponforcer = app.has_plugin(WeaponEnforcer::new)?;
     let _loadoutenforcer = app.has_plugin(LoadoutEnforcer::new)?;
     // let _playerreport = app.has_plugin(|c| PlayerReport::new(players.clone(), rabbitmq, c))?;
-    let _playermute = app.has_plugin(|c| PlayerMute::new(players.clone(), c))?;
+    let _playermute = app.has_plugin(|c| PlayerMute::new(db.clone(), players.clone(), c))?;
     let mapman = app.has_plugin(MapManager::new)?;
     let _mapvote = app.has_plugin_arc(|c: MapVoteConfigJson|
         Mapvote::new(mapman, vips, players.clone(), admins.clone(), MapVoteConfig::from_json(c))
