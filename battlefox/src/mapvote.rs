@@ -23,6 +23,7 @@ use futures::{future::join_all, StreamExt};
 use itertools::Itertools;
 use matching::AltMatcher;
 use multimap::MultiMap;
+use num_bigint::BigInt;
 use rand::{RngCore, thread_rng};
 use std::cell::Cell;
 use std::fmt::Write;
@@ -43,7 +44,7 @@ use tokio::{
     time::{sleep, Interval},
 };
 
-use num_rational::BigRational as Rat;
+use num_rational::{BigRational as Rat, Ratio};
 use num_traits::{One, ToPrimitive};
 
 pub mod config;
@@ -216,9 +217,9 @@ impl Inner {
         }
     }
 
-    fn set_up_new_vote(&mut self, n_options: usize, without: Option<Map>) {
+    fn set_up_new_vote(&mut self, n_options: usize, without: Option<Vec<Map>>) {
         let pool = if let Some(without) = without {
-            self.popstate.pool.without(without)
+            self.popstate.pool.without_many_vec(&without)
         } else {
             self.popstate.pool.clone()
         };
@@ -322,11 +323,13 @@ impl Plugin for Mapvote {
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
             Event::Chat { vis, player, msg } => {
-                if msg.as_str().starts_with("/bfox endvote") && self.admins.is_admin(&player.name) {
-                    self.handle_round_over(&bf4).await;
-                } else {
-                    let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
-                }
+                let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
+            }
+            Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total } => {
+                tokio::spawn(async move {
+                    tokio::time::sleep(self.config.vote_start_interval).await;
+                    self.start_new_vote().await;
+                });
             }
             Event::RoundOver { .. } => {
                 self.handle_round_over(&bf4).await;
@@ -621,7 +624,7 @@ impl Mapvote {
             prefs.retain(|MapInPool { map, mode, vehicles}| inner.alternatives.contains_map(*map));
 
             let weight = match player.clone().cases() {
-                Left(yesvip) => Rat::one() + Rat::one(), // 2
+                Left(yesvip) => self.vip_vote_weight(),
                 Right(novip) => Rat::one(),
             };
 
@@ -760,22 +763,31 @@ impl Mapvote {
                                     if inner.popstate.pool.contains_map(map) {
                                         // make sure this VIP hasn't exceeded their nomination limit this round.
                                         if inner.vip_n_noms(&player) < self.config.max_noms_per_vip {
-                                            // phew, that was a lot of ifs...
-                                            info!("Player {} has nominated {} (vehicles: {:?})", player.name, map.Pretty(), vehicles);
-                                            inner.vip_nom(&player, map, vehicles);
-                                            info!("The new alternatives are {:?}.", inner.alternatives);
+                                            // Check if the nominated map has recently been played
+                                            if !self.mapman.is_recently_played(&map) {
+                                                // phew, that was a lot of ifs...
+                                                info!("Player {} has nominated {} (vehicles: {:?})", player.name, map.Pretty(), vehicles);
+                                                inner.vip_nom(&player, map, vehicles);
+                                                info!("The new alternatives are {:?}.", inner.alternatives);
 
-                                            let announce = self.config.announce_nominator.unwrap_or(true);
-                                            if announce {
-                                                futures.push(bf4.say_lines(vec![
-                                                    format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
-                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
-                                                ], Visibility::All));
+                                                let announce = self.config.announce_nominator.unwrap_or(true);
+                                                if announce {
+                                                    futures.push(bf4.say_lines(vec![
+                                                        format!("Our beloved VIP {} has nominated {}!", &*player, map.Pretty()),
+                                                        format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                    ], Visibility::All));
+                                                }
+                                                else {
+                                                    futures.push(bf4.say_lines(vec![
+                                                        format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
+                                                    ], Visibility::All));
+                                                }
                                             }
                                             else {
                                                 futures.push(bf4.say_lines(vec![
-                                                    format!("{} has been added to the options, everyone can vote on it now <3", map.Pretty()),
-                                                ], Visibility::All));
+                                                    format!("Apologies, {}, that map was just recently played.", &*player),
+                                                    "Try nominating some other map".to_string(),
+                                                ], player.get().into()));
                                             }
                                         } else {
                                             futures.push(bf4.say_lines(vec![
@@ -899,6 +911,14 @@ impl Mapvote {
                                 let _ = bf4.say("You are not admin (according to bfox config).", player).await;
                             }
                         },
+                        "startvote" => {
+                            if self.admins.is_admin(&player.name) {
+                                let _ = bf4.say("Starting new vote.", player).await;
+                                self.start_new_vote().await;
+                            } else {
+                                let _ = bf4.say("You are not admin (according to bfox config).", player).await;
+                            }
+                        },
                         _ => (),
                     }
                 }
@@ -997,8 +1017,18 @@ impl Mapvote {
         Ok(())
     }
 
+    async fn start_new_vote(&self) {
+        let recent_maps = self.mapman.recent_maps();
+
+        let mut lock = self.inner.lock().await;
+        if let Some(inner) = &mut *lock {
+            info!("Starting a new vote: {:#?}", &inner.votes);
+            inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
+        }
+    }
+
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
-        let current_map = self.mapman.current_map(bf4).await;
+        let recent_maps = self.mapman.recent_maps();
         self.broadcast_status(bf4).await; // send everyone the voting options.
         // let's wait like 10 seconds because people might still vote in the end screen.
         let _ = bf4.say(format!("Mapvote is still going for {}s! Hurry!", self.config.endscreen_votetime.as_secs()), Visibility::All).await;
@@ -1018,7 +1048,7 @@ impl Mapvote {
                 // get each player's votes, so we can simulate how the votes go later.
                 let assignment = inner.to_assignment();
 
-                inner.set_up_new_vote(self.config.n_options, current_map);
+                // inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
                 Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None
@@ -1077,6 +1107,17 @@ impl Mapvote {
                 let _ = bf4.say("Round over, no winner", Visibility::All).await;
             }
         }
+    }
+
+    /// Returns the configured (or default 2) VIP vote weight
+    /// - Can't be less than 1
+    fn vip_vote_weight(&self) -> Ratio<BigInt> {
+        let mut weight = Rat::one();
+        let config_weight = self.config.vip_vote_weight.unwrap_or(2);
+        for n in 1..config_weight {
+            weight += Rat::one();
+        }
+        weight
     }
 }
 

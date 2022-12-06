@@ -13,6 +13,8 @@ pub struct MapVoteConfig {
 
     pub max_noms_per_vip: usize,
 
+    pub vote_start_interval: Duration,
+
     pub spammer_interval: Duration,
 
     pub endscreen_votetime: Duration,
@@ -22,6 +24,7 @@ pub struct MapVoteConfig {
     pub vip_ad: String,
 
     pub announce_nominator: Option<bool>,
+    pub vip_vote_weight: Option<usize>,
 
     pub animate: bool,
     pub animate_override: HashMap<AsciiString, bool>,
@@ -41,6 +44,8 @@ pub struct MapVoteConfigJson {
 
     pub max_noms_per_vip: usize,
 
+    pub vote_start_interval: u64,
+
     pub spammer_interval: u64,
 
     pub endscreen_votetime: u64,
@@ -50,6 +55,7 @@ pub struct MapVoteConfigJson {
     pub vip_nom: String,
 
     pub announce_nominator: Option<bool>,
+    pub vip_vote_weight: Option<usize>,
 
     pub animate: bool,
     pub animate_override: HashMap<String, bool>,
@@ -66,12 +72,14 @@ impl MapVoteConfig {
             n_options: other.n_options,
             max_options: other.max_options,
             max_noms_per_vip: other.max_noms_per_vip,
+            vote_start_interval: Duration::from_secs(other.vote_start_interval),
             spammer_interval: Duration::from_secs(other.spammer_interval),
             endscreen_votetime: Duration::from_secs(other.endscreen_votetime),
             endscreen_post_votetime: Duration::from_secs(other.endscreen_post_votetime),
             vip_nom: other.vip_ad,
             vip_ad: other.vip_nom,
             announce_nominator: other.announce_nominator,
+            vip_vote_weight: other.vip_vote_weight,
             animate: other.animate,
             animate_override: other.animate_override.iter().map(|(k, v)| (k.clone().into_ascii_string().unwrap(), *v)).collect(),
             options_minlen: other.options_minlen,

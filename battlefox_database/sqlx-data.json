@@ -128,5 +128,82 @@
       }
     },
     "query": "SELECT PlayerID, ClanTag, SoldierName, EAGUID, ban_notes, ban_status, ban_startTime, ban_endTime, record_message\n            FROM tbl_playerdata AS pd\n            INNER JOIN adkats_bans AS bans ON pd.PlayerId = bans.player_id\n            INNER JOIN adkats_records_main AS records ON records.record_id = bans.latest_record_id\n            WHERE pd.EAGUID = ?;"
+  },
+  "6a10a7bdf64d0bee4d778a5b7fe1c338926a97807f80feffb5d73fb23ba211b5": {
+    "describe": {
+      "columns": [
+        {
+          "name": "player_id",
+          "ordinal": 0,
+          "type_info": {
+            "char_set": 63,
+            "flags": {
+              "bits": 4139
+            },
+            "max_size": 10,
+            "type": "Long"
+          }
+        },
+        {
+          "name": "persona_id",
+          "ordinal": 1,
+          "type_info": {
+            "char_set": 63,
+            "flags": {
+              "bits": 4137
+            },
+            "max_size": 20,
+            "type": "LongLong"
+          }
+        },
+        {
+          "name": "user_id",
+          "ordinal": 2,
+          "type_info": {
+            "char_set": 63,
+            "flags": {
+              "bits": 4137
+            },
+            "max_size": 20,
+            "type": "LongLong"
+          }
+        },
+        {
+          "name": "gravatar",
+          "ordinal": 3,
+          "type_info": {
+            "char_set": 224,
+            "flags": {
+              "bits": 0
+            },
+            "max_size": 128,
+            "type": "VarString"
+          }
+        },
+        {
+          "name": "persona_banned",
+          "ordinal": 4,
+          "type_info": {
+            "char_set": 63,
+            "flags": {
+              "bits": 1
+            },
+            "max_size": 1,
+            "type": "Tiny"
+          }
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "SELECT * from adkats_battlelog_players WHERE persona_id = ?"
   }
 }

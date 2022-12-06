@@ -11,9 +11,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then export ARCHITECTURE=x86_64-un
 
 RUN tar -xf battlefox.tar.gz
 
-FROM debian:bullseye-slim
+FROM frolvlad/alpine-glibc:glibc-2.34
 
-RUN apt-get update && apt-get install -y ca-certificates
+# RUN apt-get update && apt-get install -y ca-certificates
 
 WORKDIR /app
 COPY --from=downloader /home/curl_user/battlefox .
