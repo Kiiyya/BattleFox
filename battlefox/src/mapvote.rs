@@ -323,11 +323,13 @@ impl Plugin for Mapvote {
     async fn event(self: Arc<Self>, bf4: Arc<Bf4Client>, event: Event) -> RconResult<()> {
         match event {
             Event::Chat { vis, player, msg } => {
-                if msg.as_str().starts_with("/bfox endvote") && self.admins.is_admin(&player.name) {
-                    self.handle_round_over(&bf4).await;
-                } else {
-                    let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
-                }
+                let _ = self.handle_chat_msg(bf4, vis, player, msg).await;
+            }
+            Event::LevelLoaded { level_name, game_mode, rounds_played, rounds_total } => {
+                tokio::spawn(async move {
+                    tokio::time::sleep(self.config.vote_start_interval).await;
+                    self.start_new_vote().await;
+                });
             }
             Event::RoundOver { .. } => {
                 self.handle_round_over(&bf4).await;
@@ -909,6 +911,14 @@ impl Mapvote {
                                 let _ = bf4.say("You are not admin (according to bfox config).", player).await;
                             }
                         },
+                        "startvote" => {
+                            if self.admins.is_admin(&player.name) {
+                                let _ = bf4.say("Starting new vote.", player).await;
+                                self.start_new_vote().await;
+                            } else {
+                                let _ = bf4.say("You are not admin (according to bfox config).", player).await;
+                            }
+                        },
                         _ => (),
                     }
                 }
@@ -1007,6 +1017,16 @@ impl Mapvote {
         Ok(())
     }
 
+    async fn start_new_vote(&self) {
+        let recent_maps = self.mapman.recent_maps();
+
+        let mut lock = self.inner.lock().await;
+        if let Some(inner) = &mut *lock {
+            info!("Starting a new vote: {:#?}", &inner.votes);
+            inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
+        }
+    }
+
     async fn handle_round_over(&self, bf4: &Arc<Bf4Client>) {
         let recent_maps = self.mapman.recent_maps();
         self.broadcast_status(bf4).await; // send everyone the voting options.
@@ -1028,7 +1048,7 @@ impl Mapvote {
                 // get each player's votes, so we can simulate how the votes go later.
                 let assignment = inner.to_assignment();
 
-                inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
+                // inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
                 Some((profile, assignment, inner.anim_override_override.clone()))
             } else {
                 None

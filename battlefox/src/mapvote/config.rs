@@ -13,6 +13,8 @@ pub struct MapVoteConfig {
 
     pub max_noms_per_vip: usize,
 
+    pub vote_start_interval: Duration,
+
     pub spammer_interval: Duration,
 
     pub endscreen_votetime: Duration,
@@ -42,6 +44,8 @@ pub struct MapVoteConfigJson {
 
     pub max_noms_per_vip: usize,
 
+    pub vote_start_interval: u64,
+
     pub spammer_interval: u64,
 
     pub endscreen_votetime: u64,
@@ -68,6 +72,7 @@ impl MapVoteConfig {
             n_options: other.n_options,
             max_options: other.max_options,
             max_noms_per_vip: other.max_noms_per_vip,
+            vote_start_interval: Duration::from_secs(other.vote_start_interval),
             spammer_interval: Duration::from_secs(other.spammer_interval),
             endscreen_votetime: Duration::from_secs(other.endscreen_votetime),
             endscreen_post_votetime: Duration::from_secs(other.endscreen_post_votetime),
