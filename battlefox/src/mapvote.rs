@@ -79,6 +79,7 @@ struct Inner {
 
 #[derive(Debug)]
 pub struct Mapvote {
+    /// Is `None` exactly when mapvote is currently disabled.
     inner: Mutex<Option<Inner>>,
     mapman: Arc<MapManager>,
     vips: Arc<Vips>,
@@ -1046,12 +1047,14 @@ impl Mapvote {
             if let Some(inner) = &mut *lock {
                 info!("Voting ended. Votes: {:#?}", &inner.votes);
                 let profile = inner.to_profile();
+                let anim_override_override = inner.anim_override_override.clone();
 
                 // get each player's votes, so we can simulate how the votes go later.
                 let assignment = inner.to_assignment();
 
-                // inner.set_up_new_vote(self.config.n_options, Some(recent_maps));
-                Some((profile, assignment, inner.anim_override_override.clone()))
+                // We set the `inner` to None, which will disable the mapvote until it is re-enabled some time.
+                *lock = None;
+                Some((profile, assignment, anim_override_override))
             } else {
                 None
             }
