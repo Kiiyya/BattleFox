@@ -356,7 +356,7 @@ impl Bf4Client {
                 if packet.words.len() < 3 {
                     return Err(Bf4Error::Rcon(RconError::malformed_packet(
                         packet.words.clone(),
-                        format!("{} packet must have at least {} words", &packet.words[0], 5),
+                        format!("{} packet must have at least {} words", &packet.words[0], 3),
                     )));
                 }
 
