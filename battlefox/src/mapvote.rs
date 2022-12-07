@@ -126,6 +126,7 @@ impl Inner {
             map,
             mode: GameMode::Rush,
             vehicles,
+            nom_only: None,
         });
         self.update_matchers(true);
     }
@@ -608,20 +609,20 @@ impl Mapvote {
         if let Some(inner) = &mut *lock {
             let not_in_popstate = prefs
                 .iter()
-                .filter(|MapInPool { map, mode, vehicles}| !inner.popstate.pool.contains_map(*map))
+                .filter(|MapInPool { map, mode, vehicles, nom_only}| !inner.popstate.pool.contains_map(*map))
                 .cloned()
                 .collect::<Vec<_>>();
             // Remove maps which are forbidden by pop state.
-            prefs.retain(|MapInPool { map, mode, vehicles}| inner.popstate.pool.contains_map(*map));
+            prefs.retain(|MapInPool { map, mode, vehicles, nom_only}| inner.popstate.pool.contains_map(*map));
 
             let not_in_options = prefs
                 .iter()
-                .filter(|MapInPool { map, mode, vehicles}| !inner.alternatives.contains_map(*map))
+                .filter(|MapInPool { map, mode, vehicles, nom_only}| !inner.alternatives.contains_map(*map))
                 .cloned()
                 .collect::<Vec<_>>();
             // the maps are in the popstate, but aren't up to be chosen right now.
             // Nomination possible.
-            prefs.retain(|MapInPool { map, mode, vehicles}| inner.alternatives.contains_map(*map));
+            prefs.retain(|MapInPool { map, mode, vehicles, nom_only}| inner.alternatives.contains_map(*map));
 
             let weight = match player.clone().cases() {
                 Left(yesvip) => self.vip_vote_weight(),
@@ -629,10 +630,11 @@ impl Mapvote {
             };
 
             // now, attempt to deduplicate (Ballot:from_iter(..) does that for us)
-            let alts = prefs.iter().map(|MapInPool { map, mode, vehicles}| MapInPool {
+            let alts = prefs.iter().map(|MapInPool { map, mode, vehicles, nom_only}| MapInPool {
                 map: *map,
                 mode: mode.clone(),
-                vehicles: *vehicles
+                vehicles: *vehicles,
+                nom_only: *nom_only,
             });
             let (ballot, soft_dups) = match Ballot::from_iter(weight, alts) {
                 CheckBallotResult::Ok { ballot, soft_dups } => (ballot, soft_dups),

@@ -9,11 +9,13 @@ use serde::{Deserialize, Serialize};
 /// - map
 /// - game mode (Rush, Conquest, ...)
 /// - vehicles (None -> Adaptive based on vehicle_threshold, False -> No vehicles, True -> Vehicles)
+/// - nom_only (None -> Can be nominated and can randomly show up, False -> Random + nomination, True -> Nomination only)
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MapInPool {
     pub map: Map,
     pub mode: GameMode,
-    pub vehicles: Option<bool>
+    pub vehicles: Option<bool>,
+    pub nom_only: Option<bool>,
 }
 
 impl Display for MapInPool {
@@ -47,13 +49,14 @@ impl From<Vec<MapInPool>> for MapPool {
         }
     }
 }
-impl From<Vec<(Map, GameMode, Option<bool>)>> for MapPool {
-    fn from(pool: Vec<(Map, GameMode, Option<bool>)>) -> Self {
+impl From<Vec<(Map, GameMode, Option<bool>, Option<bool>)>> for MapPool {
+    fn from(pool: Vec<(Map, GameMode, Option<bool>, Option<bool>)>) -> Self {
         Self {
-            pool: pool.iter().map(|(map, mode, vehicles)| MapInPool {
+            pool: pool.iter().map(|(map, mode, vehicles, nom_only)| MapInPool {
                 map: *map,
                 mode: mode.clone(),
-                vehicles: *vehicles
+                vehicles: *vehicles,
+                nom_only: *nom_only,
             }).collect()
         }
     }
@@ -135,6 +138,18 @@ impl MapPool {
         }
     }
 
+    /// Returns a new pool, with only the maps that can be randomly drawn.
+    pub fn random_maps_only(&self) -> Self {
+        Self {
+            pool: self
+                .pool
+                .iter()
+                .filter(|mip| mip.nom_only.is_none() || !mip.nom_only.unwrap())
+                .cloned()
+                .collect(),
+        }
+    }
+
     pub fn to_set(&self) -> HashSet<MapInPool>
     {
         self.pool.iter().cloned().collect()
@@ -172,8 +187,9 @@ impl MapPool {
     /// Selects at most `n_max` maps from the pool at random.
     pub fn choose_random(&self, n_max: usize) -> Self {
         let mut rng = thread_rng();
+        let random_maps_only = self.random_maps_only();
         Self {
-            pool: self
+            pool: random_maps_only
                 .pool
                 .choose_multiple(&mut rng, n_max)
                 .cloned()
@@ -231,6 +247,7 @@ mod tests {
                 map: Map::Metro,
                 mode: GameMode::Rush,
                 vehicles: None,
+                nom_only: None,
             }],
         };
 
@@ -240,11 +257,13 @@ mod tests {
                     map: Map::Metro,
                     mode: GameMode::Rush,
                     vehicles: None,
+                    nom_only: None,
                 },
                 MapInPool {
                     map: Map::Locker,
                     mode: GameMode::Rush,
                     vehicles: None,
+                    nom_only: None,
                 },
             ],
         };
@@ -254,6 +273,7 @@ mod tests {
                 map: Map::Locker,
                 mode: GameMode::Rush,
                 vehicles: None,
+                nom_only: None,
             }],
         };
 
@@ -269,11 +289,13 @@ mod tests {
                     map: Map::Metro,
                     mode: GameMode::Rush,
                     vehicles: None,
+                    nom_only: None,
                 },
                 MapInPool {
                     map: Map::Locker,
                     mode: GameMode::Rush,
                     vehicles: None,
+                    nom_only: None,
                 },
             ],
         };
@@ -283,6 +305,7 @@ mod tests {
                 map: Map::Metro,
                 mode: GameMode::Rush,
                 vehicles: None,
+                nom_only: None,
             }],
         };
 
@@ -291,6 +314,7 @@ mod tests {
                 map: Map::Locker,
                 mode: GameMode::Rush,
                 vehicles: None,
+                nom_only: None,
             }],
         };
 
