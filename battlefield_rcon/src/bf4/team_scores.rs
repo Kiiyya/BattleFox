@@ -34,3 +34,40 @@ pub fn parse_team_scores(words: &[AsciiString]) -> RconResult<TeamScores> {
         target_score: parse_int(&words[offset]).unwrap(),
     })
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ascii::{AsciiString, IntoAsciiString};
+
+    #[test]
+    fn parse_zero_teams() {
+        let mut words: Vec<AsciiString> = Vec::new();
+        words.push("server.onRoundOverTeamScores".into_ascii_string().unwrap());
+        words.push("0".into_ascii_string().unwrap());
+        words.push("0".into_ascii_string().unwrap());
+        let result = parse_team_scores(&words).unwrap();
+
+        assert_eq!(0, result.number_of_entries);
+        assert_eq!(0, result.scores.len());
+        assert_eq!(0, result.target_score);
+    }
+
+    #[test]
+    fn parse_two_teams() {
+        let mut words: Vec<AsciiString> = Vec::new();
+        words.push("server.onRoundOverTeamScores".into_ascii_string().unwrap());
+        words.push("2".into_ascii_string().unwrap());
+        words.push("100".into_ascii_string().unwrap());
+        words.push("110".into_ascii_string().unwrap());
+        words.push("150".into_ascii_string().unwrap());
+        let result = parse_team_scores(&words).unwrap();
+
+        assert_eq!(2, result.number_of_entries);
+        assert_eq!(2, result.scores.len());
+        assert_eq!(100, result.scores[0]);
+        assert_eq!(110, result.scores[1]);
+        assert_eq!(150, result.target_score);
+    }
+}

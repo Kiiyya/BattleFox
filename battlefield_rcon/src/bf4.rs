@@ -353,7 +353,7 @@ impl Bf4Client {
                 })
             }
             "server.onRoundOverTeamScores" => {
-                if packet.words.len() < 5 {
+                if packet.words.len() < 3 {
                     return Err(Bf4Error::Rcon(RconError::malformed_packet(
                         packet.words.clone(),
                         format!("{} packet must have at least {} words", &packet.words[0], 5),
