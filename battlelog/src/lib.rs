@@ -37,7 +37,8 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
     let mut users: Vec<UserResult> = Vec::new();
     for (_key, value) in response_data.data {
         // If soldier is not from the PC namespace
-        if value.persona.namespace != "cem_ea_id" {
+        let namespace = value.persona.namespace.as_ref().unwrap_or(&"".to_string()).clone();
+        if namespace != "cem_ea_id" {
             continue;
         }
 
@@ -166,6 +167,59 @@ pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyh
     Ok(data)
 }
 
+pub async fn battlereport(report_id: &str) -> Result<BattlereportResponse, anyhow::Error> {
+    let res = reqwest::Client::new()
+        .get(format!(
+            "https://battlelog.battlefield.com/bf4/battlereport/loadgeneralreport/{}/1/0/",
+            report_id
+        ))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let data: BattlereportResponse = serde_json::from_str(&data_str)?;
+    //let data = res.json::<BattlereportResponse>().await?;
+    //println!("BattlereportResponse: {:#?}", data);
+
+    Ok(data)
+}
+
+pub async fn playerreport(report_id: &str, persona_id: &str) -> Result<PlayerreportResponse, anyhow::Error> {
+    let res = reqwest::Client::new()
+        .get(format!(
+            "https://battlelog.battlefield.com/bf4/battlereport/loadplayerreport/{}/1/{}/",
+            report_id,
+            persona_id
+        ))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let data: PlayerreportResponse = serde_json::from_str(&data_str)?;
+    //let data = res.json::<PlayerreportResponse>().await?;
+    //println!("PlayerreportResponse: {:#?}", data);
+
+    Ok(data)
+}
+
 pub async fn ingame_metadata(persona_id: u64) -> Result<IngameMetadataResponse, anyhow::Error> {
     let res = reqwest::Client::new()
         .get(format!(
@@ -253,6 +307,43 @@ mod tests {
 
         // Uncomment to actually display the output of the println!() statements above:
         // panic!();
+    }
+
+    #[tokio::test]
+    async fn get_battlereport() {
+        let report_id = "1581019904850607296".to_string();
+        let data = battlereport(&report_id)
+            .await
+            .unwrap();
+        println!("{:#?}", data);
+
+        // Check that the correct report was fetched
+        assert_eq!(report_id, data.id);
+
+        let player_by_name = data.get_player_by_name("xfileFIN");
+        if player_by_name.is_some() {
+            println!("Found player by name: {:#?}", player_by_name.unwrap());
+        }
+
+        let player_by_persona_id = data.get_player_by_personaid(806262072);
+        if player_by_persona_id.is_some() {
+            println!("Found player by personaId: {:#?}", player_by_persona_id.unwrap());
+        }
+    }
+
+    #[tokio::test]
+    async fn get_playerreport() {
+        // let report_id = "1581019904850607296".to_string();
+        // let persona_id = "817893902".to_string();
+        let report_id = "1600873238180240640".to_string();
+        let persona_id = "999821982".to_string();
+        let data = playerreport(&report_id, &persona_id)
+            .await
+            .unwrap();
+        println!("{:#?}", data);
+
+        // Check that the correct report was fetched
+        assert_eq!(persona_id, data.persona_id);
     }
 
     #[tokio::test]

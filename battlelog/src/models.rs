@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_aux::prelude::*;
-use serde_json::Value;
-use std::collections::HashMap;
+use serde_json::{Value};
+use std::{collections::HashMap};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -70,14 +70,15 @@ pub struct SearchResult {
 #[serde(rename_all = "camelCase")]
 pub struct Persona {
     pub picture: Option<String>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    pub user_id: u64,
+    #[serde(deserialize_with = "deserialize_option_number_from_string")]
+    pub user_id: Option<u64>,
     pub user: Option<User>,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub persona_id: u64,
     pub persona_name: String,
-    pub namespace: String,
+    pub namespace: Option<String>,
     pub games: HashMap<i32, Value>,
+    pub clan_tag: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -445,4 +446,164 @@ pub struct CurrentLoadout {
     ///     0 = Paint
     /// ```
     pub vehicles: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BattlereportResponse {
+    pub id: String,
+    pub player_report: Option<PlayerreportResponse>,
+    pub game_mode: Option<String>,
+    pub players: Option<HashMap<u64, ReportPlayer>>,
+    pub duration: f32,
+    pub game_server: GameServer,
+    pub created_at: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GameServer {
+    pub map_mode: Option<String>,
+    pub guid: Option<String>,
+    pub map: Option<String>,
+    pub name: Option<String>,
+    pub country: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportPlayer {
+    pub deaths: u16,
+    pub user_id: Option<String>,
+    pub rank: i16,
+    pub kill_assists: u16,
+    pub skill: i16,
+    pub heals: u16,
+    pub persona: Persona,
+    pub persona_id: Option<String>,
+    pub dnf: bool,
+    pub revives: u16,
+    pub commander_score: u32,
+    pub accuracy: f64,
+    pub kills: u32,
+    pub team: i8,
+    pub kill_streak: u16,
+    pub combat_score: u32,
+    pub squad_id: i8,
+    pub is_commander: bool,
+    pub is_soldier: bool,
+}
+
+impl BattlereportResponse {
+    pub fn get_player_by_personaid(&self, persona_id: u64) -> Option<&ReportPlayer> {
+        if self.players.is_none() {
+            return None;
+        }
+
+        self.players.as_ref().unwrap().get(&persona_id)
+    }
+
+    pub fn get_player_by_name(&self, name: &str) -> Option<&ReportPlayer> {
+        if self.players.is_none() {
+            return None;
+        }
+
+        self.players.as_ref().unwrap().values().find(|p| p.persona.persona_name == name)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Team {
+    pub tickets: Option<u32>,
+    pub bags: Option<u32>,
+    pub titan_health: Option<u32>,
+    pub name: String,
+    pub is_winner: bool,
+    pub players: Vec<String>,
+    pub score: Option<u32>,
+    pub score_max: Option<u32>,
+    pub squads: HashMap<String, Vec<String>>,
+    pub is_attacker: bool,
+    pub id: i8,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerreportResponse {
+    pub persona_id: String,
+    pub persona: Option<Persona>,
+    pub stats: Stats,
+    pub scores: Scores,
+}
+
+#[derive(Debug, Serialize, serde::Deserialize)]
+pub struct Stats {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub kills: u32,
+    pub deaths: u32,
+    pub shots_hit: f32,
+    pub shots_fired: f32,
+    pub vehicle_destroyed: u32,
+    pub assists: u32,
+    #[serde(rename = "spm")]
+    pub spm_raw: Option<String>,
+    pub kd_ratio: f32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub skill: i32,
+    pub vehicle_assists: u32,
+    pub accuracy: u32,
+}
+
+impl Stats {
+    pub fn get_spm(&self) -> u32 {
+        if self.spm_raw.is_none() {
+            return 0;
+        }
+
+        match self.spm_raw.as_ref().unwrap().parse::<u32>() {
+            Ok(value) => value,
+            Err(_) => 0,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Scores {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_unlock: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_bomber: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehiclesh: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehicleajet: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_engineer: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_commander: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_assault: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub vehicle: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehicleaa: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_award: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehicleifv: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_recon: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehicleah: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_support: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehiclesjet: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub total: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehiclembt: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub sc_vehicleaboat: u32,
 }
