@@ -454,6 +454,7 @@ pub struct BattlereportResponse {
     pub id: String,
     pub player_report: Option<PlayerreportResponse>,
     pub game_mode: Option<String>,
+    pub teams: HashMap<u8, Team>,
     pub players: Option<HashMap<u64, ReportPlayer>>,
     pub duration: f32,
     pub game_server: GameServer,
@@ -524,7 +525,7 @@ pub struct Team {
     pub score: Option<u32>,
     pub score_max: Option<u32>,
     pub squads: HashMap<String, Vec<String>>,
-    pub is_attacker: bool,
+    pub is_attacker: i8,
     pub id: i8,
 }
 
