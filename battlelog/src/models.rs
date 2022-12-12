@@ -525,7 +525,7 @@ pub struct Team {
     pub score: Option<u32>,
     pub score_max: Option<u32>,
     pub squads: HashMap<String, Vec<String>>,
-    pub is_attacker: i8,
+    pub is_attacker: Option<i8>,
     pub id: i8,
 }
 
