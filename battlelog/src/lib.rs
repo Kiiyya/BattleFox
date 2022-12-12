@@ -43,7 +43,7 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
         }
 
         // If soldier has BF4
-        for val in value.persona.games.values() {
+        for val in value.persona.get_games().values() {
             if val.is_string() {
                 if val.as_str().unwrap().parse::<i32>().unwrap() & 2048 == 0 {
                     continue;

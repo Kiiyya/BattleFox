@@ -77,8 +77,15 @@ pub struct Persona {
     pub persona_id: u64,
     pub persona_name: String,
     pub namespace: Option<String>,
-    pub games: HashMap<i32, Value>,
+    pub games: Value,
     pub clan_tag: Option<String>,
+}
+
+impl Persona {
+    pub fn get_games(&self) -> HashMap<i32, Value> {
+        let games: HashMap<i32, Value> = serde_json::from_value(self.games.clone()).unwrap();
+        games
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
