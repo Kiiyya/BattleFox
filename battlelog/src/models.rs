@@ -487,7 +487,7 @@ pub struct ReportPlayer {
     pub kill_assists: u16,
     pub skill: i16,
     pub heals: u16,
-    pub persona: Persona,
+    pub persona: Option<Persona>,
     pub persona_id: Option<String>,
     pub dnf: bool,
     pub revives: u16,
@@ -516,7 +516,7 @@ impl BattlereportResponse {
             return None;
         }
 
-        self.players.as_ref().unwrap().values().find(|p| p.persona.persona_name == name)
+        self.players.as_ref().unwrap().values().find(|p| p.persona.is_some() && p.persona.as_ref().unwrap().persona_name == name)
     }
 }
 
