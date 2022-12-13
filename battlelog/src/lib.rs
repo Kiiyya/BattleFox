@@ -2,6 +2,22 @@ pub mod models;
 
 use http::{header::USER_AGENT, HeaderMap, HeaderValue, StatusCode};
 pub use models::*;
+use reqwest_middleware::ClientBuilder;
+use reqwest_retry::RetryTransientMiddleware;
+use reqwest_retry::policies::ExponentialBackoff;
+
+fn get_retry_policy() -> RetryTransientMiddleware<ExponentialBackoff> {
+    // We create a ExponentialBackoff retry policy which implements `RetryPolicy`.
+    let retry_policy = ExponentialBackoff {
+        /// How many times the policy will tell the middleware to retry the request.
+        max_n_retries: 3,
+        max_retry_interval: std::time::Duration::from_millis(30),
+        min_retry_interval: std::time::Duration::from_millis(100),
+        backoff_exponent: 2,
+    };
+
+    RetryTransientMiddleware::new_with_policy(retry_policy)
+}
 
 pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, anyhow::Error> {
     let mut params = vec![("kind", "light")];
@@ -10,7 +26,10 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
         params.push(("personaNames", soldier_name));
     }
 
-    let client = reqwest::Client::new();
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
     let res = client
         .get("https://battlelog.battlefield.com/bf4/battledash/getUsersByPersonaNames")
         .query(&params)
@@ -70,7 +89,10 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
 }
 
 pub async fn get_loadout(soldier_name: &str, persona_id: &str) -> Result<LoadoutResult, anyhow::Error> {
-    let client = reqwest::Client::new();
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
     let res = client
         .get(format!("https://battlelog.battlefield.com/bf4/loadout/get/{}/{}/1/", soldier_name, persona_id))
         .header(USER_AGENT, "BattleFox")
@@ -102,7 +124,10 @@ pub async fn get_loadout(soldier_name: &str, persona_id: &str) -> Result<Loadout
 
 pub async fn search_user(soldier_name: &str) -> Result<SearchResult, anyhow::Error> {
     let params = [("query", soldier_name.to_owned())];
-    let client = reqwest::Client::new();
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
     let res = client
         .post("https://battlelog.battlefield.com/bf4/search/query/")
         .form(&params)
@@ -142,7 +167,11 @@ pub async fn search_user(soldier_name: &str) -> Result<SearchResult, anyhow::Err
 }
 
 pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyhow::Error> {
-    let res = reqwest::Client::new()
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
         .get(format!(
             "https://keeper.battlelog.com/snapshot/{}",
             server_guid
@@ -168,7 +197,11 @@ pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyh
 }
 
 pub async fn battlereport(report_id: &str) -> Result<BattlereportResponse, anyhow::Error> {
-    let res = reqwest::Client::new()
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
         .get(format!(
             "https://battlelog.battlefield.com/bf4/battlereport/loadgeneralreport/{}/1/0/",
             report_id
@@ -194,7 +227,11 @@ pub async fn battlereport(report_id: &str) -> Result<BattlereportResponse, anyho
 }
 
 pub async fn playerreport(report_id: &str, persona_id: &str) -> Result<PlayerreportResponse, anyhow::Error> {
-    let res = reqwest::Client::new()
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
         .get(format!(
             "https://battlelog.battlefield.com/bf4/battlereport/loadplayerreport/{}/1/{}/",
             report_id,
@@ -221,7 +258,11 @@ pub async fn playerreport(report_id: &str, persona_id: &str) -> Result<Playerrep
 }
 
 pub async fn ingame_metadata(persona_id: u64) -> Result<IngameMetadataResponse, anyhow::Error> {
-    let res = reqwest::Client::new()
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
         .get(format!(
             "https://battlelog.battlefield.com/api/bf4/pc/persona/1/{}/ingame_metadata",
             persona_id
@@ -254,7 +295,11 @@ pub async fn get_user(persona_id: String) -> Result<StatsResponse, anyhow::Error
         HeaderValue::from_str("XMLHttpRequest").unwrap(),
     );
 
-    let res = reqwest::Client::new()
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
         .get(format!(
             "https://battlelog.battlefield.com/bf4/soldier/SOLDIER/stats/{}/pc/",
             persona_id
