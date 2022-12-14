@@ -196,6 +196,37 @@ pub async fn server_snapshot(server_guid: String) -> Result<KeeperResponse, anyh
     Ok(data)
 }
 
+pub async fn warsawbattlereportspopulatemore(persona_id: &str, timestamp: &str) -> Result<BattlereportMoreResponse, anyhow::Error> {
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
+        .get(format!(
+            "https://battlelog.battlefield.com/bf4/warsawbattlereportspopulatemore/{}/2048/1/{}/",
+            persona_id,
+            timestamp
+        ))
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let data: BattlereportMoreResponse = serde_json::from_str(&data_str)?;
+    //let data = res.json::<BattlereportMoreResponse>().await?;
+    //println!("BattlereportMoreResponse: {:#?}", data);
+
+    Ok(data)
+}
+
 pub async fn battlereport(report_id: &str) -> Result<BattlereportResponse, anyhow::Error> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(get_retry_policy())
@@ -352,6 +383,19 @@ mod tests {
 
         // Uncomment to actually display the output of the println!() statements above:
         // panic!();
+    }
+
+    #[tokio::test]
+    async fn get_warsawbattlereportspopulatemore() {
+        let persona_id = "817893902".to_string();
+        let timestamp = "1670435600".to_string();
+        let data = warsawbattlereportspopulatemore(&persona_id, &timestamp)
+            .await
+            .unwrap();
+        println!("{:#?}", data);
+
+        // Check that the query was successfull
+        assert_eq!(data.r#type, "success");
     }
 
     #[tokio::test]

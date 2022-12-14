@@ -457,6 +457,28 @@ pub struct CurrentLoadout {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BattlereportMoreResponse {
+    pub r#type: String,
+    pub message: String,
+    pub data: BattlereportMore,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BattlereportMore {
+    pub game_reports: Option<Vec<GameReport>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameReport {
+    pub name: String,
+    pub game_report_id: String,
+    pub created_at: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BattlereportResponse {
     pub id: String,
     pub player_report: Option<PlayerreportResponse>,
