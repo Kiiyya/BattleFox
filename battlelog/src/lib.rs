@@ -88,6 +88,52 @@ pub async fn get_users(soldier_names: Vec<String>) -> Result<Vec<UserResult>, an
     Err(anyhow::anyhow!("Users not found"))
 }
 
+pub async fn get_users_by_persona_ids(persona_ids: Vec<String>) -> Result<Vec<UserResult>, anyhow::Error> {
+    let mut params = vec![("kind", "light")];
+
+    for persona_id in persona_ids.iter() {
+        params.push(("personaIds[]", persona_id));
+    }
+
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(get_retry_policy())
+        .build();
+
+    let res = client
+        .get("https://battlelog.battlefield.com/bf4/battledash/getUsersByPersonaIds")
+        .query(&params)
+        .header(USER_AGENT, "BattleFox")
+        .send()
+        .await?;
+
+    let status = res.status();
+    let data_str = res.text().await?;
+    // println!("{}", data_str);
+
+    if status != StatusCode::OK {
+        return Err(anyhow::anyhow!(data_str));
+    }
+
+    let response_data = match serde_json::from_str::<UsersResponse>(&data_str) {
+        Ok(data) => data,
+        Err(err) => return Err(anyhow::anyhow!("{} - {}", err, data_str)),
+    };
+
+    // let response_data = res.json::<UsersResponse>().await?;
+    //println!("UsersResponse: {:#?}", js);
+
+    let mut users: Vec<UserResult> = Vec::new();
+    for (_key, value) in response_data.data {
+        users.push(value.clone());
+    }
+
+    if !users.is_empty() {
+        return Ok(users);
+    }
+
+    Err(anyhow::anyhow!("Users not found"))
+}
+
 pub async fn get_loadout(soldier_name: &str, persona_id: &str) -> Result<LoadoutResult, anyhow::Error> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(get_retry_policy())
@@ -451,6 +497,13 @@ mod tests {
     async fn test_get_users() {
         let soldiers: Vec<String> = vec!["xfileFIN".to_string()];
         dbg!(get_users(soldiers).await.unwrap());
+        // panic!()
+    }
+
+    #[tokio::test]
+    async fn test_get_users_by_persona_ids() {
+        let persona_ids: Vec<String> = vec!["1058743680".to_string()];
+        dbg!(get_users_by_persona_ids(persona_ids).await.unwrap());
         // panic!()
     }
 

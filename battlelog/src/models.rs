@@ -161,6 +161,20 @@ pub struct UserResult {
     pub user_id: String,
     pub persona_id: String,
     pub user: Option<User>,
+    pub game_expansions: HashMap<String, Vec<i32>>,
+    pub info: Option<Info>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Info {
+    pub locality: Option<String>,
+    pub location: Option<String>,
+    pub presentation: Option<String>,
+    pub login_counter: Option<i32>,
+    pub name: Option<String>,
+    pub age: Option<String>,
+    pub last_login: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
