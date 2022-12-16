@@ -361,6 +361,7 @@ pub struct LoadoutResult {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub persona_id: u64,
     pub persona_name: Option<String>,
+    pub is_premium: Option<bool>,
     pub current_loadout: Option<CurrentLoadout>,
 }
 
