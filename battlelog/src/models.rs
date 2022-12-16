@@ -171,9 +171,7 @@ pub struct Info {
     pub locality: Option<String>,
     pub location: Option<String>,
     pub presentation: Option<String>,
-    pub login_counter: Option<i32>,
-    pub name: Option<String>,
-    pub age: Option<String>,
+    pub login_counter: Option<u32>,
     pub last_login: Option<u32>,
 }
 
