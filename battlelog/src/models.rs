@@ -10,7 +10,7 @@ pub struct User {
     pub gravatar_md5: Option<String>,
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub user_id: u64,
-    pub created_at: u64,
+    pub created_at: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
