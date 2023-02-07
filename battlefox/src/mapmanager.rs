@@ -241,7 +241,7 @@ impl MapManager {
             drop(inner);
         }
 
-        switch_map_to(bf4, mip.map, mip.mode, 1, vehicles, tickets).await?;
+        switch_map_to(bf4, &mip.map, &mip.mode, 1, vehicles, tickets).await?;
 
         Ok(())
     }
@@ -448,8 +448,8 @@ pub async fn fill_rcon_maplist(
 
 pub async fn switch_map_to(
     bf4: &Arc<Bf4Client>,
-    map: Map,
-    mode: GameMode,
+    map: &Map,
+    mode: &GameMode,
     rounds: usize,
     vehicles: bool,
     tickets: usize,
@@ -467,7 +467,7 @@ pub async fn switch_map_to(
 
     trace!("MapList (step1): {:?}", bf4.maplist_list().await?);
     trace!("Adding {:?} {:?} 1 round at index 0 temporarily...", map, mode);
-    bf4.maplist_add(&map, &mode, rounds, Some(0)).await?;
+    bf4.maplist_add(&map, &mode, rounds as i32, Some(0)).await?;
     trace!("MapList (step2): {:?}", bf4.maplist_list().await?);
     bf4.maplist_set_next_map(0).await?;
     bf4.maplist_run_next_round().await?;
