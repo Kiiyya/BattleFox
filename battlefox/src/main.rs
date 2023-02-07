@@ -239,6 +239,9 @@ async fn main() -> anyhow::Result<()> {
 
     let rconinfo = get_rcon_coninfo()?;
 
+    let harmless = var("BFOX_HARMLESS").map(|x| x == "true").unwrap_or(false);
+    warn!("Running in harmless mode! Destructive bf4 rcon commands will just be logged instead of sent.");
+
     // TODO: Disable DB potentially.
     let db = BfoxContext::new_env();
 
@@ -260,7 +263,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Connect to RCON.
     info!("Connecting to {}:{} with password ***...", rconinfo.ip, rconinfo.port);
-    let bf4 = Bf4Client::connect((rconinfo.ip, rconinfo.port), rconinfo.password).await.unwrap();
+    let bf4 = Bf4Client::connect((rconinfo.ip, rconinfo.port), rconinfo.password, harmless).await.unwrap();
     trace!("Connected!");
 
     // Actually start all the plugins and wait for them to finish.

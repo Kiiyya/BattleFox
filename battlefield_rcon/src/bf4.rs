@@ -63,6 +63,8 @@ pub struct Bf4Client {
     /// - When parsing packets, e.g. from events.
     /// - When parsing replies to queries.
     player_cache: Mutex<PlayerEaidCache>,
+
+    harmless: bool,
 }
 
 
@@ -80,18 +82,18 @@ impl Bf4Client {
     /// let info = bf4_client.server_info().await.unwrap();
     /// # }
     /// ```
-    pub async fn connect_restricted(addr: impl ToSocketAddrs) -> RconResult<Arc<Self>> {
+    pub async fn connect_restricted(addr: impl ToSocketAddrs, harmless: bool) -> RconResult<Arc<Self>> {
         let rcon = RconClient::connect(addr).await?;
-        Bf4Client::new_from(rcon).await
+        Bf4Client::new_from(rcon, harmless).await
     }
 
-    pub async fn connect(addr: impl ToSocketAddrs, password: AsciiString) -> RconResult<Arc<Self>> {
+    pub async fn connect(addr: impl ToSocketAddrs, password: AsciiString, harmless: bool) -> RconResult<Arc<Self>> {
         let rcon = RconClient::connect(addr).await?;
         rcon.login_hashed(password).await?;
-        Bf4Client::new_from(rcon).await
+        Bf4Client::new_from(rcon, harmless).await
     }
 
-    pub async fn new_from(mut rcon: RconClient) -> RconResult<Arc<Self>> {
+    pub async fn new_from(mut rcon: RconClient, harmless: bool) -> RconResult<Arc<Self>> {
         let (tx, rx) = oneshot::channel::<Weak<Bf4Client>>();
 
         let events = Bf4Client::packet_to_event_stream(rx, rcon.take_nonresponse_rx().expect("Bf4Client requires Rcon's `take_nonresponse_tx()` to succeed. If you are calling this yourself, then please don't."));
@@ -100,6 +102,7 @@ impl Bf4Client {
             events: Mutex::new(Some(events)),
             player_cache: Mutex::new(PlayerEaidCache::new()),
             // interval_timers: Vec::new(),
+            harmless,
         });
 
         tx.send(Arc::downgrade(&myself)).unwrap();
@@ -362,7 +365,7 @@ impl Bf4Client {
 
                 let team_scores = parse_team_scores(&packet.words)?;
 
-                Ok(Event::RoundOverTeamScores { 
+                Ok(Event::RoundOverTeamScores {
                     number_of_entries: team_scores.number_of_entries,
                     scores: team_scores.scores,
                     target_score: team_scores.target_score,
@@ -370,7 +373,7 @@ impl Bf4Client {
             }
             "server.onRoundOverPlayers" => {
                 let pib = parse_pib(&packet.words[1..])?;
-                Ok(Event::RoundOverPlayers { 
+                Ok(Event::RoundOverPlayers {
                     players: pib,
                 })
             }
@@ -515,6 +518,11 @@ impl Bf4Client {
         &self,
         player: impl IntoAsciiString + Into<String>,
     ) -> Result<(), PlayerKillError> {
+        if self.harmless {
+            info!("harmless KILL {}", player);
+            return Ok(());
+        }
+
         // first, `command` checks whether we received an OK, if yes, calls `ok`.
         // if not, then it checks if the response was `UnknownCommand` or `InvalidArguments`,
         // and handles those with an appropriate error message.
@@ -539,6 +547,11 @@ impl Bf4Client {
         player: impl IntoAsciiString + Into<String>,
         reason: impl IntoAsciiString + Into<String>,
     ) -> Result<(), PlayerKickError> {
+        if self.harmless {
+            info!("harmless KICK {} because \"{}\"", player, reason);
+            return Ok(());
+        }
+
         let player = player.into_ascii_string()?;
         let reason = reason.into_ascii_string()?;
         self.rcon
@@ -563,6 +576,11 @@ impl Bf4Client {
         timeout: BanTimeout,
         reason: Option<impl IntoAsciiString + Into<String>>
     ) -> Result<(), BanListError> {
+        if self.harmless {
+            info!("harmless BAN_ADD ban={:?} timeout={:?} reason={:?}", ban, timeout, reason);
+            return Ok(());
+        }
+
         let (typ, id) = match ban {
             Ban::Name(name) => ("name", name.into_ascii_string()?),
             Ban::Ip(ip) => ("ip", ip.into_ascii_string()?),
@@ -606,6 +624,11 @@ impl Bf4Client {
         &self,
         ban: Ban,
     ) -> Result<(), BanListError> {
+        if self.harmless {
+            info!("harmless BAN_REMOVE {:?}", ban);
+            return Ok(());
+        }
+
         let (typ, id) = match ban {
             Ban::Name(name) => ("name", name.into_ascii_string()?),
             Ban::Ip(ip) => ("ip", ip.into_ascii_string()?),
@@ -632,6 +655,11 @@ impl Bf4Client {
         vis: impl Into<Visibility>,
         dur: impl IntoAsciiString + Into<String>
     ) -> Result<(), YellError> {
+        if self.harmless {
+            info!("harmless YELL({}, {}) \"{}\"", vis, dur, msg);
+            return Ok(());
+        }
+
         let mut words = veca!["admin.yell", msg, dur];
         words.append(&mut vis.into().rcon_encode());
         self.rcon
@@ -656,6 +684,11 @@ impl Bf4Client {
         msg: impl IntoAsciiString + Into<String>,
         vis: impl Into<Visibility>,
     ) -> Result<(), YellError> {
+        if self.harmless {
+            info!("harmless YELL({}, 10) \"{}\"", vis, dur, msg);
+            return Ok(());
+        }
+
         let mut words = veca!["admin.yell", msg, "10"];
         words.append(&mut vis.into().rcon_encode());
         self.rcon
@@ -679,6 +712,11 @@ impl Bf4Client {
         msg: impl IntoAsciiString + Into<String>,
         vis: impl Into<Visibility>,
     ) -> Result<(), SayError> {
+        if self.harmless {
+            info!("harmless SAY({}) \"{}\"", vis, msg);
+            return Ok(());
+        }
+
         let mut words = veca!["admin.say", msg];
         words.append(&mut vis.into().rcon_encode());
         self.rcon
@@ -713,6 +751,11 @@ impl Bf4Client {
     where
         Line: IntoAsciiString + Into<String> + 'static + Send,
     {
+        if self.harmless {
+            info!("harmless SAY_LINES({}) lines={:?}", vis, lines.into_iter().map(|x| x.into()));
+            return Ok(());
+        }
+
         let vis = vis.into();
         let vis_words = vis.rcon_encode();
         let queries = lines
@@ -756,6 +799,11 @@ impl Bf4Client {
     }
 
     pub async fn maplist_clear(&self) -> Result<(), RconError> {
+        if self.harmless {
+            info!("harmless MAPLIST_CLEAR");
+            return Ok(());
+        }
+
         self.rcon
             .query(&veca!["mapList.clear"], ok_eof, |_| None)
             .await
@@ -768,6 +816,11 @@ impl Bf4Client {
         n_rounds: i32,
         index: Option<i32>,
     ) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless MAPLIST_ADD map={:?} mode={:?} n_rounds={} index={:?}", map, game_mode, n_rounds, index);
+            return Ok(());
+        }
+
         let mut words = veca![
             "mapList.add",
             map.rcon_encode(),
@@ -798,34 +851,59 @@ impl Bf4Client {
     }
 
     pub async fn maplist_list(&self) -> Result<Vec<map_list::MapListEntry>, MapListError> {
-        self.rcon
+        let ret = self.rcon
             .query(
                 &veca!["maplist.list", "0"],
                 |ok| Ok(map_list::parse_map_list(ok)?),
                 |_| None,
             )
-            .await
+            .await;
+        ret
+        // if self.harmless {
+        //     info!("MAPLIST_LIST map={:?} mode={:?} n_rounds={} index={:?}", map, game_mode, n_rounds, index);
+        //     return Ok(());
+        // }
     }
 
     pub async fn maplist_run_next_round(&self) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless MAPLIST_RUN_NEXT_ROUND");
+            return Ok(());
+        }
+
         // TODO errors
         self.rcon
             .query(&veca!["mapList.runNextRound"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_save(&self) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless MAPLIST_SAVE");
+            return Ok(());
+        }
+
         // TODO err
         self.rcon
             .query(&veca!["mapList.save"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_restart_round(&self) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless maplist_restart_round");
+            return Ok(());
+        }
+
         // TODO err
         self.rcon
             .query(&veca!["mapList.restartRound"], ok_eof, |_| None)
             .await
     }
     pub async fn maplist_set_next_map(&self, index: usize) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless MAPLIST_SET_NEXT_MAP index={}", index);
+            return Ok(());
+        }
+
         // TODO err
         self.rcon
             .query(
@@ -839,6 +917,11 @@ impl Bf4Client {
             .await
     }
     pub async fn maplist_remove(&self, index: usize) -> Result<(), MapListError> {
+        if self.harmless {
+            info!("harmless MAPLIST_REMOVE index={}", index);
+            return Ok(());
+        }
+
         // TODO err
         self.rcon
             .query(
@@ -858,6 +941,11 @@ impl Bf4Client {
     }
 
     pub async fn set_preset(&self, preset: Preset) -> RconResult<()> {
+        if self.harmless {
+            info!("harmless SET_PRESET preset={:?}", preset);
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["vars.preset", preset.rcon_encode(), "false"],
@@ -868,6 +956,11 @@ impl Bf4Client {
     }
 
     pub async fn set_tickets(&self, tickets: usize) -> RconResult<()> {
+        if self.harmless {
+            info!("harmless SET_TICKETS {tickets}");
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["vars.gameModeCounter", format!("{}", tickets)],
@@ -879,6 +972,11 @@ impl Bf4Client {
 
     // TODO(dek): Rename to `set_vehicle_spawn_allowed()` to match the var name.
     pub async fn set_vehicles_spawn_allowed(&self, allowed: bool) -> RconResult<()> {
+        if self.harmless {
+            info!("harmless SET_VEHICLE_SPAWN_ALLOWED {allowed}");
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["vars.vehicleSpawnAllowed", allowed.to_string()],
@@ -889,6 +987,11 @@ impl Bf4Client {
     }
 
     pub async fn set_vehicle_spawn_delay(&self, delay: usize) -> RconResult<()> {
+        if self.harmless {
+            info!("harmless set_vehicle_spawn_delay {delay}");
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["vars.vehicleSpawnDelay", format!("{}", delay)],
@@ -900,6 +1003,11 @@ impl Bf4Client {
 
     /// add player name to reserved slots list.
     pub async fn reserved_add(&self, player: &Player) -> Result<(), ReservedSlotsError> {
+        if self.harmless {
+            info!("harmless RESERVED_SLOT_ADD {player:?}");
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["reservedSlotsList.add", player.name.as_str()],
@@ -915,6 +1023,11 @@ impl Bf4Client {
 
     /// Saves the reserved slots to file. (can fail, remote rcon io error, no error code yet.)
     pub async fn reserved_save(&self) -> Result<(), ReservedSlotsError> {
+        if self.harmless {
+            info!("harmless RESERVED_SAVE");
+            return Ok(());
+        }
+
         // TODO err
         self.rcon
             .query(&veca!["reservedSlotsList.save"], ok_eof, |_| None)
@@ -935,6 +1048,11 @@ impl Bf4Client {
     }
 
     pub async fn admin_add(&self, player: impl AsRef<str>, level: usize) -> Result<(), ReservedSlotsError> {
+        if self.harmless {
+            info!("harmless ADMIN_ADD {} level={}", player.as_ref(), level);
+            return Ok(());
+        }
+
         self.rcon
             .query(
                 &veca!["gameAdmin.add", player.as_ref(), level.to_string()],
@@ -949,6 +1067,11 @@ impl Bf4Client {
     }
 
     pub async fn admin_remove(&self, player: impl AsRef<str>) -> Result<(), ReservedSlotsError> {
+        if self.harmless {
+            info!("harmless ADMIN_REMOVE {}", player.as_ref());
+            return Ok(());
+        }
+
         self.rcon.query(
             &veca!["gameAdmin.remove", player.as_ref()],
             ok_eof,
@@ -1036,6 +1159,8 @@ pub fn wrap_msg_chars(
 
 // pub fn wrap_msg_vislen(items: &[String]) -> Vec<String> { }
 
+// fn hlog(msg : &str)
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1065,7 +1190,7 @@ mod test {
     async fn spammer(i: usize) -> rcon::RconResult<()> {
         let rcon = RconClient::connect(("127.0.0.1", 47200)).await?;
         rcon.login_hashed("smurf").await?;
-        let bf4 = Bf4Client::new_from(rcon).await.unwrap();
+        let bf4 = Bf4Client::new_from(rcon, false).await.unwrap();
         let start = Instant::now();
 
         let mut joinhandles = Vec::new();
