@@ -519,7 +519,7 @@ impl Bf4Client {
         player: impl IntoAsciiString + Into<String>,
     ) -> Result<(), PlayerKillError> {
         if self.harmless {
-            info!("harmless KILL {}", player);
+            info!("harmless KILL {}", player.into());
             return Ok(());
         }
 
@@ -548,7 +548,7 @@ impl Bf4Client {
         reason: impl IntoAsciiString + Into<String>,
     ) -> Result<(), PlayerKickError> {
         if self.harmless {
-            info!("harmless KICK {} because \"{}\"", player, reason);
+            info!("harmless KICK {} because \"{}\"", player.into(), reason.into());
             return Ok(());
         }
 
@@ -577,7 +577,7 @@ impl Bf4Client {
         reason: Option<impl IntoAsciiString + Into<String>>
     ) -> Result<(), BanListError> {
         if self.harmless {
-            info!("harmless BAN_ADD ban={:?} timeout={:?} reason={:?}", ban, timeout, reason);
+            info!("harmless BAN_ADD ban={:?} timeout={:?} reason={:?}", ban, timeout, reason.map(|x| x.into()));
             return Ok(());
         }
 
@@ -656,7 +656,7 @@ impl Bf4Client {
         dur: impl IntoAsciiString + Into<String>
     ) -> Result<(), YellError> {
         if self.harmless {
-            info!("harmless YELL({}, {}) \"{}\"", vis, dur, msg);
+            info!("harmless YELL({:?}, {}) \"{}\"", vis.into(), dur.into(), msg.into());
             return Ok(());
         }
 
@@ -685,7 +685,7 @@ impl Bf4Client {
         vis: impl Into<Visibility>,
     ) -> Result<(), YellError> {
         if self.harmless {
-            info!("harmless YELL({}, 10) \"{}\"", vis, dur, msg);
+            info!("harmless YELL({:?}, 10) \"{}\"", vis.into(), msg.into());
             return Ok(());
         }
 
@@ -713,7 +713,7 @@ impl Bf4Client {
         vis: impl Into<Visibility>,
     ) -> Result<(), SayError> {
         if self.harmless {
-            info!("harmless SAY({}) \"{}\"", vis, msg);
+            info!("harmless SAY({:?}) \"{}\"", vis.into(), msg.into());
             return Ok(());
         }
 
@@ -752,7 +752,7 @@ impl Bf4Client {
         Line: IntoAsciiString + Into<String> + 'static + Send,
     {
         if self.harmless {
-            info!("harmless SAY_LINES({}) lines={:?}", vis, lines.into_iter().map(|x| x.into()));
+            info!("harmless SAY_LINES({:?}) lines={:?}", vis.into(), lines.into_iter().map(|x| x.into()).collect::<Vec<_>>());
             return Ok(());
         }
 

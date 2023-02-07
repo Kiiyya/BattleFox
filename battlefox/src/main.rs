@@ -240,7 +240,13 @@ async fn main() -> anyhow::Result<()> {
     let rconinfo = get_rcon_coninfo()?;
 
     let harmless = var("BFOX_HARMLESS").map(|x| x == "true").unwrap_or(false);
-    warn!("Running in harmless mode! Destructive bf4 rcon commands will just be logged instead of sent.");
+    if harmless {
+        warn!("Running in harmless mode! Destructive bf4 rcon commands will just be logged instead of sent.");
+    }
+
+    if !harmless {
+        panic!("Not harmless :(");
+    }
 
     // TODO: Disable DB potentially.
     let db = BfoxContext::new_env();
