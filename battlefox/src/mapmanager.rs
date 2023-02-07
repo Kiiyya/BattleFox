@@ -1,6 +1,7 @@
 //! Manages map lists based on player population
 
 use async_trait::async_trait;
+use battlefield_rcon::bf4::GameMode;
 use itertools::Itertools;
 use lerp::Lerp;
 use serde::{Deserialize, Serialize};
@@ -233,12 +234,6 @@ impl MapManager {
         // let tickets = ()
         let tickets = tickets as usize;
 
-        trace!("MapList: {:?}", bf4.maplist_list().await?);
-        trace!("Adding {:?} {:?} 1 round at index 0 temporarily...", mip.map, mip.mode);
-
-        bf4.maplist_add(&mip.map, &mip.mode, 1, Some(0)).await?;
-        trace!("MapList: {:?}", bf4.maplist_list().await?);
-
         {
             let mut inner = self.inner.lock().unwrap();
             inner.map_history.insert(0, mip.map);
@@ -246,10 +241,7 @@ impl MapManager {
             drop(inner);
         }
 
-        switch_map_to(bf4, 0, vehicles, tickets).await?;
-        bf4.maplist_remove(0).await?;
-        trace!("...removed rcon maplist index 0 again.");
-        trace!("MapList: {:?}", bf4.maplist_list().await?);
+        switch_map_to(bf4, mip.map, mip.mode, 1, vehicles, tickets).await?;
 
         Ok(())
     }
@@ -418,7 +410,7 @@ impl MapManager {
 
     pub fn is_recently_played(&self, map: &Map) -> bool {
         let recent_maps = self.recent_maps();
-        
+
         for m in recent_maps.iter() {
             if map.eq(&m) {
                 return true;
@@ -456,16 +448,12 @@ pub async fn fill_rcon_maplist(
 
 pub async fn switch_map_to(
     bf4: &Arc<Bf4Client>,
-    index: usize,
+    map: Map,
+    mode: GameMode,
+    rounds: usize,
     vehicles: bool,
     tickets: usize,
 ) -> Result<(), MapListError> {
-    bf4.maplist_set_next_map(index).await?;
-    debug!(
-        "index: {}, vehicles: {}, tickets: {}",
-        index, vehicles, tickets
-    );
-
     let _ = bf4.set_preset(Preset::Custom).await;
     let _ = bf4.set_vehicles_spawn_allowed(vehicles).await;
 
@@ -477,14 +465,23 @@ pub async fn switch_map_to(
     let _  = bf4.set_tickets(tickets).await;
     sleep(Duration::from_secs(1)).await;
 
+    trace!("MapList (step1): {:?}", bf4.maplist_list().await?);
+    trace!("Adding {:?} {:?} 1 round at index 0 temporarily...", map, mode);
+    bf4.maplist_add(&map, &mode, rounds, Some(0)).await?;
+    trace!("MapList (step2): {:?}", bf4.maplist_list().await?);
+    bf4.maplist_set_next_map(0).await?;
     bf4.maplist_run_next_round().await?;
+    trace!("MapList (step3): {:?}", bf4.maplist_list().await?);
+    bf4.maplist_remove(0).await?;
+    trace!("...removed rcon maplist index 0 again.");
+    trace!("MapList (step4): {:?}", bf4.maplist_list().await?);
 
     sleep(Duration::from_secs(10)).await;
     let _ = bf4.set_tickets(std::cmp::max(100, tickets)).await;
     let _ = bf4.set_vehicles_spawn_allowed(true).await;
     let _ = bf4.set_preset(Preset::Hardcore).await;
 
-    // println!("[mapman switch_map_to()] done.");
+    trace!("done.");
 
     Ok(())
 }
